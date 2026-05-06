@@ -4,14 +4,14 @@ $ next dev -p 3000 2>&1 | tee dev.log
 - Network:       http://21.0.8.46:3000
 
 ✓ Starting...
-✓ Ready in 1035ms
+✓ Ready in 1027ms
 ○ Compiling / ...
- GET / 200 in 2.9s (compile: 2.4s, render: 537ms)
- GET / 200 in 4.5s (compile: 4.0s, render: 492ms)
+ GET / 200 in 4.7s (compile: 4.0s, render: 653ms)
 prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) LIMIT ? OFFSET ?) AS `sub`
 prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`senderId`, `main`.`Email`.`recipientEmail`, `main`.`Email`.`subject`, `main`.`Email`.`body`, `main`.`Email`.`bodyHtml`, `main`.`Email`.`attachments`, `main`.`Email`.`isRead`, `main`.`Email`.`isStarred`, `main`.`Email`.`isArchived`, `main`.`Email`.`folder`, `main`.`Email`.`parentEmailId`, `main`.`Email`.`readAt`, `main`.`Email`.`snoozedUntil`, `main`.`Email`.`scheduledAt`, `main`.`Email`.`sentAt`, `main`.`Email`.`isDraft`, `main`.`Email`.`priority`, `main`.`Email`.`createdAt` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) ORDER BY `main`.`Email`.`createdAt` DESC LIMIT ? OFFSET ?
 prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`id` IN (?,?,?,?) LIMIT ? OFFSET ?
 prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`email` IN (?) LIMIT ? OFFSET ?
 prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`parentEmailId` FROM `main`.`Email` WHERE `main`.`Email`.`parentEmailId` IN (?,?,?,?,?) LIMIT ? OFFSET ?
- GET /api/emails?folder=inbox&page=1&limit=5 200 in 151ms (compile: 111ms, render: 40ms)
- GET /api/auth/me 401 in 45ms (compile: 37ms, render: 7ms)
+ GET /api/emails?folder=inbox&page=1&limit=5 200 in 1574ms (compile: 837ms, render: 737ms)
+ GET / 200 in 32ms (compile: 4ms, render: 29ms)
+ GET /api/auth/me 401 in 49ms (compile: 42ms, render: 6ms)
