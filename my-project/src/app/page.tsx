@@ -15,7 +15,6 @@ import { SettingsPanel } from '@/components/settings/settings-panel'
 import { AdminPanel } from '@/components/admin/admin-panel'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
 import { KeyboardShortcutsHelp } from '@/components/shared/keyboard-shortcuts-help'
-import { InAppNotificationBanner } from '@/components/shared/in-app-notification-banner'
 import { useNotifications } from '@/hooks/use-notifications'
 
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
@@ -476,9 +475,6 @@ export default function HomePage() {
 
       {/* Keyboard shortcuts help dialog */}
       <KeyboardShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-
-      {/* In-app push notification banner */}
-      <InAppNotificationBanner />
     </div>
   )
 }
