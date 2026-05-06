@@ -72,7 +72,7 @@ export async function POST(
       },
     });
 
-    // Create a copy in the sender's sent folder
+    // Create a copy in the sender's sent folder (no parentEmailId to avoid duplicate in thread)
     await db.email.create({
       data: {
         senderId: session.userId,
@@ -83,7 +83,6 @@ export async function POST(
         body: replyBody.trim(),
         bodyHtml: bodyHtml || '',
         folder: 'sent',
-        parentEmailId: parentEmail.id,
       },
     });
 
