@@ -210,7 +210,7 @@ export function ComposeModal() {
 
     if (replyToEmail && replyMode) {
       const senderEmail = replyToEmail.sender
-        ? `${replyToEmail.sender.firstName.toLowerCase()}.${replyToEmail.sender.lastName.toLowerCase()}@ezy.af`
+        ? replyToEmail.sender.email
         : replyToEmail.recipientEmail
 
       if (replyMode === 'forward') {
@@ -237,7 +237,7 @@ export function ComposeModal() {
       }
     } else if (replyToEmail) {
       setTo(replyToEmail.sender
-        ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
+        ? replyToEmail.sender.email
         : replyToEmail.recipientEmail)
       setSubject(`Re: ${replyToEmail.subject || ''}`)
       editor.commands.setContent('')
