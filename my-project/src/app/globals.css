@@ -219,8 +219,10 @@
   color: #e5e7eb;
 }
 
-.tiptap:focus {
-  outline: none;
+.tiptap:focus,
+.tiptap:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .tiptap .ProseMirror {
@@ -229,10 +231,11 @@
   border: none;
 }
 
-.tiptap .ProseMirror:focus {
-  outline: none;
-  border: none;
-  box-shadow: none;
+.tiptap .ProseMirror:focus,
+.tiptap .ProseMirror:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* Ensure the editor wrapper passes height to children */
@@ -243,10 +246,12 @@
   border: none;
 }
 
-.tiptap-editor-wrap:focus-within {
-  outline: none;
-  border: none;
-  box-shadow: none;
+.tiptap-editor-wrap:focus,
+.tiptap-editor-wrap:focus-within,
+.tiptap-editor-wrap:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .tiptap-editor-wrap .tiptap {
@@ -254,6 +259,21 @@
   outline: none;
   border: none;
   box-shadow: none;
+}
+
+/* Remove focus ring from EditorContent wrapper */
+.tiptap-editor-wrap [class*="tiptap"],
+.tiptap-editor-wrap div[contenteditable] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.tiptap-editor-wrap [class*="tiptap"]:focus,
+.tiptap-editor-wrap [class*="tiptap"]:focus-visible,
+.tiptap-editor-wrap div[contenteditable]:focus,
+.tiptap-editor-wrap div[contenteditable]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .tiptap p.is-editor-empty:first-child::before {
