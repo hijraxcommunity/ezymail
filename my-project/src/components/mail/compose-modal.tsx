@@ -209,36 +209,37 @@ export function ComposeModal() {
     }
 
     if (replyToEmail && replyMode) {
-      const senderEmail = replyToEmail.sender
-        ? replyToEmail.sender.email
-        : replyToEmail.recipientEmail
+      // Always use the sender's actual email from the DB, never construct from name
+      const senderEmail = replyToEmail.sender?.email || ''
+      const senderName = replyToEmail.sender
+        ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
+        : 'Unknown Sender'
 
       if (replyMode === 'forward') {
         setTo('')
         setSubject(replyToEmail.subject?.startsWith('Fwd: ')
           ? replyToEmail.subject
           : `Fwd: ${replyToEmail.subject || '(No subject)'}`)
-        const fwdBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>---------- Forwarded message ----------</p><p>From: ${replyToEmail.sender ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}` : replyToEmail.recipientEmail} &lt;${senderEmail}&gt;</p><p>Date: ${new Date(replyToEmail.createdAt).toLocaleString()}</p><p>Subject: ${replyToEmail.subject || '(No subject)'}</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
+        const fwdBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>---------- Forwarded message ----------</p><p>From: ${senderName} &lt;${senderEmail}&gt;</p><p>Date: ${new Date(replyToEmail.createdAt).toLocaleString()}</p><p>Subject: ${replyToEmail.subject || '(No subject)'}</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
         editor.commands.setContent(fwdBody)
       } else {
         if (replyMode === 'reply') {
           setTo(senderEmail)
         } else {
-          setTo(senderEmail)
+          // Reply All: include sender + recipient
+          const recipientEmail = replyToEmail.recipient?.email || ''
+          setTo([senderEmail, recipientEmail].filter(Boolean).join(', '))
         }
         const subject = replyToEmail.subject?.startsWith('Re: ')
           ? replyToEmail.subject
           : `Re: ${replyToEmail.subject || ''}`
         setSubject(subject)
         const quoteDate = new Date(replyToEmail.createdAt).toLocaleString()
-        const quoteSender = replyToEmail.sender ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}` : replyToEmail.recipientEmail
-        const quotedBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>On ${quoteDate}, ${quoteSender} wrote:</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
+        const quotedBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>On ${quoteDate}, ${senderName} wrote:</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
         editor.commands.setContent(quotedBody)
       }
     } else if (replyToEmail) {
-      setTo(replyToEmail.sender
-        ? replyToEmail.sender.email
-        : replyToEmail.recipientEmail)
+      setTo(replyToEmail.sender?.email || '')
       setSubject(`Re: ${replyToEmail.subject || ''}`)
       editor.commands.setContent('')
     } else {
@@ -277,7 +278,15 @@ export function ComposeModal() {
       .split(',')
       .map(r => r.trim())
       .filter(Boolean)
-      .map(r => (r.includes('@') ? r : `${r}@ezy.af`))
+      .map(r => {
+        // Already a valid email address
+        if (r.includes('@')) return r
+        // Only auto-append @ezy.af for simple usernames (letters, numbers, dots, underscores, hyphens)
+        // NOT for full names with spaces like "Muhammad Wasil Amiri"
+        if (/^[a-zA-Z0-9._-]+$/.test(r)) return `${r}@ezy.af`
+        // If it contains spaces or looks like a name, return as-is (will fail validation)
+        return r
+      })
       .join(', ')
   }
 

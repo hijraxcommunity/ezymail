@@ -610,9 +610,7 @@ export function EmailDetail() {
     ? `${email.sender.firstName} ${email.sender.lastName}`
     : email.recipientEmail
   const initials = getInitials(email.sender)
-  const senderEmail = email.sender
-    ? `${email.sender.firstName.toLowerCase()}.${email.sender.lastName.toLowerCase()}@ezy.af`
-    : email.recipientEmail
+  const senderEmail = email.sender?.email || email.recipientEmail
   const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
     try { return email.attachments ? JSON.parse(email.attachments) : [] }
     catch { return [] }
