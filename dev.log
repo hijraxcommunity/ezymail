@@ -4,11 +4,33 @@ $ next dev -p 3000 2>&1 | tee dev.log
 - Network:       http://21.0.8.46:3000
 
 ✓ Starting...
-✓ Ready in 1048ms
+✓ Ready in 958ms
 ○ Compiling / ...
- GET / 200 in 47ms (compile: 5ms, render: 42ms)
- GET / 200 in 4.3s (compile: 3.7s, render: 602ms)
-prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`passwordHash`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`displayName`, `main`.`User`.`bio`, `main`.`User`.`dateOfBirth`, `main`.`User`.`phone`, `main`.`User`.`avatar`, `main`.`User`.`recoveryEmail`, `main`.`User`.`role`, `main`.`User`.`status`, `main`.`User`.`signature`, `main`.`User`.`preferences`, `main`.`User`.`onboardingDone`, `main`.`User`.`lastLogin`, `main`.`User`.`lastIp`, `main`.`User`.`deletedAt`, `main`.`User`.`createdAt`, `main`.`User`.`updatedAt` FROM `main`.`User` WHERE (`main`.`User`.`email` = ? AND 1=1) LIMIT ? OFFSET ?
-prisma:query UPDATE `main`.`User` SET `lastLogin` = ?, `lastIp` = ?, `updatedAt` = ? WHERE (`main`.`User`.`id` = ? AND 1=1) RETURNING `id` AS `id`, `email` AS `email`, `passwordHash` AS `passwordHash`, `firstName` AS `firstName`, `lastName` AS `lastName`, `displayName` AS `displayName`, `bio` AS `bio`, `dateOfBirth` AS `dateOfBirth`, `phone` AS `phone`, `avatar` AS `avatar`, `recoveryEmail` AS `recoveryEmail`, `role` AS `role`, `status` AS `status`, `signature` AS `signature`, `preferences` AS `preferences`, `onboardingDone` AS `onboardingDone`, `lastLogin` AS `lastLogin`, `lastIp` AS `lastIp`, `deletedAt` AS `deletedAt`, `createdAt` AS `createdAt`, `updatedAt` AS `updatedAt`
-prisma:query INSERT INTO `main`.`Session` (`id`, `userId`, `token`, `ipAddress`, `lastActive`, `expiresAt`, `isActive`) VALUES (?,?,?,?,?,?,?) RETURNING `id` AS `id`, `userId` AS `userId`, `token` AS `token`, `deviceName` AS `deviceName`, `deviceType` AS `deviceType`, `ipAddress` AS `ipAddress`, `userAgent` AS `userAgent`, `location` AS `location`, `lastActive` AS `lastActive`, `expiresAt` AS `expiresAt`, `isActive` AS `isActive`
- POST /api/auth/login 200 in 498ms (compile: 157ms, render: 341ms)
+ GET / 200 in 4.0s (compile: 3.5s, render: 582ms)
+ GET / 200 in 40ms (compile: 4ms, render: 35ms)
+ GET /api/auth/me 401 in 116ms (compile: 103ms, render: 13ms)
+ GET / 200 in 35ms (compile: 4ms, render: 31ms)
+ GET / 200 in 39ms (compile: 3ms, render: 37ms)
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar`, `main`.`User`.`role`, `main`.`User`.`status`, `main`.`User`.`onboardingDone`, `main`.`User`.`createdAt` FROM `main`.`User` WHERE (`main`.`User`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
+ GET /api/auth/me 200 in 23ms (compile: 3ms, render: 20ms)
+ GET /api/emails?folder=inbox&page=1&limit=20 200 in 210ms (compile: 180ms, render: 29ms)
+prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`senderId`, `main`.`Email`.`recipientEmail`, `main`.`Email`.`subject`, `main`.`Email`.`body`, `main`.`Email`.`bodyHtml`, `main`.`Email`.`attachments`, `main`.`Email`.`isRead`, `main`.`Email`.`isStarred`, `main`.`Email`.`isArchived`, `main`.`Email`.`folder`, `main`.`Email`.`parentEmailId`, `main`.`Email`.`readAt`, `main`.`Email`.`snoozedUntil`, `main`.`Email`.`scheduledAt`, `main`.`Email`.`sentAt`, `main`.`Email`.`isDraft`, `main`.`Email`.`priority`, `main`.`Email`.`createdAt` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) ORDER BY `main`.`Email`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`id` IN (?,?,?) LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`email` IN (?) LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`parentEmailId` FROM `main`.`Email` WHERE `main`.`Email`.`parentEmailId` IN (?,?,?,?,?) LIMIT ? OFFSET ?
+prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) LIMIT ? OFFSET ?) AS `sub`
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`displayName`, `main`.`User`.`avatar`, `main`.`User`.`bio`, `main`.`User`.`phone`, `main`.`User`.`dateOfBirth`, `main`.`User`.`recoveryEmail`, `main`.`User`.`role`, `main`.`User`.`status`, `main`.`User`.`signature`, `main`.`User`.`preferences`, `main`.`User`.`createdAt`, `main`.`User`.`lastLogin` FROM `main`.`User` WHERE (`main`.`User`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
+prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`folder` = ?) LIMIT ? OFFSET ?) AS `sub`
+prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`senderId` = ? AND `main`.`Email`.`folder` = ?) LIMIT ? OFFSET ?) AS `sub`
+prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`folder` = ? AND `main`.`Email`.`isRead` = ?) LIMIT ? OFFSET ?) AS `sub`
+ GET /api/user/profile 200 in 187ms (compile: 173ms, render: 14ms)
+ GET /api/labels 401 in 486ms (compile: 478ms, render: 8ms)
+prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Email`.`id` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) LIMIT ? OFFSET ?) AS `sub`
+prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`senderId`, `main`.`Email`.`recipientEmail`, `main`.`Email`.`subject`, `main`.`Email`.`body`, `main`.`Email`.`bodyHtml`, `main`.`Email`.`attachments`, `main`.`Email`.`isRead`, `main`.`Email`.`isStarred`, `main`.`Email`.`isArchived`, `main`.`Email`.`folder`, `main`.`Email`.`parentEmailId`, `main`.`Email`.`readAt`, `main`.`Email`.`snoozedUntil`, `main`.`Email`.`scheduledAt`, `main`.`Email`.`sentAt`, `main`.`Email`.`isDraft`, `main`.`Email`.`priority`, `main`.`Email`.`createdAt` FROM `main`.`Email` WHERE (`main`.`Email`.`folder` = ? AND `main`.`Email`.`recipientEmail` = ? AND `main`.`Email`.`snoozedUntil` IS NULL) ORDER BY `main`.`Email`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`id` IN (?,?,?) LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`avatar` FROM `main`.`User` WHERE `main`.`User`.`email` IN (?) LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Email`.`id`, `main`.`Email`.`parentEmailId` FROM `main`.`Email` WHERE `main`.`Email`.`parentEmailId` IN (?,?,?,?,?) LIMIT ? OFFSET ?
+ GET /api/emails?folder=inbox&page=1&limit=20 200 in 13ms (compile: 3ms, render: 10ms)
+ GET /api/emails/cmnpuirlo000ap3h9lj1ho4ry/labels 401 in 837ms (compile: 810ms, render: 27ms)
+ GET /api/emails/cmnllv901000gmq8ly642nmr3/labels 401 in 874ms (compile: 846ms, render: 28ms)
+ GET /api/emails/cmnpujfky000ep3h9ofocsfbf/labels 401 in 908ms (compile: 881ms, render: 28ms)
