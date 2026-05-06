@@ -94,7 +94,7 @@ function getStoredPreferences(): NotificationPreferences {
 // ─── Main Hook ─────────────────────────────────────────────────────────────
 
 export function useNotifications() {
-  const { isAuthenticated, setNewEmailNotification, setCurrentFolder } = useAppStore()
+  const { isAuthenticated, setNewEmailNotification, setCurrentFolder, setEmails, setTotalEmails } = useAppStore()
   const lastEmailIdsRef = useRef<Set<string>>(new Set())
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -175,6 +175,18 @@ export function useNotifications() {
         const prefs = prefsRef.current
         const isBackground = document.visibilityState === 'hidden'
 
+        // Refresh the email list so new emails appear immediately
+        const { currentFolder: folder, currentPage } = useAppStore.getState()
+        if (folder !== 'search') {
+          const folderParam = folder === 'folder' ? 'custom' : folder
+          const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=${currentPage}&limit=20`)
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json()
+            setEmails(refreshData.emails || [])
+            setTotalEmails(refreshData.total || 0)
+          }
+        }
+
         for (const email of newEmails) {
           const senderName = (email as { sender?: { firstName?: string; lastName?: string } }).sender
             ? `${(email as { sender: { firstName: string; lastName: string } }).sender.firstName} ${(email as { sender: { firstName: string; lastName: string } }).sender.lastName}`
@@ -218,7 +230,7 @@ export function useNotifications() {
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, setNewEmailNotification, setCurrentFolder])
+  }, [isAuthenticated, setNewEmailNotification, setCurrentFolder, setEmails, setTotalEmails])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {
@@ -245,17 +257,31 @@ export function useNotifications() {
     }
   }, [isAuthenticated, pollForNewEmails])
 
-  // ─── Re-poll when tab becomes visible ──────────────────────────────────
+  // ─── Re-poll and refresh when tab becomes visible ──────────────────────
   useEffect(() => {
     if (!isAuthenticated) return
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         pollForNewEmails()
+        // Also refresh the email list for the current view
+        const { currentFolder: folder, currentPage } = useAppStore.getState()
+        if (folder !== 'search') {
+          const folderParam = folder === 'folder' ? 'custom' : folder
+          fetch(`/api/emails?folder=${folderParam}&page=${currentPage}&limit=20`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data) {
+                setEmails(data.emails || [])
+                setTotalEmails(data.total || 0)
+              }
+            })
+            .catch(() => { /* silent */ })
+        }
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [isAuthenticated, pollForNewEmails])
+  }, [isAuthenticated, pollForNewEmails, setEmails, setTotalEmails])
 }
