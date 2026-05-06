@@ -1,13 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
-import { Mail } from 'lucide-react'
 
 const POLL_INTERVAL = 15000 // 15 seconds
-
-// ─── Notification Sound ────────────────────────────────────────────────────
 
 function playNotificationSound() {
   try {
@@ -94,7 +90,7 @@ function getStoredPreferences(): NotificationPreferences {
 // ─── Main Hook ─────────────────────────────────────────────────────────────
 
 export function useNotifications() {
-  const { isAuthenticated, setNewEmailNotification, setCurrentFolder, setEmails, setTotalEmails } = useAppStore()
+  const { isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification, addPushNotification } = useAppStore()
   const lastEmailIdsRef = useRef<Set<string>>(new Set())
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -188,39 +184,41 @@ export function useNotifications() {
         }
 
         for (const email of newEmails) {
-          const senderName = (email as { sender?: { firstName?: string; lastName?: string } }).sender
-            ? `${(email as { sender: { firstName: string; lastName: string } }).sender.firstName} ${(email as { sender: { firstName: string; lastName: string } }).sender.lastName}`
+          const e = email as {
+            id: string
+            subject?: string
+            isRead: boolean
+            sender?: { firstName?: string; lastName?: string; avatar?: string | null }
+          }
+          const senderName = e.sender
+            ? `${e.sender.firstName} ${e.sender.lastName}`
             : 'Unknown'
+          const subject = e.subject || '(No subject)'
 
-          const subject = (email as { subject?: string }).subject || '(No subject)'
+          // Push in-app notification banner (works in foreground)
+          addPushNotification({
+            id: `push-${e.id}`,
+            senderName,
+            senderAvatar: e.sender?.avatar || null,
+            subject,
+            emailId: e.id,
+          })
 
-          // Always show browser notification (works in background)
+          // Play notification sound
+          if (prefs.soundNotif && !isBackground) {
+            playNotificationSound()
+          }
+
+          // Show browser push notification (works in background)
           if (prefs.desktopNotif) {
             showBrowserNotification(`New email from ${senderName}`, {
               body: subject,
-              tag: `email-${(email as { id: string }).id}`,
+              tag: `email-${e.id}`,
             })
           }
 
-          // Only play sound and show toast when app is in foreground
+          // Navigate to inbox
           if (!isBackground) {
-            if (prefs.soundNotif) {
-              playNotificationSound()
-            }
-
-            toast.info(`New email from ${senderName}`, {
-              description: subject,
-              icon: <Mail className="w-4 h-4 text-[#4285F4]" />,
-              duration: 6000,
-              action: {
-                label: 'View',
-                onClick: () => {
-                  setNewEmailNotification((email as { id: string }).id)
-                  setCurrentFolder('inbox')
-                },
-              },
-            })
-
             setCurrentFolder('inbox')
           }
         }
@@ -230,7 +228,7 @@ export function useNotifications() {
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, setNewEmailNotification, setCurrentFolder, setEmails, setTotalEmails])
+  }, [isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification, addPushNotification])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {
