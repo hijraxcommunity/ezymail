@@ -130,6 +130,7 @@ export function ComposeModal() {
   const restoreDataRef = useRef<RestoreData | null>(null)
   const dragCounterRef = useRef(0)
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isSendingRef = useRef(false)
 
   // TipTap Editor
   const editor = useEditor({
@@ -371,103 +372,111 @@ export function ComposeModal() {
   }, [])
 
   const handleSend = async (scheduledAtDate?: Date | null) => {
-    const e: Record<string, string> = {}
-    if (!to.trim()) e.to = 'Recipient is required'
-    if (!subject.trim()) e.subject = 'Subject is required'
-    const text = editor?.getText().trim()
-    if (!text || text.length === 0) e.body = 'Message body is required'
-    setErrors(e)
-    if (Object.keys(e).length > 0) return
+    // Prevent double-send from double-click or rapid taps
+    if (isSendingRef.current) return
+    isSendingRef.current = true
 
-    const html = editor?.getHTML() || ''
-    const currentAttachments = attachments
+    try {
+      const e: Record<string, string> = {}
+      if (!to.trim()) e.to = 'Recipient is required'
+      if (!subject.trim()) e.subject = 'Subject is required'
+      const text = editor?.getText().trim()
+      if (!text || text.length === 0) e.body = 'Message body is required'
+      setErrors(e)
+      if (Object.keys(e).length > 0) return
 
-    // Upload attachments FIRST
-    let uploadedFiles: Array<{ name: string; url: string; size: number; type: string }> | undefined
-    if (currentAttachments.length > 0) {
-      setIsUploading(true)
-      setUploadProgress(0)
-      try {
-        const result = await new Promise<Array<{ name: string; url: string; size: number; type: string }>>((resolve, reject) => {
-          const formData = new FormData()
-          currentAttachments.forEach(file => formData.append('files', file))
-          const xhr = new XMLHttpRequest()
-          xhr.open('POST', '/api/upload')
-          xhr.upload.addEventListener('progress', (ev) => {
-            if (ev.lengthComputable) {
-              setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
-            }
-          })
-          xhr.addEventListener('load', () => {
-            if (xhr.status === 200) {
-              const data = JSON.parse(xhr.responseText)
-              resolve(data.files)
-            } else {
-              try {
-                const err = JSON.parse(xhr.responseText)
-                reject(new Error(err.error || 'Upload failed'))
-              } catch {
-                reject(new Error('Upload failed'))
+      const html = editor?.getHTML() || ''
+      const currentAttachments = attachments
+
+      // Upload attachments FIRST
+      let uploadedFiles: Array<{ name: string; url: string; size: number; type: string }> | undefined
+      if (currentAttachments.length > 0) {
+        setIsUploading(true)
+        setUploadProgress(0)
+        try {
+          const result = await new Promise<Array<{ name: string; url: string; size: number; type: string }>>((resolve, reject) => {
+            const formData = new FormData()
+            currentAttachments.forEach(file => formData.append('files', file))
+            const xhr = new XMLHttpRequest()
+            xhr.open('POST', '/api/upload')
+            xhr.upload.addEventListener('progress', (ev) => {
+              if (ev.lengthComputable) {
+                setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
               }
-            }
+            })
+            xhr.addEventListener('load', () => {
+              if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText)
+                resolve(data.files)
+              } else {
+                try {
+                  const err = JSON.parse(xhr.responseText)
+                  reject(new Error(err.error || 'Upload failed'))
+                } catch {
+                  reject(new Error('Upload failed'))
+                }
+              }
+            })
+            xhr.addEventListener('error', () => reject(new Error('Network error')))
+            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+            xhr.send(formData)
           })
-          xhr.addEventListener('error', () => reject(new Error('Network error')))
-          xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
-          xhr.send(formData)
-        })
-        uploadedFiles = result
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to upload attachments')
+          uploadedFiles = result
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to upload attachments')
+          setIsUploading(false)
+          setUploadProgress(0)
+          return
+        }
         setIsUploading(false)
         setUploadProgress(0)
-        return
-      }
-      setIsUploading(false)
-      setUploadProgress(0)
-    }
-
-    const data: PendingSendData = {
-      to, cc, bcc, subject, html,
-      replyToId: replyToEmail?.id,
-      attachments: uploadedFiles,
-      priority,
-      scheduledAt: scheduledAtDate ? scheduledAtDate.toISOString() : null,
-    }
-    pendingSendRef.current = data
-
-    // Close compose modal
-    setComposeOpen(false)
-    setShowSchedulePopover(false)
-
-    if (scheduledAtDate) {
-      // Schedule send — send immediately to API (no undo)
-      toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
-      actuallySendEmail(data)
-    } else {
-      // Normal send with undo
-      const sendResult = await actuallySendEmailWithResponse(data)
-      if (sendResult?.emailId) {
-        pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
       }
 
-      toast('Message sent.', {
-        description: undoCountdown > 0 ? `Undo available (${undoCountdown}s)` : undefined,
-        action: {
-          label: 'Undo',
-          onClick: handleUndo,
-        },
-        duration: 5000,
-      })
+      const data: PendingSendData = {
+        to, cc, bcc, subject, html,
+        replyToId: replyToEmail?.id,
+        attachments: uploadedFiles,
+        priority,
+        scheduledAt: scheduledAtDate ? scheduledAtDate.toISOString() : null,
+      }
+      pendingSendRef.current = data
 
-      startUndoCountdown()
+      // Close compose modal
+      setComposeOpen(false)
+      setShowSchedulePopover(false)
 
-      undoTimerRef.current = setTimeout(() => {
-        const payload = pendingSendRef.current
-        if (!payload) return
-        pendingSendRef.current = null
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
-        setUndoCountdown(0)
-      }, 5000)
+      if (scheduledAtDate) {
+        // Schedule send — send immediately to API (no undo)
+        toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
+        actuallySendEmail(data)
+      } else {
+        // Normal send with undo
+        const sendResult = await actuallySendEmailWithResponse(data)
+        if (sendResult?.emailId) {
+          pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
+        }
+
+        toast('Message sent.', {
+          description: undoCountdown > 0 ? `Undo available (${undoCountdown}s)` : undefined,
+          action: {
+            label: 'Undo',
+            onClick: handleUndo,
+          },
+          duration: 5000,
+        })
+
+        startUndoCountdown()
+
+        undoTimerRef.current = setTimeout(() => {
+          const payload = pendingSendRef.current
+          if (!payload) return
+          pendingSendRef.current = null
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+          setUndoCountdown(0)
+        }, 5000)
+      }
+    } finally {
+      isSendingRef.current = false
     }
   }
 

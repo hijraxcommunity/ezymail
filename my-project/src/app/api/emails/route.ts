@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
     const search = searchParams.get('search') || '';
+    const includeThreads = searchParams.get('includeThreads') === 'true';
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -59,6 +60,13 @@ export async function GET(request: NextRequest) {
     // Exclude snoozed emails from normal folders (unless viewing snoozed folder)
     if (folder !== 'snoozed') {
       where.snoozedUntil = null;
+    }
+
+    // Filter out reply emails (with parentEmailId) from the list view
+    // Replies should only appear inside the thread view of the parent email
+    // includeThreads=true is used by notification polling to detect new replies
+    if (!includeThreads && !search) {
+      where.parentEmailId = null;
     }
 
     if (search) {
