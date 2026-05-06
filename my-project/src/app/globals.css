@@ -226,16 +226,34 @@
 .tiptap .ProseMirror {
   min-height: 100%;
   outline: none;
+  border: none;
+}
+
+.tiptap .ProseMirror:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
 }
 
 /* Ensure the editor wrapper passes height to children */
 .tiptap-editor-wrap {
   display: flex;
   flex-direction: column;
+  outline: none;
+  border: none;
+}
+
+.tiptap-editor-wrap:focus-within {
+  outline: none;
+  border: none;
+  box-shadow: none;
 }
 
 .tiptap-editor-wrap .tiptap {
   flex: 1;
+  outline: none;
+  border: none;
+  box-shadow: none;
 }
 
 .tiptap p.is-editor-empty:first-child::before {
