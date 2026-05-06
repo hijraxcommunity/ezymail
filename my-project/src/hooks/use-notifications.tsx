@@ -1,9 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
+import { Mail } from 'lucide-react'
 
 const POLL_INTERVAL = 15000 // 15 seconds
+
+// ─── Notification Sound ────────────────────────────────────────────────────
 
 function playNotificationSound() {
   try {
@@ -90,7 +94,7 @@ function getStoredPreferences(): NotificationPreferences {
 // ─── Main Hook ─────────────────────────────────────────────────────────────
 
 export function useNotifications() {
-  const { isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification, addPushNotification } = useAppStore()
+  const { isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setNewEmailNotification, setSelectedEmailId } = useAppStore()
   const lastEmailIdsRef = useRef<Set<string>>(new Set())
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -122,7 +126,6 @@ export function useNotifications() {
     }
     fetchPrefs()
 
-    // Listen for storage changes to pick up prefs saved from settings
     const handleStorage = () => {
       try {
         const cached = sessionStorage.getItem('ezymail-notif-prefs')
@@ -195,21 +198,7 @@ export function useNotifications() {
             : 'Unknown'
           const subject = e.subject || '(No subject)'
 
-          // Push in-app notification banner (works in foreground)
-          addPushNotification({
-            id: `push-${e.id}`,
-            senderName,
-            senderAvatar: e.sender?.avatar || null,
-            subject,
-            emailId: e.id,
-          })
-
-          // Play notification sound
-          if (prefs.soundNotif && !isBackground) {
-            playNotificationSound()
-          }
-
-          // Show browser push notification (works in background)
+          // Always show native browser push notification (outside the app)
           if (prefs.desktopNotif) {
             showBrowserNotification(`New email from ${senderName}`, {
               body: subject,
@@ -217,8 +206,27 @@ export function useNotifications() {
             })
           }
 
-          // Navigate to inbox
+          // Play sound when app is in foreground
+          if (prefs.soundNotif && !isBackground) {
+            playNotificationSound()
+          }
+
+          // Show toast when app is in foreground
           if (!isBackground) {
+            toast.info(`New email from ${senderName}`, {
+              description: subject,
+              icon: <Mail className="w-4 h-4 text-[#4285F4]" />,
+              duration: 6000,
+              action: {
+                label: 'View',
+                onClick: () => {
+                  setNewEmailNotification(e.id)
+                  setSelectedEmailId(e.id)
+                  setCurrentFolder('inbox')
+                },
+              },
+            })
+
             setCurrentFolder('inbox')
           }
         }
@@ -228,7 +236,7 @@ export function useNotifications() {
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification, addPushNotification])
+  }, [isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {
