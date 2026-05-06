@@ -19,8 +19,8 @@ interface UserSafe {
 }
 
 export interface EmailWithSender extends Email {
-  sender: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatar'> | null;
-  recipient: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatar'> | null;
+  sender: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar'> | null;
+  recipient: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar'> | null;
   replies?: EmailWithSender[];
 }
 
