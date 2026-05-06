@@ -157,7 +157,7 @@ export function useNotifications() {
     if (!isAuthenticated || !isInitializedRef.current) return
 
     try {
-      const res = await fetch('/api/emails?folder=inbox&page=1&limit=5')
+      const res = await fetch('/api/emails?folder=inbox&page=1&limit=5&includeThreads=true')
       if (!res.ok) return
 
       const data = await res.json()
