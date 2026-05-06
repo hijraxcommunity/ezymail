@@ -5,7 +5,7 @@ import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Sun, Moon, Menu, Mail, Settings, User, Shield, LogOut, X,
-  Loader2, Clock, ArrowRight, Filter, Bookmark, Trash2, Bell, BellOff,
+  Loader2, Clock, ArrowRight, Filter, Bookmark, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
@@ -216,142 +216,6 @@ function SearchSuggestions({
 }
 
 /* ═══════════════════════════════════════════
-   Notification Bell Component
-   ═══════════════════════════════════════════ */
-
-function NotificationBell({ unreadCount }: { unreadCount: number }) {
-  const [permissionStatus, setPermissionStatus] = useState<string>('default')
-  const [requesting, setRequesting] = useState(false)
-  const [dismissed, setDismissed] = useState(false)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setPermissionStatus(Notification.permission)
-    }
-  }, [])
-
-  const handleRequestPermission = async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      toast.error('Notifications not supported in this browser')
-      return
-    }
-
-    setRequesting(true)
-    try {
-      const permission = await Notification.requestPermission()
-      setPermissionStatus(permission)
-      if (permission === 'granted') {
-        toast.success('Notifications enabled!', {
-          description: 'You\'ll receive alerts for new emails',
-          duration: 3000,
-        })
-      } else if (permission === 'denied') {
-        toast.error('Notifications blocked', {
-          description: 'Enable them in your browser\'s site settings',
-          duration: 4000,
-        })
-      }
-    } catch {
-      toast.error('Failed to request notification permission')
-    } finally {
-      setRequesting(false)
-    }
-  }
-
-  const needsPermission = permissionStatus === 'default'
-  const isDenied = permissionStatus === 'denied'
-  const isGranted = permissionStatus === 'granted'
-
-  return (
-    <>
-      {/* Notification permission banner — shown once when permission is default */}
-      <AnimatePresence>
-        {needsPermission && !dismissed && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-1 z-50 bg-white dark:bg-gray-900 rounded-xl border border-[#FBBC05]/40 dark:border-[#FBBC05]/30 shadow-lg shadow-black/5 p-3 sm:p-4"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-[#FBBC05]/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Bell className="w-4.5 h-4.5 text-[#FBBC05]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Stay updated with notifications</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Get notified instantly when new emails arrive — even when EzyMail is in the background.
-                </p>
-                <div className="flex items-center gap-2 mt-3">
-                  <Button
-                    size="sm"
-                    onClick={handleRequestPermission}
-                    disabled={requesting}
-                    className="h-8 px-4 bg-[#FBBC05] hover:bg-[#F9A825] text-[#1F1F1F] text-xs font-semibold rounded-full transition-colors"
-                  >
-                    {requesting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                    ) : (
-                      <Bell className="w-3.5 h-3.5 mr-1.5" />
-                    )}
-                    Enable Notifications
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDismissed(true)}
-                    className="h-8 px-3 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-full"
-                  >
-                    Not now
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Bell icon button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 sm:h-9 sm:w-9 relative"
-        onClick={() => {
-          if (needsPermission) handleRequestPermission()
-          else if (isDenied) {
-            toast.error('Notifications blocked', {
-              description: 'Go to your browser\'s site settings to allow notifications for this site.',
-              duration: 5000,
-            })
-          }
-        }}
-        title={
-          needsPermission
-            ? 'Enable email notifications'
-            : isDenied
-              ? 'Notifications blocked — click to learn more'
-              : isGranted
-                ? `${unreadCount} unread email${unreadCount !== 1 ? 's' : ''}`
-                : 'Notifications'
-        }
-      >
-        {isGranted || needsPermission ? (
-          <Bell className="w-4 h-4" />
-        ) : (
-          <BellOff className="w-4 h-4 text-gray-400" />
-        )}
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center bg-red-500 rounded-full text-[10px] font-bold text-white border-2 border-white dark:border-gray-950">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </Button>
-    </>
-  )
-}
-
-/* ═══════════════════════════════════════════
    Main MailHeader Component
    ═══════════════════════════════════════════ */
 
@@ -518,7 +382,7 @@ export function MailHeader() {
 
   return (
     <>
-      <header className="h-12 sm:h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 shrink-0 z-30 relative">
+      <header className="h-12 sm:h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 shrink-0 z-30">
         {/* ─── Left: Hamburger + Logo ─── */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Button
@@ -657,11 +521,8 @@ export function MailHeader() {
           </div>
         </div>
 
-        {/* ─── Right: Notifications + Theme Toggle + Profile ─── */}
+        {/* ─── Right: Theme Toggle + Profile ─── */}
         <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-          {/* Notification Bell */}
-          <NotificationBell unreadCount={unreadCount} />
-
           <Button
             variant="ghost"
             size="icon"

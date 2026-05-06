@@ -153,10 +153,9 @@ export function useNotifications() {
     return () => clearTimeout(timer)
   }, [isAuthenticated])
 
-  // ─── Poll for new emails ───────────────────────────────────────────────
+  // ─── Poll for new emails (works even when tab is in background) ─────────
   const pollForNewEmails = useCallback(async () => {
     if (!isAuthenticated || !isInitializedRef.current) return
-    if (document.visibilityState === 'hidden') return
 
     try {
       const res = await fetch('/api/emails?folder=inbox&page=1&limit=5')
@@ -174,6 +173,7 @@ export function useNotifications() {
       if (newEmails.length > 0) {
         lastEmailIdsRef.current = serverIds
         const prefs = prefsRef.current
+        const isBackground = document.visibilityState === 'hidden'
 
         for (const email of newEmails) {
           const senderName = (email as { sender?: { firstName?: string; lastName?: string } }).sender
@@ -182,10 +182,7 @@ export function useNotifications() {
 
           const subject = (email as { subject?: string }).subject || '(No subject)'
 
-          if (prefs.soundNotif) {
-            playNotificationSound()
-          }
-
+          // Always show browser notification (works in background)
           if (prefs.desktopNotif) {
             showBrowserNotification(`New email from ${senderName}`, {
               body: subject,
@@ -193,20 +190,27 @@ export function useNotifications() {
             })
           }
 
-          toast.info(`New email from ${senderName}`, {
-            description: subject,
-            icon: <Mail className="w-4 h-4 text-[#4285F4]" />,
-            duration: 6000,
-            action: {
-              label: 'View',
-              onClick: () => {
-                setNewEmailNotification((email as { id: string }).id)
-                setCurrentFolder('inbox')
-              },
-            },
-          })
+          // Only play sound and show toast when app is in foreground
+          if (!isBackground) {
+            if (prefs.soundNotif) {
+              playNotificationSound()
+            }
 
-          setCurrentFolder('inbox')
+            toast.info(`New email from ${senderName}`, {
+              description: subject,
+              icon: <Mail className="w-4 h-4 text-[#4285F4]" />,
+              duration: 6000,
+              action: {
+                label: 'View',
+                onClick: () => {
+                  setNewEmailNotification((email as { id: string }).id)
+                  setCurrentFolder('inbox')
+                },
+              },
+            })
+
+            setCurrentFolder('inbox')
+          }
         }
       } else {
         lastEmailIdsRef.current = serverIds
