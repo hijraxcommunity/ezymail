@@ -4,6 +4,11 @@ $ next dev -p 3000 2>&1 | tee dev.log
 - Network:       http://21.0.8.46:3000
 
 ✓ Starting...
-✓ Ready in 1043ms
+✓ Ready in 1048ms
 ○ Compiling / ...
- GET / 200 in 4.2s (compile: 3.6s, render: 580ms)
+ GET / 200 in 47ms (compile: 5ms, render: 42ms)
+ GET / 200 in 4.3s (compile: 3.7s, render: 602ms)
+prisma:query SELECT `main`.`User`.`id`, `main`.`User`.`email`, `main`.`User`.`passwordHash`, `main`.`User`.`firstName`, `main`.`User`.`lastName`, `main`.`User`.`displayName`, `main`.`User`.`bio`, `main`.`User`.`dateOfBirth`, `main`.`User`.`phone`, `main`.`User`.`avatar`, `main`.`User`.`recoveryEmail`, `main`.`User`.`role`, `main`.`User`.`status`, `main`.`User`.`signature`, `main`.`User`.`preferences`, `main`.`User`.`onboardingDone`, `main`.`User`.`lastLogin`, `main`.`User`.`lastIp`, `main`.`User`.`deletedAt`, `main`.`User`.`createdAt`, `main`.`User`.`updatedAt` FROM `main`.`User` WHERE (`main`.`User`.`email` = ? AND 1=1) LIMIT ? OFFSET ?
+prisma:query UPDATE `main`.`User` SET `lastLogin` = ?, `lastIp` = ?, `updatedAt` = ? WHERE (`main`.`User`.`id` = ? AND 1=1) RETURNING `id` AS `id`, `email` AS `email`, `passwordHash` AS `passwordHash`, `firstName` AS `firstName`, `lastName` AS `lastName`, `displayName` AS `displayName`, `bio` AS `bio`, `dateOfBirth` AS `dateOfBirth`, `phone` AS `phone`, `avatar` AS `avatar`, `recoveryEmail` AS `recoveryEmail`, `role` AS `role`, `status` AS `status`, `signature` AS `signature`, `preferences` AS `preferences`, `onboardingDone` AS `onboardingDone`, `lastLogin` AS `lastLogin`, `lastIp` AS `lastIp`, `deletedAt` AS `deletedAt`, `createdAt` AS `createdAt`, `updatedAt` AS `updatedAt`
+prisma:query INSERT INTO `main`.`Session` (`id`, `userId`, `token`, `ipAddress`, `lastActive`, `expiresAt`, `isActive`) VALUES (?,?,?,?,?,?,?) RETURNING `id` AS `id`, `userId` AS `userId`, `token` AS `token`, `deviceName` AS `deviceName`, `deviceType` AS `deviceType`, `ipAddress` AS `ipAddress`, `userAgent` AS `userAgent`, `location` AS `location`, `lastActive` AS `lastActive`, `expiresAt` AS `expiresAt`, `isActive` AS `isActive`
+ POST /api/auth/login 200 in 498ms (compile: 157ms, render: 341ms)
