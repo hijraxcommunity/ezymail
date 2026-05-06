@@ -129,6 +129,19 @@ interface AppState {
   newEmailNotification: string | null;
   setNewEmailNotification: (emailId: string | null) => void;
 
+  // In-app push notification queue
+  pushNotifications: Array<{
+    id: string;
+    senderName: string;
+    senderAvatar: string | null;
+    subject: string;
+    emailId: string;
+    timestamp: number;
+  }>;
+  addPushNotification: (notif: Omit<AppState['pushNotifications'][number], 'timestamp'>) => void;
+  dismissPushNotification: (id: string) => void;
+  clearPushNotifications: () => void;
+
   // Settings
   settingsView: SettingsView;
 
@@ -280,6 +293,9 @@ export const useAppStore = create<AppState>()(
       // Notifications
       newEmailNotification: null,
 
+      // In-app push notifications
+      pushNotifications: [],
+
       // Settings
       settingsView: null,
 
@@ -400,6 +416,14 @@ export const useAppStore = create<AppState>()(
 
       // Notifications
       setNewEmailNotification: (emailId) => set({ newEmailNotification: emailId }),
+
+      addPushNotification: (notif) => set((state) => ({
+        pushNotifications: [{ ...notif, timestamp: Date.now() }, ...state.pushNotifications],
+      })),
+      dismissPushNotification: (id) => set((state) => ({
+        pushNotifications: state.pushNotifications.filter(n => n.id !== id),
+      })),
+      clearPushNotifications: () => set({ pushNotifications: [] }),
 
       // Actions - Settings
       setSettingsView: (view) => set({ settingsView: view, adminView: null }),
