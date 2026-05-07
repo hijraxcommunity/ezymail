@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { readFile, stat } from 'fs/promises';
-import { join, extname } from 'path';
-import { existsSync } from 'fs';
+import { db } from '@/lib/db';
 
 // MIME type map for serving files with correct Content-Type
 const MIME_MAP: Record<string, string> = {
@@ -27,13 +25,13 @@ const MIME_MAP: Record<string, string> = {
   '.7z': 'application/x-7z-compressed', '.gz': 'application/gzip', '.tar': 'application/x-tar',
 };
 
-// GET /api/attachments/[path] - Serve uploaded files
+// GET /api/attachments/[path] - Serve attachment files
+// Looks up the attachment from the database and serves the base64 data
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ path: string }> }
 ) {
   try {
-    // Auth check (lightweight — just verify session exists)
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -47,33 +45,58 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
     }
 
-    const fullPath = join(process.cwd(), 'uploads', 'attachments', normalized);
+    // Extract the attachment ID from the path (format: userId_hash.ext)
+    const fileName = normalized.split('/').pop() || '';
 
-    // Fallback to old public/ location for backward compatibility
-    const oldPath = !existsSync(fullPath)
-      ? join(process.cwd(), 'public', 'uploads', 'attachments', normalized)
-      : fullPath;
-    const servePath = existsSync(fullPath) ? fullPath : oldPath;
+    // Look for the attachment in the user's emails
+    const emails = await db.email.findMany({
+      where: {
+        OR: [
+          { senderId: session.userId },
+          { recipientEmail: session.email },
+        ],
+        attachments: { not: null },
+      },
+      select: { attachments: true },
+      take: 100,
+    });
 
-    if (!existsSync(servePath)) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    // Search through email attachments for a matching file
+    for (const email of emails) {
+      if (!email.attachments) continue;
+      try {
+        const attachmentList = JSON.parse(email.attachments);
+        if (!Array.isArray(attachmentList)) continue;
+
+        const match = attachmentList.find(
+          (a: { name?: string; url?: string; data?: string }) =>
+            a.url?.includes(normalized) || a.name === fileName
+        );
+
+        if (match?.data) {
+          // Attachment has base64 data embedded
+          const base64Data = match.data.replace(/^data:[^;]+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = '.' + (match.name?.split('.').pop() || 'bin').toLowerCase();
+          const contentType = MIME_MAP[ext] || 'application/octet-stream';
+
+          return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+              'Content-Type': contentType,
+              'Content-Length': String(buffer.length),
+              'Cache-Control': 'public, max-age=86400, immutable',
+              'Content-Disposition': `inline; filename="${match.name || fileName}"`,
+            },
+          });
+        }
+      } catch {
+        // Skip malformed JSON
+        continue;
+      }
     }
 
-    const fileBuffer = await readFile(servePath);
-    const fileStat = await stat(servePath);
-    const ext = extname(normalized).toLowerCase();
-    const contentType = MIME_MAP[ext] || 'application/octet-stream';
-
-    // Cache for 1 day
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': String(fileStat.size),
-        'Cache-Control': 'public, max-age=86400, immutable',
-        'Content-Disposition': `inline; filename="${normalized.split('/').pop()}"`,
-      },
-    });
+    return NextResponse.json({ error: 'File not found' }, { status: 404 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Serve attachment error:', message);

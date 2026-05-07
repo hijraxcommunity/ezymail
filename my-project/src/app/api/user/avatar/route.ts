@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { db } from '@/lib/db';
 import sharp from 'sharp';
 
-// POST /api/user/avatar - Upload avatar
+// POST /api/user/avatar - Upload avatar (stored as base64 in database)
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
@@ -42,21 +41,17 @@ export async function POST(request: NextRequest) {
       .jpeg({ quality: 80 })
       .toBuffer();
 
-    // Determine file extension
-    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/gif' ? 'gif' : 'jpg';
-    const fileName = `${session.userId}.${ext}`;
+    // Convert to base64 data URL (stored directly in database)
+    const base64 = processedBuffer.toString('base64');
+    const avatarDataUrl = `data:image/jpeg;base64,${base64}`;
 
-    // Ensure upload directory exists
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'avatars');
-    await mkdir(uploadDir, { recursive: true });
+    // Save avatar URL to user record
+    await db.user.update({
+      where: { id: session.userId },
+      data: { avatar: avatarDataUrl },
+    });
 
-    // Save file
-    const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, processedBuffer);
-
-    const avatarPath = `/uploads/avatars/${fileName}`;
-
-    return NextResponse.json({ avatar: avatarPath });
+    return NextResponse.json({ avatar: avatarDataUrl });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Upload avatar error:', message);
