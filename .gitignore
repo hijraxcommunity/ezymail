@@ -1,0 +1,45 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+
+# Logs
+dev.log
+*.log
+nohup.out
+
+# Build artifacts
+dist/
+build/
+tsconfig.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Uploaded files
+public/uploads/
+
+# Temp files
+tmp/
+temp/
