@@ -1,0 +1,28 @@
+{
+  "name": "EzyMail - Email made Ezy",
+  "short_name": "EzyMail",
+  "description": "A modern, fast, and secure email platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4285F4",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity", "communication"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
