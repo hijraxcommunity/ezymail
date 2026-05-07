@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
 
 // GET /api/emails - List emails
 export async function GET(request: NextRequest) {
@@ -242,6 +243,25 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Send push notification to recipient (non-blocking, does not delay response)
+    if (!isScheduled) {
+      const sender = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const senderName = sender
+        ? `${sender.firstName} ${sender.lastName}`
+        : 'Someone';
+
+      // Fire-and-forget — don't await, don't block the email send response
+      sendPushNotification({
+        recipientUserId: recipient.id,
+        senderName,
+        subject: subject.trim(),
+        emailId: inboxEmail.id,
+      }).catch(() => {});
+    }
 
     return NextResponse.json(
       {
