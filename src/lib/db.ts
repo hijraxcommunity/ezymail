@@ -7,7 +7,7 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   // Use pg adapter for connection pooling (required for Vercel serverless)
-  const connectionString = process.env.DATABASE_URL!
+  const connectionString = process.env.DATABASE_URL|| ''
 
   // In production (Vercel), use the pg adapter for connection pooling
   // In development, use standard PrismaClient
