@@ -30,6 +30,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
     }
 
+    // Must be an @ezy.af address
+    if (!email.trim().toLowerCase().endsWith('@ezy.af')) {
+      return NextResponse.json({ error: 'Email must end with @ezy.af' }, { status: 400 });
+    }
+
     // Validate password strength
     if (password.length < 8) {
       return NextResponse.json(
