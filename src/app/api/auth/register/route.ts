@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { createSession, hashPassword, generateEmailFromName } from '@/lib/auth';
+import { createSession, hashPassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firstName, lastName, dateOfBirth, password, email: clientEmail } = body;
+    const { firstName, lastName, dateOfBirth, password, email } = body;
 
     // Validate fields
     if (!firstName || !firstName.trim()) {
@@ -19,6 +19,15 @@ export async function POST(request: NextRequest) {
     }
     if (!password) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+    }
+    if (!email || !email.trim()) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
     }
 
     // Validate password strength
@@ -62,34 +71,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate email address
-    let email = clientEmail || generateEmailFromName(firstName.trim(), lastName.trim());
-
-    // Ensure it ends with @ezy.af
-    if (!email.endsWith('@ezy.af')) {
-      email = email.split('@')[0] + '@ezy.af';
-    }
+    // Use email directly from user input
+    const userEmail = email.trim().toLowerCase();
 
     // Check if email exists
-    const existingUser = await db.user.findUnique({ where: { email } });
+    const existingUser = await db.user.findUnique({ where: { email: userEmail } });
     if (existingUser) {
-      // If client provided email exists, generate alternatives
-      if (clientEmail) {
-        return NextResponse.json(
-          { error: 'This email is already taken. Please choose a different one.' },
-          { status: 409 }
-        );
-      }
-      // Auto-generate with number suffix
-      let counter = 2;
-      while (true) {
-        const cleanFirst = firstName.toLowerCase().replace(/[^a-z]/g, '');
-        const cleanLast = lastName.toLowerCase().replace(/[^a-z]/g, '');
-        email = `${cleanFirst}.${cleanLast}${counter}@ezy.af`;
-        const exists = await db.user.findUnique({ where: { email } });
-        if (!exists) break;
-        counter++;
-      }
+      return NextResponse.json(
+        { error: 'This email is already taken. Please choose a different one.' },
+        { status: 409 }
+      );
     }
 
     // Hash password
@@ -98,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Create user
     const user = await db.user.create({
       data: {
-        email,
+        email: userEmail,
         passwordHash,
         firstName: firstName.trim(),
         lastName: lastName.trim(),

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, AtSign, X } from 'lucide-react'
+import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -84,8 +84,8 @@ export function RegisterForm() {
   const [day, setDay] = useState(0)
   const [year, setYear] = useState(0)
 
-  // Email: user-chosen username + availability
-  const [emailUsername, setEmailUsername] = useState('')
+  // Email: user-chosen full email address
+  const [userEmail, setUserEmail] = useState('')
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   // Step 3: Password
@@ -103,28 +103,16 @@ export function RegisterForm() {
   const passwordValue = passwordForm.watch('password')
   const passwordStrength = getPasswordStrength(passwordValue || '')
 
-  // Derive email from form values in real-time (not from delayed state)
-  const watchFirstName = nameForm.watch('firstName')
-  const watchLastName = nameForm.watch('lastName')
-
-  // Auto-update emailUsername as user types their name
-  useEffect(() => {
-    const fn = watchFirstName?.toLowerCase().replace(/[^a-z]/g, '') || ''
-    const ln = watchLastName?.toLowerCase().replace(/[^a-z]/g, '') || ''
-    if (fn && ln) {
-      const base = `${fn}.${ln}`
-      setEmailUsername(base)
-      setEmailStatus('idle')
-    }
-  }, [watchFirstName, watchLastName])
-
   // Build the full email
-  const fullEmail = emailUsername ? `${emailUsername}@ezy.af` : ''
+  const fullEmail = userEmail.trim()
+
+  // Validate email format
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fullEmail)
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!emailUsername || !emailUsername.includes('.')) {
+    if (!fullEmail || !isValidEmail) {
       setEmailStatus('idle')
       return
     }
@@ -132,8 +120,7 @@ export function RegisterForm() {
     if (checkTimerRef.current) clearTimeout(checkTimerRef.current)
     checkTimerRef.current = setTimeout(async () => {
       try {
-        const email = `${emailUsername}@ezy.af`
-        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`)
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(fullEmail)}`)
         const data = await res.json()
         setEmailStatus(data.available ? 'available' : 'taken')
       } catch {
@@ -141,19 +128,7 @@ export function RegisterForm() {
       }
     }, 600)
     return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
-  }, [emailUsername])
-
-  // Generate alternative suggestions when taken
-  const suggestions = emailStatus === 'taken' && emailUsername ? (() => {
-    const base = emailUsername.split('.')[0]
-    const sugs = [`${base}1`, `${base}2`, `${base}3`]
-    return sugs
-  })() : []
-
-  const pickSuggestion = (sug: string) => {
-    setEmailUsername(sug)
-    setEmailStatus('idle')
-  }
+  }, [fullEmail, isValidEmail])
 
   const handleNameNext = () => {
     const fn = nameForm.getValues('firstName')
@@ -162,8 +137,8 @@ export function RegisterForm() {
       toast.error('Please enter your first and last name (min 2 chars each)')
       return
     }
-    if (!emailUsername || !emailUsername.includes('.')) {
-      toast.error('Please enter or customize your email address')
+    if (!fullEmail || !isValidEmail) {
+      toast.error('Please enter a valid email address')
       return
     }
     if (emailStatus === 'taken') {
@@ -332,22 +307,18 @@ export function RegisterForm() {
                   {/* EMAIL CHOOSER */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
-                      <AtSign className="w-3.5 h-3.5 inline mr-1" />
-                      Choose your email address
+                      <Mail className="w-3.5 h-3.5 inline mr-1" />
+                      Email address
                     </label>
-                    <div className="relative">
-                      <Input
-                        value={emailUsername}
-                        onChange={(e) => setEmailUsername(e.target.value.toLowerCase().replace(/[^a-z0-9.]/g, ''))}
-                        placeholder="username"
-                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-16"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none font-medium">
-                        @ezy.af
-                      </span>
-                    </div>
+                    <Input
+                      value={userEmail}
+                      onChange={(e) => { setUserEmail(e.target.value); setEmailStatus('idle') }}
+                      placeholder="yourname@example.com"
+                      type="email"
+                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                    />
                     {/* Status indicator */}
-                    {emailUsername && emailUsername.includes('.') && (
+                    {fullEmail && isValidEmail && (
                       <div className="flex items-center gap-1.5">
                         {emailStatus === 'checking' && (
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
@@ -364,27 +335,6 @@ export function RegisterForm() {
                             <span className="text-xs text-red-500 font-medium">{fullEmail} is taken</span>
                           </>
                         )}
-                      </div>
-                    )}
-                    {/* Alternative suggestions */}
-                    {emailStatus === 'taken' && suggestions.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs text-gray-500">Try one of these instead:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {suggestions.map(sug => {
-                            const sugEmail = `${sug}@ezy.af`
-                            return (
-                              <button
-                                key={sug}
-                                type="button"
-                                onClick={() => pickSuggestion(sug)}
-                                className="px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/20 transition-colors"
-                              >
-                                {sugEmail}
-                              </button>
-                            )
-                          })}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -556,7 +506,7 @@ export function RegisterForm() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Email</span>
-                      <span className={`text-sm font-medium ${emailStatus === 'available' ? 'text-[#4285F4]' : 'text-red-500'}`}>
+                      <span className={`text-sm font-medium ${fullEmail && isValidEmail && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
                         {fullEmail || 'Not set'}
                       </span>
                     </div>
