@@ -99,7 +99,7 @@ export async function PUT(request: NextRequest) {
       updateData.lastName = lastName.trim();
     }
     if (displayName !== undefined) {
-      updateData.displayName = displayName.trim();
+      updateData.displayName = displayName ? displayName.trim() : null;
     }
     if (avatar !== undefined) {
       updateData.avatar = avatar;
