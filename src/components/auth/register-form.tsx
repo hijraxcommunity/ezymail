@@ -84,8 +84,8 @@ export function RegisterForm() {
   const [day, setDay] = useState(0)
   const [year, setYear] = useState(0)
 
-  // Email: user-chosen full email address
-  const [userEmail, setUserEmail] = useState('')
+  // Email: user-chosen username part (before @ezy.af)
+  const [emailUsername, setEmailUsername] = useState('')
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   // Step 3: Password
@@ -103,16 +103,16 @@ export function RegisterForm() {
   const passwordValue = passwordForm.watch('password')
   const passwordStrength = getPasswordStrength(passwordValue || '')
 
-  // Build the full email
-  const fullEmail = userEmail.trim()
+  // Build the full email from username + @ezy.af
+  const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
 
-  // Validate email format
-  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fullEmail)
+  // Validate username (letters, numbers, dots, underscores, hyphens)
+  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!fullEmail || !isValidEmail) {
+    if (!fullEmail || !isValidUsername) {
       setEmailStatus('idle')
       return
     }
@@ -128,7 +128,7 @@ export function RegisterForm() {
       }
     }, 600)
     return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
-  }, [fullEmail, isValidEmail])
+  }, [fullEmail, isValidUsername])
 
   const handleNameNext = () => {
     const fn = nameForm.getValues('firstName')
@@ -137,8 +137,8 @@ export function RegisterForm() {
       toast.error('Please enter your first and last name (min 2 chars each)')
       return
     }
-    if (!fullEmail || !isValidEmail) {
-      toast.error('Please enter a valid email address')
+    if (!fullEmail || !isValidUsername) {
+      toast.error('Please enter a valid email username')
       return
     }
     if (emailStatus === 'taken') {
@@ -310,15 +310,19 @@ export function RegisterForm() {
                       <Mail className="w-3.5 h-3.5 inline mr-1" />
                       Email address
                     </label>
-                    <Input
-                      value={userEmail}
-                      onChange={(e) => { setUserEmail(e.target.value); setEmailStatus('idle') }}
-                      placeholder="yourname@example.com"
-                      type="email"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
-                    />
+                    <div className="relative">
+                      <Input
+                        value={emailUsername}
+                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
+                        placeholder="yourname"
+                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
+                        @ezy.af
+                      </span>
+                    </div>
                     {/* Status indicator */}
-                    {fullEmail && isValidEmail && (
+                    {fullEmail && isValidUsername && (
                       <div className="flex items-center gap-1.5">
                         {emailStatus === 'checking' && (
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
@@ -506,7 +510,7 @@ export function RegisterForm() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Email</span>
-                      <span className={`text-sm font-medium ${fullEmail && isValidEmail && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
+                      <span className={`text-sm font-medium ${fullEmail && isValidUsername && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
                         {fullEmail || 'Not set'}
                       </span>
                     </div>
