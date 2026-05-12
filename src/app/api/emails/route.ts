@@ -108,6 +108,13 @@ export async function GET(request: NextRequest) {
       emailMap.set(email.id, email);
     }
 
+    // Normalize subject for cross-copy thread matching
+    const normalizeSubject = (s: string) => s.replace(/^(Re|Fwd|Fw):\s*/gi, '').trim().toLowerCase();
+    const normalizedSubjects = new Map<string, string>(); // emailId -> normalizedSubject
+    for (const email of emails) {
+      normalizedSubjects.set(email.id, normalizeSubject(email.subject || ''));
+    }
+
     // Find thread root for each email (follow parentEmail chain)
     const threadRoots = new Map<string, string>(); // emailId -> rootId
     for (const email of emails) {
@@ -121,6 +128,30 @@ export async function GET(request: NextRequest) {
         ? current.id // Parent is outside current view — this email becomes the thread representative
         : (current?.id || email.id);
       threadRoots.set(email.id, rootId);
+    }
+
+    // Cross-copy subject merge: if a reply's parentEmailId chain leads outside
+    // the current view, find another email with the same normalized subject
+    // and merge into that thread (like Gmail does across sent/inbox copies).
+    for (const email of emails) {
+      const myRoot = threadRoots.get(email.id);
+      if (!myRoot || myRoot !== email.id) continue // Already linked to a local root
+      if (!email.parentEmailId) continue // True root (no parent) — skip
+
+      // This is a reply whose parent is outside the current view
+      const ns = normalizedSubjects.get(email.id) || '';
+      if (!ns) continue;
+
+      for (const other of emails) {
+        if (other.id === email.id) continue;
+        const otherNs = normalizedSubjects.get(other.id) || '';
+        if (otherNs !== ns) continue;
+
+        // Found a subject match — merge into the other's thread
+        const otherRoot = threadRoots.get(other.id) || other.id;
+        threadRoots.set(email.id, otherRoot);
+        break;
+      }
     }
 
     // Group by root and pick the best representative (latest email in thread)
