@@ -161,6 +161,7 @@ export default function HomePage() {
 
   // ─── Keyboard shortcuts help dialog ─────────────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   // ─── Check session on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function HomePage() {
         if (data.user) setUser(data.user)
       })
       .catch(() => { /* silent */ })
+      .finally(() => setIsCheckingAuth(false))
   }, [setUser])
 
   // ─── Fetch emails when authenticated ─────────────────────────────────────
@@ -346,6 +348,25 @@ export default function HomePage() {
       ? `(${unreadCount}) EzyMail - Email made Ezy`
       : 'EzyMail - Email made Ezy'
   }, [isAuthenticated, emails])
+
+  // ─── Show loading spinner while checking session ─────────────────────
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA] flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full border-4 border-[#4285F4]/20 border-t-[#4285F4] animate-spin" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Loading EzyMail...</p>
+        </motion.div>
+      </div>
+    )
+  }
 
   // ─── Auth views ──────────────────────────────────────────────────────────
   if (!isAuthenticated) {
