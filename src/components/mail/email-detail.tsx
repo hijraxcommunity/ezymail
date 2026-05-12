@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
   Paperclip, Forward, FileText, Download, Tag, Check,
-  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronDown, ChevronRight, ChevronUp
+  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -61,65 +61,61 @@ function getInitials(user: { firstName?: string; lastName?: string } | null | un
   return `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase() || fallback
 }
 
-/* ─── Gmail-style Thread Message Card ─── */
+/* ─── Gmail-style Thread Reply (flat, no box) ─── */
 
 function ThreadMessage({
   message,
   isExpanded,
-  isLatest,
   onToggle,
 }: {
   message: EmailWithSender
   isExpanded: boolean
-  isLatest: boolean
   onToggle: () => void
 }) {
   const initials = getInitials(message.sender)
   const name = message.sender
     ? `${message.sender.firstName} ${message.sender.lastName}`
     : 'Unknown'
-  const emailAddr = message.sender?.email || ''
   const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
     try { return message.attachments ? JSON.parse(message.attachments) : [] }
     catch { return [] }
   })()
 
   return (
-    <div className={`rounded-lg border ${isLatest && isExpanded ? 'border-[#D3E3FD] dark:border-[#4285F4]/30 shadow-sm' : 'border-gray-200 dark:border-gray-800'} bg-white dark:bg-gray-950 overflow-hidden`}>
-      {/* Header — always visible, clickable to expand/collapse */}
+    <>
+      {/* Clickable header row */}
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left cursor-pointer"
+        className="w-full flex items-center gap-2.5 py-2 text-left cursor-pointer group"
       >
-        <Avatar className="w-8 h-8 shrink-0">
+        <Avatar className="w-7 h-7 shrink-0">
           <AvatarImage src={message.sender?.avatar || undefined} />
-          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
+          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">{initials}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{name}</span>
-            <span className="text-xs text-gray-400 truncate">&lt;{emailAddr}&gt;</span>
+            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{name}</span>
+            <span className="text-xs text-gray-400">
+              {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
+            </span>
           </div>
           {!isExpanded && (
-            <p className="text-xs text-gray-500 truncate mt-0.5">
-              {message.body?.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').substring(0, 100) || '...'}
+            <p className="text-xs text-gray-500 truncate mt-0.5 ml-9">
+              {message.body?.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').substring(0, 120) || '...'}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-gray-400 hidden sm:inline">
-            {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
-          </span>
+        <div className="shrink-0 text-gray-400">
           {isExpanded ? (
-            <ChevronUp className="w-4 h-4 text-gray-400" />
+            <ChevronUp className="w-4 h-4" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-gray-400" />
+            <ChevronRight className="w-4 h-4" />
           )}
         </div>
       </button>
 
-      {/* Body — only shown when expanded */}
+      {/* Expandable body */}
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
@@ -129,7 +125,7 @@ function ThreadMessage({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3">
+            <div className="pb-3 ml-9">
               <div
                 className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
                   [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
@@ -150,7 +146,7 @@ function ThreadMessage({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   )
 }
 
@@ -935,31 +931,26 @@ export function EmailDetail() {
             </div>
           )}
 
-          {/* ─── Gmail-style Thread: Original Email + All Replies ─── */}
-          <div className="space-y-3 mb-6">
-            {/* Original email card */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-8 h-8 shrink-0">
-                    <AvatarImage src={email.sender?.avatar || undefined} />
-                    <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{senderName}</span>
-                      <span className="text-xs text-gray-400 truncate">&lt;{senderEmail}&gt;</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+          {/* ─── Thread: Original Email + Replies (flat, Gmail-style) ─── */}
+          <div className="mb-6">
+            {/* Original email — always shown, no box */}
+            <div className="py-1">
+              <div className="flex items-center gap-2.5 mb-2">
+                <Avatar className="w-7 h-7 shrink-0">
+                  <AvatarImage src={email.sender?.avatar || undefined} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{senderName}</span>
+                    <span className="text-xs text-gray-400 truncate">&lt;{senderEmail}&gt;</span>
                   </div>
                 </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+                  {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+                </div>
               </div>
-              <div className="px-4 py-3">
+              <div className="ml-9">
                 <div
                   className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
                     [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
@@ -981,17 +972,18 @@ export function EmailDetail() {
               </div>
             </div>
 
-            {/* Reply cards — collapsible, newest at bottom, latest auto-expanded */}
+            {/* Replies — collapsible, older collapsed, latest auto-expanded */}
             {replies.length > 0 && (
-              <div className="space-y-2">
-                {replies.map((reply) => (
-                  <ThreadMessage
-                    key={reply.id}
-                    message={reply}
-                    isExpanded={expandedReplies.has(reply.id)}
-                    isLatest={replies.length > 0 && reply.id === replies[replies.length - 1].id}
-                    onToggle={() => toggleReply(reply.id)}
-                  />
+              <div className="border-t border-gray-100 dark:border-gray-800 mt-2">
+                {replies.map((reply, idx) => (
+                  <div key={reply.id}>
+                    {idx > 0 && <div className="border-t border-gray-100 dark:border-gray-800" />}
+                    <ThreadMessage
+                      message={reply}
+                      isExpanded={expandedReplies.has(reply.id)}
+                      onToggle={() => toggleReply(reply.id)}
+                    />
+                  </div>
                 ))}
               </div>
             )}
