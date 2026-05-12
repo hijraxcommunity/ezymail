@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
-// GET /api/emails/[id] - Get single email
+// GET /api/emails/[id] - Get single email with full thread chain
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -52,9 +52,93 @@ export async function GET(
       return NextResponse.json({ error: 'Email not found' }, { status: 404 });
     }
 
-    // Cross-copy threading: if this email is a sent copy (no parentEmailId)
-    // find the inbox copy that shares the same senderId, recipientEmail,
-    // subject, and createdAt, then grab its replies too.
+    // Check ownership
+    const isSender = email.senderId === session.userId;
+    const isRecipient = email.recipientEmail === session.email;
+    if (!isSender && !isRecipient) {
+      return NextResponse.json({ error: 'Email not found' }, { status: 404 });
+    }
+
+    // ─── Build full thread chain ───
+    // Walk up the parent chain to find all ancestors
+    const ancestors: typeof email[] = [];
+    let currentParent = email.parentEmail;
+    const visitedIds = new Set<string>();
+
+    while (currentParent && !visitedIds.has(currentParent.id)) {
+      visitedIds.add(currentParent.id);
+      // Fetch this ancestor's replies too (they might contain siblings)
+      const ancestorWithEmails = await db.email.findUnique({
+        where: { id: currentParent.id },
+        include: {
+          sender: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          },
+          recipient: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          },
+          replies: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              sender: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+              recipient: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+            },
+          },
+          parentEmail: {
+            include: {
+              sender: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+              recipient: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+            },
+          },
+        },
+      });
+      if (ancestorWithEmails) {
+        ancestors.unshift(ancestorWithEmails); // Add to beginning (oldest first)
+        currentParent = ancestorWithEmails.parentEmail;
+      } else {
+        break;
+      }
+    }
+
+    // Build thread: ancestors + current email + replies
+    // Collect all unique message IDs to avoid duplicates
+    const threadMap = new Map<string, typeof email>();
+
+    // Add ancestors
+    for (const ancestor of ancestors) {
+      threadMap.set(ancestor.id, ancestor);
+      // Also add the ancestor's replies (siblings of our email)
+      if (ancestor.replies) {
+        for (const reply of ancestor.replies) {
+          threadMap.set(reply.id, reply as unknown as typeof email);
+        }
+      }
+    }
+
+    // Add current email
+    threadMap.set(email.id, email);
+
+    // Add current email's replies (descendants)
+    if (email.replies) {
+      for (const reply of email.replies) {
+        threadMap.set(reply.id, reply as unknown as typeof email);
+      }
+    }
+
+    // Sort by createdAt ascending
+    const thread = Array.from(threadMap.values()).sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    // Cross-copy threading for sent emails (keep existing logic)
     if (!email.parentEmailId && email.folder === 'sent' && email.replies.length === 0) {
       const inboxCopy = await db.email.findFirst({
         where: {
@@ -80,20 +164,11 @@ export async function GET(
       });
 
       if (inboxCopy && inboxCopy.replies.length > 0) {
-        // Attach the inbox copy's replies to this sent email for thread display
         (email as unknown as Record<string, unknown>).replies = inboxCopy.replies;
       }
     }
 
-    // Check if the email belongs to the current user
-    const isSender = email.senderId === session.userId;
-    const isRecipient = email.recipientEmail === session.email;
-
-    if (!isSender && !isRecipient) {
-      return NextResponse.json({ error: 'Email not found' }, { status: 404 });
-    }
-
-    // Mark as read if the user is the recipient and it hasn't been read
+    // Mark as read
     if (isRecipient && !email.isRead) {
       await db.email.update({
         where: { id },
@@ -103,7 +178,7 @@ export async function GET(
       email.readAt = new Date();
     }
 
-    return NextResponse.json({ email });
+    return NextResponse.json({ email, thread });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get email error:', message);
