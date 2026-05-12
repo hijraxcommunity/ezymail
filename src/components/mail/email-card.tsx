@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, Trash2, Clock, CalendarDays } from 'lucide-react'
+import { Star, Paperclip, Archive, Trash2, Clock, CalendarDays, MessageSquare } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
@@ -319,6 +319,12 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                 >
                   {email.subject || '(No subject)'}
                 </p>
+                {email.replyCount > 0 && (
+                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
+                    <MessageSquare className="w-2.5 h-2.5" />
+                    {email.replyCount}
+                  </span>
+                )}
               </div>
               {/* Scheduled/Snoozed badge inline */}
               {email.scheduledAt && (
@@ -502,6 +508,12 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
             >
               {email.subject || '(No subject)'}
             </p>
+            {email.replyCount > 0 && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
+                <MessageSquare className="w-2.5 h-2.5" />
+                {email.replyCount}
+              </span>
+            )}
           </div>
           {/* Scheduled/Snoozed badge inline desktop */}
           {email.scheduledAt && (

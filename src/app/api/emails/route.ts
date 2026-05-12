@@ -63,12 +63,9 @@ export async function GET(request: NextRequest) {
       where.snoozedUntil = null;
     }
 
-    // Filter out reply emails (with parentEmailId) from the list view
-    // Replies should only appear inside the thread view of the parent email
-    // includeThreads=true is used by notification polling to detect new replies
-    if (!includeThreads && !search) {
-      where.parentEmailId = null;
-    }
+    // NOTE: We do NOT filter by parentEmailId = null anymore.
+    // Thread grouping is done after fetching so replies are properly
+    // nested under their parent thread in the list view.
 
     if (search) {
       where.OR = [
@@ -79,11 +76,11 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const [emails, total] = await Promise.all([
+    const [emails, totalRaw] = await Promise.all([
       db.email.findMany({
         where,
         skip,
-        take: limit,
+        take: limit * 3, // Fetch extra to account for thread deduplication
         orderBy: { createdAt: 'desc' },
         include: {
           sender: {
@@ -93,14 +90,83 @@ export async function GET(request: NextRequest) {
             select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
           },
           replies: {
-            select: { id: true },
+            select: { id: true, createdAt: true, sender: { select: { firstName: true, lastName: true } } },
+          },
+          parentEmail: {
+            select: { id: true, subject: true, sender: { select: { firstName: true, lastName: true } } },
           },
         },
       }),
-      db.email.count({ where }),
+      db.email.count({ where: { ...where, parentEmailId: null } }),
     ]);
 
-    const formattedEmails = emails.map((email) => ({
+    // ─── Thread Grouping ────────────────────────────────────────────────
+    // Group emails by their thread root (the earliest email without parentEmailId).
+    // For each thread, keep the root email and attach reply metadata.
+    const emailMap = new Map<string, typeof emails[0]>();
+    for (const email of emails) {
+      emailMap.set(email.id, email);
+    }
+
+    // Find thread root for each email (follow parentEmail chain)
+    const threadRoots = new Map<string, string>(); // emailId -> rootId
+    for (const email of emails) {
+      let current: typeof emails[0] | undefined = email;
+      const visited = new Set<string>();
+      while (current?.parentEmailId && emailMap.has(current.parentEmailId) && !visited.has(current.parentEmailId)) {
+        visited.add(current.parentEmailId);
+        current = emailMap.get(current.parentEmailId);
+      }
+      const rootId = current?.parentEmailId && !emailMap.has(current.parentEmailId)
+        ? current.id // Parent is outside current view — this email becomes the thread representative
+        : (current?.id || email.id);
+      threadRoots.set(email.id, rootId);
+    }
+
+    // Group by root and pick the best representative (latest email in thread)
+    const threadGroups = new Map<string, typeof emails[0][]>();
+    for (const email of emails) {
+      const rootId = threadRoots.get(email.id) || email.id;
+      if (!threadGroups.has(rootId)) threadGroups.set(rootId, []);
+      threadGroups.get(rootId)!.push(email);
+    }
+
+    // Build final list: one representative per thread (the latest email)
+    const seen = new Set<string>();
+    const finalEmails: typeof emails = [];
+    for (const email of emails) {
+      const rootId = threadRoots.get(email.id) || email.id;
+      if (seen.has(rootId)) continue;
+      seen.add(rootId);
+
+      const group = threadGroups.get(rootId) || [email];
+      // Sort group by createdAt desc to get the latest
+      group.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const representative = group[0]; // Latest email is the representative
+
+      // Calculate total reply count for this thread (all emails except root)
+      const totalReplies = group.length - 1;
+      // Also count replies stored in DB that might not be in this page
+      const dbReplyCount = representative.replies?.length || 0;
+      const replyCount = Math.max(totalReplies, dbReplyCount);
+
+      // Get all unique senders in the thread for avatar stack
+      const threadSenders = new Map<string, { firstName: string; lastName: string; avatar: string | null }>();
+      for (const e of group) {
+        if (e.sender) {
+          threadSenders.set(e.sender.email, e.sender as { firstName: string; lastName: string; avatar: string | null });
+        }
+      }
+
+      finalEmails.push({
+        ...representative,
+        _threadReplyCount: replyCount,
+        _threadSenders: Array.from(threadSenders.values()),
+        _isThreadRoot: rootId === representative.id,
+      });
+    }
+
+    const formattedEmails = finalEmails.map((email) => ({
       id: email.id,
       senderId: email.senderId,
       recipientEmail: email.recipientEmail,
@@ -120,12 +186,12 @@ export async function GET(request: NextRequest) {
       createdAt: email.createdAt,
       sender: email.sender,
       recipient: email.recipient,
-      replyCount: email.replies.length,
+      replyCount: (email as unknown as Record<string, number>)._threadReplyCount || 0,
     }));
 
     return NextResponse.json({
       emails: formattedEmails,
-      total,
+      total: totalRaw,
       page,
       limit,
     });
