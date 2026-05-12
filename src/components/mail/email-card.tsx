@@ -126,11 +126,16 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
   }, [swipeOpenDir, resetSwipe, onSelect])
 
   /* ─── Email data ─── */
-  const senderName = email.sender
-    ? `${email.sender.firstName} ${email.sender.lastName}`
-    : email.recipientEmail
-  const initials = email.sender
-    ? `${email.sender.firstName?.charAt(0) || ''}${email.sender.lastName?.charAt(0) || ''}`.toUpperCase()
+  const isSent = email.folder === 'sent'
+  // For sent emails, show the recipient; for others, show the sender
+  const contactPerson = isSent
+    ? (email.recipient || null)
+    : email.sender
+  const contactName = contactPerson
+    ? `${contactPerson.firstName} ${contactPerson.lastName}`
+    : (isSent ? email.recipientEmail : email.sender?.email || email.recipientEmail)
+  const initials = contactPerson
+    ? `${contactPerson.firstName?.charAt(0) || ''}${contactPerson.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
   const timeAgo = formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })
   const snippet = email.body
@@ -257,7 +262,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
               }}
               className={`shrink-0 items-center justify-center relative z-10 cursor-pointer ${multiSelectMode ? 'flex' : 'hidden md:flex'}`}
               style={{ minWidth: 36, minHeight: 44 }}
-              aria-label={`Select email from ${senderName}`}
+              aria-label={`Select email from ${contactName}`}
             >
               <div
                 className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
@@ -276,10 +281,10 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
 
             {/* Avatar */}
             <Avatar className="w-10 h-10 shrink-0">
-              <AvatarImage src={email.sender?.avatar} />
+              <AvatarImage src={contactPerson?.avatar} />
               <AvatarFallback
                 className={`text-white text-xs font-semibold ${
-                  email.sender
+                  contactPerson
                     ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
                     : 'bg-gradient-to-br from-gray-400 to-gray-500'
                 }`}
@@ -298,7 +303,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                       : 'text-[#444746] dark:text-gray-300'
                   }`}
                 >
-                  {senderName}
+                  {contactName}
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
                   {timeAgo}
@@ -440,7 +445,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
           }}
           className="shrink-0 flex items-center justify-center relative z-10 cursor-pointer"
           style={{ minWidth: 36, minHeight: 44 }}
-          aria-label={`Select email from ${senderName}`}
+          aria-label={`Select email from ${contactName}`}
         >
           <div
             className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
@@ -459,10 +464,10 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
 
         {/* Avatar */}
         <Avatar className="w-10 h-10 shrink-0">
-          <AvatarImage src={email.sender?.avatar} />
+          <AvatarImage src={contactPerson?.avatar} />
           <AvatarFallback
             className={`text-white text-xs font-semibold ${
-              email.sender
+              contactPerson
                 ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
                 : 'bg-gradient-to-br from-gray-400 to-gray-500'
             }`}
@@ -481,7 +486,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                   : 'text-[#444746] dark:text-gray-300'
               }`}
             >
-              {senderName}
+              {contactName}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
               {timeAgo}
