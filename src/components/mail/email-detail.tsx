@@ -394,6 +394,7 @@ export function EmailDetail() {
   } = useAppStore()
 
   const [email, setEmail] = useState<EmailWithSender | null>(null)
+  const [thread, setThread] = useState<EmailWithSender[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
 
@@ -406,6 +407,7 @@ export function EmailDetail() {
       const data = await res.json()
       if (res.ok) {
         setEmail(data.email)
+        setThread(data.thread || [])
         if (!data.email.isRead) {
           updateEmail(data.email.id, { isRead: true })
           fetch(`/api/emails/${selectedEmailId}`, {
@@ -427,18 +429,19 @@ export function EmailDetail() {
       fetchEmail()
     } else {
       setEmail(null)
+      setThread([])
     }
   }, [selectedEmailId, fetchEmail])
 
-  // Auto-expand latest reply when email loads
+  // Auto-expand latest message in thread when email loads
   useEffect(() => {
-    if (email?.replies && email.replies.length > 0) {
-      const latestReplyId = email.replies[email.replies.length - 1].id
-      setExpandedReplies(new Set([latestReplyId]))
+    if (thread.length > 0) {
+      const latestId = thread[thread.length - 1].id
+      setExpandedReplies(new Set([latestId]))
     } else {
       setExpandedReplies(new Set())
     }
-  }, [email?.id, email?.replies])
+  }, [email?.id, thread])
 
   const toggleReply = useCallback((replyId: string) => {
     setExpandedReplies((prev) => {
@@ -673,17 +676,12 @@ export function EmailDetail() {
   if (loading) return <EmailDetailSkeleton />
   if (!email) return null
 
-  const senderName = email.sender
-    ? `${email.sender.firstName} ${email.sender.lastName}`
-    : email.recipientEmail
-  const initials = getInitials(email.sender)
-  const senderEmail = email.sender?.email || email.recipientEmail
-  const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
-    try { return email.attachments ? JSON.parse(email.attachments) : [] }
-    catch { return [] }
-  })()
   const replies = email.replies || []
   const currentEmailLabels = emailLabelsMap[email.id] || []
+
+  // Use thread array if available (full conversation), otherwise fall back to email + replies
+  const threadMessages = thread.length > 0 ? thread : [email, ...replies]
+  const selectedId = email?.id
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 h-full pb-14 md:pb-0 md:border-l md:border-gray-100 md:dark:border-gray-800">
@@ -931,62 +929,76 @@ export function EmailDetail() {
             </div>
           )}
 
-          {/* ─── Thread: Original Email + Replies (flat, Gmail-style) ─── */}
+          {/* ─── Thread: Full conversation (Gmail-style, flat) ─── */}
           <div className="mb-6">
-            {/* Original email — always shown, no box */}
-            <div className="py-1">
-              <div className="flex items-center gap-2.5 mb-2">
-                <Avatar className="w-7 h-7 shrink-0">
-                  <AvatarImage src={email.sender?.avatar || undefined} />
-                  <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{senderName}</span>
-                    <span className="text-xs text-gray-400 truncate">&lt;{senderEmail}&gt;</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-                  {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
-                </div>
-              </div>
-              <div className="ml-9">
-                <div
-                  className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
-                    [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
-                    [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
-                    [&_img]:max-w-full [&_img]:rounded-lg
-                    [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
-                    [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
-                    [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
-                    [&_table]:border-collapse [&_table]:w-full
-                    [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
-                    [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
-                  dangerouslySetInnerHTML={{
-                    __html: email.bodyHtml || email.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
-                  }}
-                />
-                {attachments.length > 0 && (
-                  <div className="mt-3"><AttachmentGallery attachments={attachments} /></div>
-                )}
-              </div>
-            </div>
+            {threadMessages.map((msg, idx) => {
+              const isSelected = msg.id === selectedId
+              // The selected (current) email is always fully shown, others are collapsible
+              const isExpanded = isSelected || expandedReplies.has(msg.id)
 
-            {/* Replies — collapsible, older collapsed, latest auto-expanded */}
-            {replies.length > 0 && (
-              <div className="border-t border-gray-100 dark:border-gray-800 mt-2">
-                {replies.map((reply, idx) => (
-                  <div key={reply.id}>
-                    {idx > 0 && <div className="border-t border-gray-100 dark:border-gray-800" />}
+              return (
+                <div key={msg.id}>
+                  {idx > 0 && <div className="border-t border-gray-100 dark:border-gray-800" />}
+                  {isSelected ? (
+                    /* Selected email — always fully shown */
+                    <div className="py-1">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <Avatar className="w-7 h-7 shrink-0">
+                          <AvatarImage src={msg.sender?.avatar || undefined} />
+                          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">
+                            {getInitials(msg.sender)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
+                              {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'}
+                            </span>
+                            <span className="text-xs text-gray-400 truncate">
+                              &lt;{msg.sender?.email || msg.recipientEmail}&gt;
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+                          {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+                        </div>
+                      </div>
+                      <div className="ml-9">
+                        <div
+                          className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                            [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+                            [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+                            [&_img]:max-w-full [&_img]:rounded-lg
+                            [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+                            [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+                            [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+                            [&_table]:border-collapse [&_table]:w-full
+                            [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+                            [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+                          dangerouslySetInnerHTML={{
+                            __html: msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
+                          }}
+                        />
+                        {(() => {
+                          try {
+                            const atts = msg.attachments ? JSON.parse(msg.attachments) : []
+                            if (atts.length > 0) return <div className="mt-3"><AttachmentGallery attachments={atts} /></div>
+                          } catch {}
+                          return null
+                        })()}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Other thread messages — collapsible */
                     <ThreadMessage
-                      message={reply}
-                      isExpanded={expandedReplies.has(reply.id)}
-                      onToggle={() => toggleReply(reply.id)}
+                      message={msg}
+                      isExpanded={isExpanded}
+                      onToggle={() => toggleReply(msg.id)}
                     />
-                  </div>
-                ))}
-              </div>
-            )}
+                  )}
+                </div>
+              )
+            })}
           </div>
           {/* ─── Reply / Restore / Forward Bar (inside scrollable content) ─── */}
           <div className="border-t border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2.5 mt-2">
