@@ -60,6 +60,7 @@ export async function POST(
         body: replyBody.trim(),
         bodyHtml: bodyHtml || '',
         folder: 'inbox',
+        parentEmailId: parentEmail.id,
       },
       include: {
         sender: {
@@ -71,7 +72,7 @@ export async function POST(
       },
     });
 
-    // Create a copy in the sender's sent folder
+    // Create a copy in the sender's sent folder (no parentEmailId to avoid duplicate in thread)
     await db.email.create({
       data: {
         senderId: session.userId,

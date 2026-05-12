@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
   Paperclip, Forward, FileText, Download, Tag, Check,
-  Plus, X, Clock, CalendarDays, AlarmClockOff
+  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronDown, ChevronRight, ChevronUp
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -61,48 +61,96 @@ function getInitials(user: { firstName?: string; lastName?: string } | null | un
   return `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase() || fallback
 }
 
-/* ─── Thread Reply Bubble ─── */
+/* ─── Gmail-style Thread Message Card ─── */
 
-function ThreadReply({
-  reply,
-  isLast,
+function ThreadMessage({
+  message,
+  isExpanded,
+  isLatest,
+  onToggle,
 }: {
-  reply: EmailWithSender
-  isLast: boolean
+  message: EmailWithSender
+  isExpanded: boolean
+  isLatest: boolean
+  onToggle: () => void
 }) {
-  const replyInitials = getInitials(reply.sender)
-  const replyName = reply.sender
-    ? `${reply.sender.firstName} ${reply.sender.lastName}`
+  const initials = getInitials(message.sender)
+  const name = message.sender
+    ? `${message.sender.firstName} ${message.sender.lastName}`
     : 'Unknown'
+  const emailAddr = message.sender?.email || ''
+  const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
+    try { return message.attachments ? JSON.parse(message.attachments) : [] }
+    catch { return [] }
+  })()
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className="relative flex gap-3 ml-4 sm:ml-8"
-    >
-      {!isLast && (
-        <div className="absolute left-5 sm:left-9 top-10 bottom-0 w-px bg-gradient-to-b from-[#D3E3FD] dark:from-[#4285F4]/20 to-transparent" />
-      )}
-      <div className="relative z-10 shrink-0 mt-0.5">
-        <div className="w-6 h-6 rounded-full border-2 border-white dark:border-gray-950 bg-gradient-to-br from-[#D3E3FD] to-[#F0F7FF] dark:from-[#4285F4]/30 dark:to-[#4285F4]/10 flex items-center justify-center">
-          <span className="text-[10px] font-semibold text-[#4285F4]">{replyInitials}</span>
+    <div className={`rounded-lg border ${isLatest && isExpanded ? 'border-[#D3E3FD] dark:border-[#4285F4]/30 shadow-sm' : 'border-gray-200 dark:border-gray-800'} bg-white dark:bg-gray-950 overflow-hidden`}>
+      {/* Header — always visible, clickable to expand/collapse */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left cursor-pointer"
+      >
+        <Avatar className="w-8 h-8 shrink-0">
+          <AvatarImage src={message.sender?.avatar || undefined} />
+          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{name}</span>
+            <span className="text-xs text-gray-400 truncate">&lt;{emailAddr}&gt;</span>
+          </div>
+          {!isExpanded && (
+            <p className="text-xs text-gray-500 truncate mt-0.5">
+              {message.body?.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').substring(0, 100) || '...'}
+            </p>
+          )}
         </div>
-      </div>
-      <div className="flex-1 min-w-0 pb-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{replyName}</span>
-          <span className="text-xs text-gray-400">
-            {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-gray-400 hidden sm:inline">
+            {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
           </span>
+          {isExpanded ? (
+            <ChevronUp className="w-4 h-4 text-gray-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          )}
         </div>
-        <div
-          className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words"
-          dangerouslySetInnerHTML={{ __html: reply.bodyHtml || reply.body?.replace(/\n/g, '<br>') || '' }}
-        />
-      </div>
-    </motion.div>
+      </button>
+
+      {/* Body — only shown when expanded */}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3">
+              <div
+                className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                  [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+                  [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+                  [&_img]:max-w-full [&_img]:rounded-lg
+                  [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+                  [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+                  [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+                  [&_table]:border-collapse [&_table]:w-full
+                  [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+                  [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+                dangerouslySetInnerHTML={{ __html: message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>' }}
+              />
+              {attachments.length > 0 && (
+                <div className="mt-3"><AttachmentGallery attachments={attachments} /></div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -351,6 +399,7 @@ export function EmailDetail() {
 
   const [email, setEmail] = useState<EmailWithSender | null>(null)
   const [loading, setLoading] = useState(false)
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
 
   /* ─── Fetch email ─── */
   const fetchEmail = useCallback(async () => {
@@ -384,6 +433,28 @@ export function EmailDetail() {
       setEmail(null)
     }
   }, [selectedEmailId, fetchEmail])
+
+  // Auto-expand latest reply when email loads
+  useEffect(() => {
+    if (email?.replies && email.replies.length > 0) {
+      const latestReplyId = email.replies[email.replies.length - 1].id
+      setExpandedReplies(new Set([latestReplyId]))
+    } else {
+      setExpandedReplies(new Set())
+    }
+  }, [email?.id, email?.replies])
+
+  const toggleReply = useCallback((replyId: string) => {
+    setExpandedReplies((prev) => {
+      const next = new Set(prev)
+      if (next.has(replyId)) {
+        next.delete(replyId)
+      } else {
+        next.add(replyId)
+      }
+      return next
+    })
+  }, [])
 
   /* ─── Fetch email labels ─── */
   useEffect(() => {
@@ -864,57 +935,67 @@ export function EmailDetail() {
             </div>
           )}
 
-          <div className="flex items-start gap-3 mb-6">
-            <Avatar className="w-10 h-10 shrink-0">
-              <AvatarImage src={email.sender?.avatar || undefined} />
-              <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-[#1F1F1F] dark:text-white">{senderName}</p>
-                  <p className="text-xs text-gray-500">{senderEmail}</p>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+          {/* ─── Gmail-style Thread: Original Email + All Replies ─── */}
+          <div className="space-y-3 mb-6">
+            {/* Original email card */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-8 h-8 shrink-0">
+                    <AvatarImage src={email.sender?.avatar || undefined} />
+                    <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">{senderName}</span>
+                      <span className="text-xs text-gray-400 truncate">&lt;{senderEmail}&gt;</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+                  </div>
                 </div>
               </div>
+              <div className="px-4 py-3">
+                <div
+                  className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                    [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+                    [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+                    [&_img]:max-w-full [&_img]:rounded-lg
+                    [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+                    [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+                    [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+                    [&_table]:border-collapse [&_table]:w-full
+                    [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+                    [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+                  dangerouslySetInnerHTML={{
+                    __html: email.bodyHtml || email.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
+                  }}
+                />
+                {attachments.length > 0 && (
+                  <div className="mt-3"><AttachmentGallery attachments={attachments} /></div>
+                )}
+              </div>
             </div>
-          </div>
-          <div
-            className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 mb-6 break-words
-              [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
-              [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
-              [&_img]:max-w-full [&_img]:rounded-lg
-              [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
-              [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
-              [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
-              [&_table]:border-collapse [&_table]:w-full
-              [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
-              [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
-            dangerouslySetInnerHTML={{
-              __html: email.bodyHtml || email.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
-            }}
-          />
-          {attachments.length > 0 && (
-            <div className="mb-6"><AttachmentGallery attachments={attachments} /></div>
-          )}
-          {replies.length > 0 && (
-            <div className="mb-6">
-              <div className="border-t border-gray-200 dark:border-gray-800 my-4" />
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
-                {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
-              </p>
-              <div className="space-y-1">
-                {replies.map((reply, idx) => (
-                  <ThreadReply key={reply.id} reply={reply} isLast={idx === replies.length - 1} />
+
+            {/* Reply cards — collapsible, newest at bottom, latest auto-expanded */}
+            {replies.length > 0 && (
+              <div className="space-y-2">
+                {replies.map((reply) => (
+                  <ThreadMessage
+                    key={reply.id}
+                    message={reply}
+                    isExpanded={expandedReplies.has(reply.id)}
+                    isLatest={replies.length > 0 && reply.id === replies[replies.length - 1].id}
+                    onToggle={() => toggleReply(reply.id)}
+                  />
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
           {/* ─── Reply / Restore / Forward Bar (inside scrollable content) ─── */}
           <div className="border-t border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2.5 mt-2">
             {currentFolder === 'trash' ? (

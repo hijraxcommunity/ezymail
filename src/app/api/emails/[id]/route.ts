@@ -40,6 +40,9 @@ export async function GET(
             sender: {
               select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
             },
+            recipient: {
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+            },
           },
         },
       },
@@ -47,6 +50,39 @@ export async function GET(
 
     if (!email) {
       return NextResponse.json({ error: 'Email not found' }, { status: 404 });
+    }
+
+    // Cross-copy threading: if this email is a sent copy (no parentEmailId)
+    // find the inbox copy that shares the same senderId, recipientEmail,
+    // subject, and createdAt, then grab its replies too.
+    if (!email.parentEmailId && email.folder === 'sent' && email.replies.length === 0) {
+      const inboxCopy = await db.email.findFirst({
+        where: {
+          senderId: email.senderId,
+          recipientEmail: email.recipientEmail,
+          subject: email.subject,
+          folder: 'inbox',
+          createdAt: { gte: new Date(new Date(email.createdAt).getTime() - 5000), lte: new Date(new Date(email.createdAt).getTime() + 5000) },
+        },
+        include: {
+          replies: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              sender: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+              recipient: {
+                select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (inboxCopy && inboxCopy.replies.length > 0) {
+        // Attach the inbox copy's replies to this sent email for thread display
+        (email as unknown as Record<string, unknown>).replies = inboxCopy.replies;
+      }
     }
 
     // Check if the email belongs to the current user
