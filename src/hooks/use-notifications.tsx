@@ -137,19 +137,22 @@ export function useNotifications() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [isAuthenticated])
 
-  // ─── Initialize tracking IDs once emails have loaded ───────────────────
+  // ─── Initialize tracking IDs by fetching current emails from API ─────────
   useEffect(() => {
     if (!isAuthenticated || isInitializedRef.current) return
 
-    const timer = setTimeout(() => {
-      const currentEmails = useAppStore.getState().emails
-      if (currentEmails.length > 0) {
-        lastEmailIdsRef.current = new Set(currentEmails.map(e => e.id))
-      }
+    const initTracking = async () => {
+      try {
+        const res = await fetch('/api/emails?folder=inbox&page=1&limit=5&includeThreads=true')
+        if (res.ok) {
+          const data = await res.json()
+          const emails = data.emails || []
+          lastEmailIdsRef.current = new Set(emails.map((e: { id: string }) => e.id))
+        }
+      } catch { /* ignore */ }
       isInitializedRef.current = true
-    }, 3000)
-
-    return () => clearTimeout(timer)
+    }
+    initTracking()
   }, [isAuthenticated])
 
   // ─── Poll for new emails (works even when tab is in background) ─────────
@@ -250,7 +253,7 @@ export function useNotifications() {
 
     const initialTimeout = setTimeout(() => {
       pollForNewEmails()
-    }, 5000)
+    }, 8000)
 
     intervalRef.current = setInterval(pollForNewEmails, POLL_INTERVAL)
 
