@@ -10,7 +10,7 @@ import {
   Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
   Bold, Italic, Link as LinkIcon, List, ImagePlus,
   RefreshCw, LogOut, CalendarDays, Filter, User, Settings,
-  PenLine, ArrowLeft, Menu, X, Send, Languages, Undo2,
+  PenLine, ArrowLeft, Send, Languages, Undo2,
   ChevronRight
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
@@ -172,15 +172,7 @@ export function SettingsPanel() {
   const { user, settingsView, setSettingsView, setAdminView, logout } = useAppStore()
   const { theme, setTheme } = useTheme()
 
-  // Map old tab names to new section names
-  const initialSection: SettingsSection = settingsView === 'security' ? 'security'
-    : settingsView === 'preferences' ? 'appearance'
-    : settingsView === 'filters' ? 'filters'
-    : settingsView === 'account' ? 'account'
-    : 'profile'
-
-  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection)
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null)
 
   // ─── Profile state ──────────────────────────────────────────────────────
   const [profile, setProfile] = useState<ProfileData | null>(null)
@@ -722,12 +714,6 @@ export function SettingsPanel() {
   // ─── Close handler ─────────────────────────────────────────────────────
   const handleClose = () => setSettingsView(null)
 
-  // ─── Section navigation handler (closes mobile sidebar) ────────────────
-  const handleSectionChange = (section: SettingsSection) => {
-    setActiveSection(section)
-    setMobileSidebarOpen(false)
-  }
-
   // ─── Render: Loading state ─────────────────────────────────────────────
   if (!profile && profileLoading) {
     return (
@@ -744,297 +730,262 @@ export function SettingsPanel() {
       <header className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
-            {/* Mobile hamburger */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden h-9 w-9"
-              onClick={() => setMobileSidebarOpen(true)}
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-            <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white">Settings</h2>
+            {activeSection ? (
+              <Button variant="ghost" size="icon" onClick={() => setActiveSection(null)} className="h-9 w-9">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            ) : (
+              <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            )}
+            <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white">
+              {activeSection
+                ? sidebarSections.find(s => s.key === activeSection)?.label || 'Settings'
+                : 'Settings'}
+            </h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          {!activeSection && (
+            <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
+              <X className="w-5 h-5" />
+            </Button>
+          )}
         </div>
       </header>
 
-      {/* ── Body: Sidebar + Content ── */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
 
-        {/* ── Desktop sidebar ── */}
-        <aside className="hidden md:flex flex-col w-[240px] flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 overflow-y-auto">
-          {/* Navigation items */}
-          <nav className="flex-1 p-3 space-y-1">
+        {/* ── Level 1: Settings List ── */}
+        {!activeSection && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="max-w-2xl mx-auto p-4 sm:p-6 space-y-3 pb-24"
+          >
+            {/* User card at top */}
+            <div className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900 mb-4">
+              <Avatar className="w-14 h-14">
+                <AvatarImage src={user?.avatar || undefined} />
+                <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-lg font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-semibold text-[#1F1F1F] dark:text-white truncate">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            {/* Settings items list */}
             {sidebarSections.map((section) => (
-              <button
+              <motion.button
                 key={section.key}
                 type="button"
                 onClick={() => setActiveSection(section.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  activeSection === section.key
-                    ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4] dark:text-[#A8C7FA] shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-[#1F1F1F] dark:hover:text-gray-200'
-                }`}
+                whileTap={{ scale: 0.98 }}
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-left group"
               >
-                <section.icon className="w-[18px] h-[18px] flex-shrink-0" />
-                <span>{section.label}</span>
-              </button>
+                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 group-hover:bg-[#D3E3FD] dark:group-hover:bg-[#4285F4]/15 transition-colors">
+                  <section.icon className="w-5 h-5 text-gray-500 dark:text-gray-400 group-hover:text-[#4285F4] dark:group-hover:text-[#A8C7FA] transition-colors" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">{section.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {section.key === 'profile' && 'Manage your personal information and avatar'}
+                    {section.key === 'security' && 'Password, sessions, login history, 2FA'}
+                    {section.key === 'appearance' && 'Theme, density, language, date format'}
+                    {section.key === 'notifications' && 'Desktop alerts, sounds, read receipts'}
+                    {section.key === 'compose' && 'Signature, undo send, reply behavior'}
+                    {section.key === 'filters' && 'Email rules and automatic actions'}
+                    {section.key === 'account' && 'Export data, vacation responder, delete account'}
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors flex-shrink-0" />
+              </motion.button>
             ))}
-          </nav>
 
-          {/* Sidebar footer: Admin + Logout */}
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-1">
+            {/* Admin Panel */}
             {user?.role === 'admin' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsView(null)
-                  setAdminView('dashboard')
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-[#1F1F1F] dark:hover:text-gray-200 transition-all duration-200"
-              >
-                <Shield className="w-[18px] h-[18px] flex-shrink-0" />
-                <span>Admin Panel</span>
-              </button>
+              <>
+                <Separator />
+                <motion.button
+                  type="button"
+                  onClick={() => {
+                    setSettingsView(null)
+                    setAdminView('dashboard')
+                  }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-left group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
+                    <Shield className="w-5 h-5 text-gray-500 dark:text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Manage users, view reports and system logs</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 flex-shrink-0" />
+                </motion.button>
+              </>
             )}
-            <button
+
+            {/* Log Out */}
+            <Separator />
+            <motion.button
               type="button"
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#EA4335] hover:bg-[#EA4335]/10 transition-all duration-200"
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-[#EA4335]/5 dark:hover:bg-[#EA4335]/10 transition-colors text-left group"
             >
-              <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
-              <span>Log Out</span>
-            </button>
-          </div>
-        </aside>
+              <div className="w-10 h-10 rounded-xl bg-[#EA4335]/10 flex items-center justify-center flex-shrink-0">
+                <LogOut className="w-5 h-5 text-[#EA4335]" />
+              </div>
+              <p className="text-sm font-medium text-[#EA4335]">Log Out</p>
+            </motion.button>
+          </motion.div>
+        )}
 
-        {/* ── Mobile sidebar overlay ── */}
-        <AnimatePresence>
-          {mobileSidebarOpen && (
-            <>
-              {/* Backdrop */}
-              <motion.div
-                key="mobile-sidebar-backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="md:hidden fixed inset-0 z-40 bg-black/40"
-                onClick={() => setMobileSidebarOpen(false)}
+        {/* ── Level 2: Section Detail Pages ── */}
+        <AnimatePresence mode="wait">
+          {activeSection === 'profile' && (
+            <motion.div key="profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <ProfileTabContent
+                profile={profile}
+                setProfile={setProfile}
+                initials={initials}
+                avatarUploading={avatarUploading}
+                savingProfile={savingProfile}
+                avatarInputRef={avatarInputRef}
+                handleAvatarUpload={handleAvatarUpload}
+                handleSaveProfile={handleSaveProfile}
               />
-              {/* Sidebar panel */}
-              <motion.aside
-                key="mobile-sidebar"
-                initial={{ x: -280 }}
-                animate={{ x: 0 }}
-                exit={{ x: -280 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="md:hidden fixed top-0 left-0 bottom-0 z-50 w-[260px] flex flex-col bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 shadow-xl"
-              >
-                {/* Mobile sidebar header */}
-                <div className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800">
-                  <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Settings Menu</h3>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setMobileSidebarOpen(false)}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                {/* Navigation items */}
-                <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                  {sidebarSections.map((section) => (
-                    <button
-                      key={section.key}
-                      type="button"
-                      onClick={() => handleSectionChange(section.key)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                        activeSection === section.key
-                          ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4] dark:text-[#A8C7FA]'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <section.icon className="w-[18px] h-[18px] flex-shrink-0" />
-                      <span>{section.label}</span>
-                    </button>
-                  ))}
-                </nav>
-
-                {/* Mobile sidebar footer */}
-                <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-1">
-                  {user?.role === 'admin' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSettingsView(null)
-                        setAdminView('dashboard')
-                        setMobileSidebarOpen(false)
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
-                    >
-                      <Shield className="w-[18px] h-[18px] flex-shrink-0" />
-                      <span>Admin Panel</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#EA4335] hover:bg-[#EA4335]/10 transition-all duration-200"
-                  >
-                    <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              </motion.aside>
-            </>
+            </motion.div>
+          )}
+          {activeSection === 'security' && (
+            <motion.div key="security" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <SecurityTabContent
+                currentPassword={currentPassword}
+                setCurrentPassword={setCurrentPassword}
+                newPassword={newPassword}
+                setNewPassword={setNewPassword}
+                confirmPassword={confirmPassword}
+                setConfirmPassword={setConfirmPassword}
+                showCurrentPassword={showCurrentPassword}
+                setShowCurrentPassword={setShowCurrentPassword}
+                showNewPassword={showNewPassword}
+                setShowNewPassword={setShowNewPassword}
+                savingPassword={savingPassword}
+                passwordStrength={passwordStrength}
+                handleChangePassword={handleChangePassword}
+                sessions={sessions}
+                sessionsLoading={sessionsLoading}
+                loadSessions={loadSessions}
+                handleRevokeSession={handleRevokeSession}
+                handleRevokeAllOthers={handleRevokeAllOthers}
+                loginLogs={loginLogs}
+                loginLogsLoading={loginLogsLoading}
+                loadLoginLogs={loadLoginLogs}
+                twoFA={twoFA}
+                twoFALoading={twoFALoading}
+                load2FA={load2FA}
+                twoFASetup={twoFASetup}
+                twoFASecret={twoFASecret}
+                twoFAUri={twoFAUri}
+                twoFABackupCodes={twoFABackupCodes}
+                twoFAVerifyCode={twoFAVerifyCode}
+                setTwoFAVerifyCode={setTwoFAVerifyCode}
+                twoFAVerifying={twoFAVerifying}
+                handleSetup2FA={handleSetup2FA}
+                handleVerify2FA={handleVerify2FA}
+                setTwoFASetup={setTwoFASetup}
+                twoFADisabling={twoFADisabling}
+                disable2FAPassword={disable2FAPassword}
+                setDisable2FAPassword={setDisable2FAPassword}
+                handleDisable2FA={handleDisable2FA}
+              />
+            </motion.div>
+          )}
+          {activeSection === 'appearance' && (
+            <motion.div key="appearance" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <AppearanceTabContent
+                emailDensity={emailDensity}
+                setEmailDensity={setEmailDensity}
+                previewLines={previewLines}
+                setPreviewLines={setPreviewLines}
+                conversationView={conversationView}
+                setConversationView={setConversationView}
+                theme={theme || 'system'}
+                setTheme={setTheme}
+                dateFormat={dateFormat}
+                setDateFormat={setDateFormat}
+                language={language}
+                setLanguage={setLanguage}
+                savingPrefs={savingPrefs}
+                handleSavePreferences={handleSavePreferences}
+              />
+            </motion.div>
+          )}
+          {activeSection === 'notifications' && (
+            <motion.div key="notifications" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <NotificationsTabContent
+                desktopNotif={desktopNotif}
+                setDesktopNotif={setDesktopNotif}
+                soundNotif={soundNotif}
+                setSoundNotif={setSoundNotif}
+                readReceipts={readReceipts}
+                setReadReceipts={setReadReceipts}
+                savingPrefs={savingPrefs}
+                handleSavePreferences={handleSavePreferences}
+              />
+            </motion.div>
+          )}
+          {activeSection === 'compose' && (
+            <motion.div key="compose" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <ComposeTabContent
+                signatureEditor={signatureEditor}
+                savingSignature={savingSignature}
+                handleSaveSignature={handleSaveSignature}
+                undoSendTimeout={undoSendTimeout}
+                setUndoSendTimeout={setUndoSendTimeout}
+                defaultReplyMode={defaultReplyMode}
+                setDefaultReplyMode={setDefaultReplyMode}
+                autoAdvance={autoAdvance}
+                setAutoAdvance={setAutoAdvance}
+                savingPrefs={savingPrefs}
+                handleSavePreferences={handleSavePreferences}
+              />
+            </motion.div>
+          )}
+          {activeSection === 'filters' && (
+            <motion.div key="filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <FiltersTab />
+            </motion.div>
+          )}
+          {activeSection === 'account' && (
+            <motion.div key="account" {...tabVariants} initial="initial" animate="animate" exit="exit">
+              <AccountTabContent
+                exporting={exporting}
+                handleExport={handleExport}
+                vacationEnabled={vacationEnabled}
+                setVacationEnabled={setVacationEnabled}
+                vacationSubject={vacationSubject}
+                setVacationSubject={setVacationSubject}
+                vacationMessage={vacationMessage}
+                setVacationMessage={setVacationMessage}
+                vacationStartDate={vacationStartDate}
+                setVacationStartDate={setVacationStartDate}
+                vacationEndDate={vacationEndDate}
+                setVacationEndDate={setVacationEndDate}
+                savingVacation={savingVacation}
+                handleSaveVacation={handleSaveVacation}
+              />
+            </motion.div>
           )}
         </AnimatePresence>
-
-        {/* ── Content area ── */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar">
-          <AnimatePresence mode="wait">
-            {activeSection === 'profile' && (
-              <motion.div key="profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <ProfileTabContent
-                  profile={profile}
-                  setProfile={setProfile}
-                  initials={initials}
-                  avatarUploading={avatarUploading}
-                  savingProfile={savingProfile}
-                  avatarInputRef={avatarInputRef}
-                  handleAvatarUpload={handleAvatarUpload}
-                  handleSaveProfile={handleSaveProfile}
-                />
-              </motion.div>
-            )}
-            {activeSection === 'security' && (
-              <motion.div key="security" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <SecurityTabContent
-                  currentPassword={currentPassword}
-                  setCurrentPassword={setCurrentPassword}
-                  newPassword={newPassword}
-                  setNewPassword={setNewPassword}
-                  confirmPassword={confirmPassword}
-                  setConfirmPassword={setConfirmPassword}
-                  showCurrentPassword={showCurrentPassword}
-                  setShowCurrentPassword={setShowCurrentPassword}
-                  showNewPassword={showNewPassword}
-                  setShowNewPassword={setShowNewPassword}
-                  savingPassword={savingPassword}
-                  passwordStrength={passwordStrength}
-                  handleChangePassword={handleChangePassword}
-                  sessions={sessions}
-                  sessionsLoading={sessionsLoading}
-                  loadSessions={loadSessions}
-                  handleRevokeSession={handleRevokeSession}
-                  handleRevokeAllOthers={handleRevokeAllOthers}
-                  loginLogs={loginLogs}
-                  loginLogsLoading={loginLogsLoading}
-                  loadLoginLogs={loadLoginLogs}
-                  twoFA={twoFA}
-                  twoFALoading={twoFALoading}
-                  load2FA={load2FA}
-                  twoFASetup={twoFASetup}
-                  twoFASecret={twoFASecret}
-                  twoFAUri={twoFAUri}
-                  twoFABackupCodes={twoFABackupCodes}
-                  twoFAVerifyCode={twoFAVerifyCode}
-                  setTwoFAVerifyCode={setTwoFAVerifyCode}
-                  twoFAVerifying={twoFAVerifying}
-                  handleSetup2FA={handleSetup2FA}
-                  handleVerify2FA={handleVerify2FA}
-                  setTwoFASetup={setTwoFASetup}
-                  twoFADisabling={twoFADisabling}
-                  disable2FAPassword={disable2FAPassword}
-                  setDisable2FAPassword={setDisable2FAPassword}
-                  handleDisable2FA={handleDisable2FA}
-                />
-              </motion.div>
-            )}
-            {activeSection === 'appearance' && (
-              <motion.div key="appearance" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <AppearanceTabContent
-                  emailDensity={emailDensity}
-                  setEmailDensity={setEmailDensity}
-                  previewLines={previewLines}
-                  setPreviewLines={setPreviewLines}
-                  conversationView={conversationView}
-                  setConversationView={setConversationView}
-                  theme={theme || 'system'}
-                  setTheme={setTheme}
-                  dateFormat={dateFormat}
-                  setDateFormat={setDateFormat}
-                  language={language}
-                  setLanguage={setLanguage}
-                  savingPrefs={savingPrefs}
-                  handleSavePreferences={handleSavePreferences}
-                />
-              </motion.div>
-            )}
-            {activeSection === 'notifications' && (
-              <motion.div key="notifications" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <NotificationsTabContent
-                  desktopNotif={desktopNotif}
-                  setDesktopNotif={setDesktopNotif}
-                  soundNotif={soundNotif}
-                  setSoundNotif={setSoundNotif}
-                  readReceipts={readReceipts}
-                  setReadReceipts={setReadReceipts}
-                  savingPrefs={savingPrefs}
-                  handleSavePreferences={handleSavePreferences}
-                />
-              </motion.div>
-            )}
-            {activeSection === 'compose' && (
-              <motion.div key="compose" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <ComposeTabContent
-                  signatureEditor={signatureEditor}
-                  savingSignature={savingSignature}
-                  handleSaveSignature={handleSaveSignature}
-                  undoSendTimeout={undoSendTimeout}
-                  setUndoSendTimeout={setUndoSendTimeout}
-                  defaultReplyMode={defaultReplyMode}
-                  setDefaultReplyMode={setDefaultReplyMode}
-                  autoAdvance={autoAdvance}
-                  setAutoAdvance={setAutoAdvance}
-                  savingPrefs={savingPrefs}
-                  handleSavePreferences={handleSavePreferences}
-                />
-              </motion.div>
-            )}
-            {activeSection === 'filters' && (
-              <motion.div key="filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <FiltersTab />
-              </motion.div>
-            )}
-            {activeSection === 'account' && (
-              <motion.div key="account" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                <AccountTabContent
-                  exporting={exporting}
-                  handleExport={handleExport}
-                  vacationEnabled={vacationEnabled}
-                  setVacationEnabled={setVacationEnabled}
-                  vacationSubject={vacationSubject}
-                  setVacationSubject={setVacationSubject}
-                  vacationMessage={vacationMessage}
-                  setVacationMessage={setVacationMessage}
-                  vacationStartDate={vacationStartDate}
-                  setVacationStartDate={setVacationStartDate}
-                  vacationEndDate={vacationEndDate}
-                  setVacationEndDate={setVacationEndDate}
-                  savingVacation={savingVacation}
-                  handleSaveVacation={handleSaveVacation}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </main>
       </div>
     </div>
   )
