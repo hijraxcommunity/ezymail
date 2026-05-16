@@ -22,7 +22,6 @@ export interface EmailWithSender extends Email {
   sender: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar'> | null;
   recipient: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar'> | null;
   replies?: EmailWithSender[];
-  replyCount?: number;
 }
 
 export interface UndoAction {

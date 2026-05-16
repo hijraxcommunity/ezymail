@@ -231,7 +231,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                 handleCardClick()
               }
             }}
-            className={`group w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150 cursor-pointer relative ${
+            className={`group w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
               isSelected
                 ? 'bg-blue-50 dark:bg-blue-950/30'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-900'
@@ -411,22 +411,11 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
             onSelect()
           }
         }}
-        className={`hidden md:flex group w-full items-center gap-3 px-4 py-3.5 text-left transition-all duration-150 cursor-pointer relative ${
+        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
           isSelected
             ? 'bg-blue-50 dark:bg-blue-950/30'
             : 'hover:bg-gray-50 dark:hover:bg-gray-900'
         } ${!email.isRead ? 'bg-blue-50/50 dark:bg-blue-950/10' : ''}`}
-        style={{ transform: 'var(--card-scale, 1)' }}
-        onMouseEnter={(e) => {
-          const el = e.currentTarget
-          el.style.setProperty('--card-scale', '1.01')
-          el.style.transform = 'scale(1.01)'
-        }}
-        onMouseLeave={(e) => {
-          const el = e.currentTarget
-          el.style.setProperty('--card-scale', '1')
-          el.style.transform = 'scale(1)'
-        }}
       >
         {/* Unread indicator */}
         {!email.isRead && (

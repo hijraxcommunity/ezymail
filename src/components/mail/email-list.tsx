@@ -486,7 +486,7 @@ export function EmailList() {
               let globalIndex = 0
               return groups.map((group) => (
                 <div key={group.label}>
-                  <div className="px-4 py-2">
+                  <div className="px-3 sm:px-4 py-1.5">
                     <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                       {group.label}
                     </span>
