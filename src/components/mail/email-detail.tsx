@@ -901,7 +901,7 @@ export function EmailDetail() {
 
       {/* ─── Scrollable Content ─── */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="px-2 sm:px-4 py-2"
+        <div className="px-2 sm:px-4 py-2">
           <h1 className="text-lg sm:text-xl font-semibold text-[#1F1F1F] dark:text-white mb-1.5 leading-tight">
             {email.subject || '(No subject)'}
           </h1>
