@@ -128,6 +128,7 @@ function ThreadMessage({
             <div className="pb-3 ml-9">
               <div
                 className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                  [&_p]:my-0.5 [&>*:first-child]:mt-0
                   [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
                   [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
                   [&_img]:max-w-full [&_img]:rounded-lg
@@ -966,6 +967,7 @@ export function EmailDetail() {
                       <div className="ml-9">
                         <div
                           className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                            [&_p]:my-0.5 [&>*:first-child]:mt-0
                             [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
                             [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
                             [&_img]:max-w-full [&_img]:rounded-lg

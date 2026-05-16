@@ -187,7 +187,8 @@
   color: #1a73e8;
 }
 .email-body p {
-  margin-bottom: 0.75rem;
+  margin-top: 0.15rem;
+  margin-bottom: 0.4rem;
 }
 .email-body ul, .email-body ol {
   padding-left: 1.5rem;
