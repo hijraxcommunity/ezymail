@@ -4,21 +4,17 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Sun, Moon, Menu, Mail, Settings, User, Shield, LogOut, X,
+  Search, Sun, Moon, Menu, Mail, X,
   Loader2, Clock, ArrowRight, Filter, Bookmark, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel,
-} from '@/components/ui/dropdown-menu'
 import { useAppStore } from '@/store/use-app-store'
 import { AdvancedSearchDialog } from './advanced-search-dialog'
+import { ProfileMenu } from './profile-menu'
 
 /* ─── Operator Parsing (client-side for highlighting) ─── */
 
@@ -226,9 +222,6 @@ export function MailHeader() {
     setSidebarOpen,
     searchQuery,
     setSearchQuery,
-    setSettingsView,
-    setAdminView,
-    logout,
     emails,
     recentSearches,
     addRecentSearch,
@@ -242,6 +235,7 @@ export function MailHeader() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -508,69 +502,23 @@ export function MailHeader() {
             <span className="sr-only">Toggle theme</span>
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 relative">
-                <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                  <AvatarImage src={user?.avatar || undefined} />
-                  <AvatarFallback className="bg-[#D3E3FD] text-[#4285F4] text-[10px] sm:text-xs font-semibold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-950">
-                    <span className="sr-only">{unreadCount} unread</span>
-                  </span>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">
-                      {user?.firstName} {user?.lastName}
-                    </p>
-                    {unreadCount > 0 && (
-                      <Badge variant="secondary" className="text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0 rounded-full">
-                        {unreadCount} unread
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 truncate">
-                    {user?.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setSettingsView('profile')}>
-                <User className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSettingsView('settings')}>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-              {user?.role === 'admin' && (
-                <DropdownMenuItem onClick={() => setAdminView('dashboard')}>
-                  <Shield className="mr-2 h-4 w-4" />
-                  Admin Panel
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={async () => {
-                  await fetch('/api/auth/logout', { method: 'POST' })
-                  toast.success('Logged out')
-                  logout()
-                }}
-                className="text-red-500"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="ghost"
+            className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 relative"
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+          >
+            <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+              <AvatarImage src={user?.avatar || undefined} />
+              <AvatarFallback className="bg-[#D3E3FD] text-[#4285F4] text-[10px] sm:text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-950">
+                <span className="sr-only">{unreadCount} unread</span>
+              </span>
+            )}
+          </Button>
         </div>
       </header>
 
@@ -578,6 +526,12 @@ export function MailHeader() {
       <AdvancedSearchDialog
         open={advancedSearchOpen}
         onOpenChange={setAdvancedSearchOpen}
+      />
+
+      {/* Profile Menu */}
+      <ProfileMenu
+        open={profileMenuOpen}
+        onOpenChange={setProfileMenuOpen}
       />
     </>
   )
