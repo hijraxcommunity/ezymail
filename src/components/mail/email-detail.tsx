@@ -89,9 +89,9 @@ function ThreadMessage({
         onClick={onToggle}
         className="w-full flex items-center gap-2.5 py-2 text-left cursor-pointer group"
       >
-        <Avatar className="w-7 h-7 shrink-0">
+        <Avatar className="w-8 h-8 shrink-0">
           <AvatarImage src={message.sender?.avatar || undefined} />
-          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">{initials}</AvatarFallback>
+          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -125,7 +125,7 @@ function ThreadMessage({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="pb-3 ml-9">
+            <div className="pb-3">
               <div
                 className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
                   [&_p]:my-0.5 [&>*:first-child]:mt-0
@@ -902,8 +902,8 @@ export function EmailDetail() {
 
       {/* ─── Scrollable Content ─── */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="px-2 sm:px-4 py-2">
-          <h1 className="text-lg sm:text-xl font-semibold text-[#1F1F1F] dark:text-white mb-1.5 leading-tight">
+        <div className="px-3 sm:px-5 py-3">
+          <h1 className="text-base sm:text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1 leading-tight">
             {email.subject || '(No subject)'}
           </h1>
 
@@ -944,9 +944,9 @@ export function EmailDetail() {
                     /* Selected email — always fully shown */
                     <div className="py-1">
                       <div className="flex items-center gap-2.5 mb-2">
-                        <Avatar className="w-7 h-7 shrink-0">
+                        <Avatar className="w-8 h-8 shrink-0">
                           <AvatarImage src={msg.sender?.avatar || undefined} />
-                          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[9px] font-semibold">
+                          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">
                             {getInitials(msg.sender)}
                           </AvatarFallback>
                         </Avatar>
@@ -964,7 +964,7 @@ export function EmailDetail() {
                           {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
                         </div>
                       </div>
-                      <div className="ml-9">
+                      <div>
                         <div
                           className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
                             [&_p]:my-0.5 [&>*:first-child]:mt-0
