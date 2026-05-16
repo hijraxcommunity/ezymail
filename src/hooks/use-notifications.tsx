@@ -95,10 +95,12 @@ function getStoredPreferences(): NotificationPreferences {
 
 export function useNotifications() {
   const { isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setNewEmailNotification, setSelectedEmailId } = useAppStore()
-  const lastEmailIdsRef = useRef<Set<string>>(new Set())
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prefsRef = useRef<NotificationPreferences>(getStoredPreferences())
+  // Track the timestamp of when we first loaded — only notify about emails
+  // that arrived AFTER this time, preventing false notifications on login/page refresh
+  const lastCheckTimeRef = useRef<number>(Date.now())
 
   // ─── Fetch user notification preferences ───────────────────────────────
   useEffect(() => {
@@ -137,17 +139,16 @@ export function useNotifications() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [isAuthenticated])
 
-  // ─── Initialize tracking IDs once emails have loaded ───────────────────
+  // ─── Mark as initialized after a short delay (so initial email load completes) ──
   useEffect(() => {
     if (!isAuthenticated || isInitializedRef.current) return
 
     const timer = setTimeout(() => {
-      const currentEmails = useAppStore.getState().emails
-      if (currentEmails.length > 0) {
-        lastEmailIdsRef.current = new Set(currentEmails.map(e => e.id))
-      }
       isInitializedRef.current = true
-    }, 3000)
+      // Update last check time to NOW — any emails that existed before this
+      // moment will never trigger a notification
+      lastCheckTimeRef.current = Date.now()
+    }, 4000)
 
     return () => clearTimeout(timer)
   }, [isAuthenticated])
@@ -162,15 +163,27 @@ export function useNotifications() {
 
       const data = await res.json()
       const latestEmails = data.emails || []
-      const trackedIds = lastEmailIdsRef.current
-      const serverIds = new Set(latestEmails.map((e: { id: string }) => e.id))
 
-      const newEmails = latestEmails.filter(
-        (e: { id: string; isRead: boolean }) => !trackedIds.has(e.id) && !e.isRead
+      // Only consider emails that arrived AFTER our last check time
+      const checkTime = lastCheckTimeRef.current
+      const trulyNewEmails = latestEmails.filter(
+        (e: { id: string; isRead: boolean; createdAt: string }) => {
+          const emailTime = new Date(e.createdAt).getTime()
+          return emailTime > checkTime && !e.isRead
+        }
       )
 
-      if (newEmails.length > 0) {
-        lastEmailIdsRef.current = serverIds
+      // Update check time to server's latest email time (or now if no emails)
+      if (latestEmails.length > 0) {
+        const maxTime = Math.max(
+          ...latestEmails.map((e: { createdAt: string }) => new Date(e.createdAt).getTime())
+        )
+        lastCheckTimeRef.current = Math.max(checkTime, maxTime)
+      } else {
+        lastCheckTimeRef.current = Date.now()
+      }
+
+      if (trulyNewEmails.length > 0) {
         const prefs = prefsRef.current
         const isBackground = document.visibilityState === 'hidden'
 
@@ -186,7 +199,7 @@ export function useNotifications() {
           }
         }
 
-        for (const email of newEmails) {
+        for (const email of trulyNewEmails) {
           const e = email as {
             id: string
             subject?: string
@@ -230,8 +243,6 @@ export function useNotifications() {
             setCurrentFolder('inbox')
           }
         }
-      } else {
-        lastEmailIdsRef.current = serverIds
       }
     } catch {
       // Silent fail
