@@ -14,7 +14,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/store/use-app-store'
 import { AdvancedSearchDialog } from './advanced-search-dialog'
-import { ProfileMenu } from './profile-menu'
 
 /* ─── Operator Parsing (client-side for highlighting) ─── */
 
@@ -228,6 +227,7 @@ export function MailHeader() {
     clearRecentSearches,
     savedSearches,
     removeSavedSearch,
+    setSettingsView,
   } = useAppStore()
   const { theme, setTheme } = useTheme()
 
@@ -235,7 +235,6 @@ export function MailHeader() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -505,7 +504,7 @@ export function MailHeader() {
           <Button
             variant="ghost"
             className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 relative"
-            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            onClick={() => setSettingsView('profile')}
           >
             <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
               <AvatarImage src={user?.avatar || undefined} />
@@ -528,11 +527,7 @@ export function MailHeader() {
         onOpenChange={setAdvancedSearchOpen}
       />
 
-      {/* Profile Menu */}
-      <ProfileMenu
-        open={profileMenuOpen}
-        onOpenChange={setProfileMenuOpen}
-      />
+
     </>
   )
 }

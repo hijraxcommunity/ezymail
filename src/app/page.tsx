@@ -309,7 +309,7 @@ export default function HomePage() {
 
       {/* Settings / Admin slide-in panels */}
       <AnimatePresence>
-        {(settingsView === 'profile' || settingsView === 'settings') && (
+        {settingsView && (
           <motion.div
             key={settingsView || 'settings'}
             className="fixed inset-0 z-50"
