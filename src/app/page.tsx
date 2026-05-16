@@ -14,7 +14,6 @@ import { MobileNav } from '@/components/mail/mobile-nav'
 import { SettingsPanel } from '@/components/settings/settings-panel'
 import { AdminPanel } from '@/components/admin/admin-panel'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
-import { KeyboardShortcutsHelp } from '@/components/shared/keyboard-shortcuts-help'
 import { useNotifications } from '@/hooks/use-notifications'
 
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
@@ -159,9 +158,6 @@ export default function HomePage() {
     clearSelection,
   } = useAppStore()
 
-  // ─── Keyboard shortcuts help dialog ─────────────────────────────────────
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-
   // ─── Auth check loading state — prevents login flash on refresh ────────
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
@@ -201,140 +197,6 @@ export default function HomePage() {
   useEffect(() => {
     fetchEmails()
   }, [fetchEmails])
-
-  // ─── Keyboard shortcuts ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isInput =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-
-      if (isInput && e.key !== 'Escape') return
-
-      const key = e.key.toLowerCase()
-
-      switch (key) {
-        case 'c':
-        case 'n':
-          if (!isInput) {
-            e.preventDefault()
-            setComposeOpen(true)
-          }
-          break
-        case 'r':
-          if (!isInput && selectedEmailId) {
-            e.preventDefault()
-            const selected = emails.find((em) => em.id === selectedEmailId)
-            if (selected) setReplyToEmail(selected)
-          }
-          break
-        case 'e':
-          if (!isInput && selectedEmailId) {
-            e.preventDefault()
-            // Archive
-            fetch(`/api/emails/${selectedEmailId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ isArchived: true }),
-            }).catch(() => { /* silent */ })
-          }
-          break
-        case '#':
-        case 'delete':
-          if (!isInput && selectedEmailId) {
-            e.preventDefault()
-            // Delete (move to trash)
-            fetch(`/api/emails/${selectedEmailId}`, {
-              method: 'DELETE',
-            }).catch(() => { /* silent */ })
-            setSelectedEmailId(null)
-          }
-          break
-        case 'j': {
-          if (!isInput) {
-            e.preventDefault()
-            const idx = emails.findIndex((em) => em.id === selectedEmailId)
-            if (idx < emails.length - 1) {
-              setSelectedEmailId(emails[idx + 1].id)
-            } else if (emails.length > 0 && !selectedEmailId) {
-              setSelectedEmailId(emails[0].id)
-            }
-          }
-          break
-        }
-        case 'k': {
-          if (!isInput) {
-            e.preventDefault()
-            const idx = emails.findIndex((em) => em.id === selectedEmailId)
-            if (idx > 0) {
-              setSelectedEmailId(emails[idx - 1].id)
-            }
-          }
-          break
-        }
-        case '/':
-          if (!isInput) {
-            e.preventDefault()
-            const searchInput = document.querySelector<HTMLInputElement>(
-              'input[placeholder*="Search"], input[type="search"], input[data-search-input]'
-            )
-            if (searchInput) searchInput.focus()
-          }
-          break
-        case 'escape':
-          e.preventDefault()
-          if (shortcutsOpen) {
-            setShortcutsOpen(false)
-          } else if (composeOpen) {
-            setComposeOpen(false)
-          } else if (selectedEmailId) {
-            setSelectedEmailId(null)
-            clearSelection()
-          } else if (settingsView) {
-            setSettingsView(null)
-          } else if (adminView) {
-            setAdminView(null)
-          } else if (contactsView) {
-            setContactsView(false)
-          } else {
-            setSidebarOpen(false)
-            clearSelection()
-          }
-          break
-        case '?':
-          if (!isInput) {
-            e.preventDefault()
-            setShortcutsOpen(true)
-          }
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    isAuthenticated,
-    composeOpen,
-    selectedEmailId,
-    emails,
-    settingsView,
-    adminView,
-    contactsView,
-    setComposeOpen,
-    setReplyToEmail,
-    setSelectedEmailId,
-    clearSelection,
-    setSettingsView,
-    setAdminView,
-    setContactsView,
-    setSidebarOpen,
-    shortcutsOpen,
-  ])
 
   // ─── Email notifications ──────────────────────────────────────────────────
   useNotifications()
@@ -488,8 +350,6 @@ export default function HomePage() {
       {/* Undo snackbar */}
       <UndoSnackbar />
 
-      {/* Keyboard shortcuts help dialog */}
-      <KeyboardShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   )
 }

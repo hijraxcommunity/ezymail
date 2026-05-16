@@ -355,24 +355,6 @@ export function MailHeader() {
     searchInputRef.current?.blur()
   }
 
-  /* ─── Keyboard shortcut: Ctrl+K or / to focus search ─── */
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        searchInputRef.current?.focus()
-      } else if (e.key === '/') {
-        e.preventDefault()
-        searchInputRef.current?.focus()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
   const initials = user
     ? `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
@@ -488,14 +470,6 @@ export function MailHeader() {
               <Filter className="w-3.5 h-3.5 text-gray-500" />
             </Button>
 
-            {/* Keyboard shortcut hint */}
-            {!searchFocused && !searchQuery && (
-              <div className="absolute right-10 sm:right-16 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-0.5 pointer-events-none">
-                <kbd className="h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[10px] font-medium text-gray-400 shadow-sm">
-                  /
-                </kbd>
-              </div>
-            )}
 
             {/* Loading spinner */}
             {searchLoading && (
