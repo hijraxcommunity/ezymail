@@ -162,6 +162,9 @@ export default function HomePage() {
   // ─── Keyboard shortcuts help dialog ─────────────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
+  // ─── Auth check loading state — prevents login flash on refresh ────────
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
   // ─── Check session on mount ─────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/auth/me')
@@ -170,6 +173,7 @@ export default function HomePage() {
         if (data.user) setUser(data.user)
       })
       .catch(() => { /* silent */ })
+      .finally(() => setIsCheckingAuth(false))
   }, [setUser])
 
   // ─── Fetch emails when authenticated ─────────────────────────────────────
@@ -348,6 +352,17 @@ export default function HomePage() {
   }, [isAuthenticated, emails])
 
   // ─── Auth views ──────────────────────────────────────────────────────────
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-[#4285F4] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA]">
