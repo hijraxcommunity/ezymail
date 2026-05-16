@@ -31,3 +31,26 @@ Stage Summary:
 - Push notifications fire asynchronously after email delivery — never blocks the email send response
 - Auto-subscribe flow: if user already granted permission → auto-subscribes on login; if not → shows floating enable button
 - Dev server running with .env.local loaded, all routes returning 200 OK
+
+---
+Task ID: 1
+Agent: Main
+Task: Fix EzyMail email UI - restore clean alignment and spacing
+
+Work Log:
+- Analyzed old (April 12) and new (May 16) screenshots with VLM
+- Identified that both screenshots show email DETAIL view on mobile
+- Found sender email display changed from constructed name-based to actual DB email
+- Found angle brackets in email display from data, not code
+- Fixed email-detail.tsx: reduced content padding (px-3 mobile, px-6 desktop), smaller subject font, tighter sender info spacing, strip angle brackets from email display
+- Fixed email-card.tsx: reduced padding (px-3 mobile, px-4 desktop, py-3), removed extra mb-0.5 gaps between name/subject, use displayName for sent folder, strip angle brackets
+- Fixed email-list.tsx: tighter date group headers (py-1.5)
+- Removed desktop card hover scale effect for cleaner look
+- Build verified successfully
+- Force-pushed to GitHub
+
+Stage Summary:
+- 3 files modified: email-card.tsx, email-detail.tsx, email-list.tsx
+- Tighter padding throughout for more professional Gmail-like appearance
+- Angle brackets stripped from email address display
+- displayName logic for sent folder (shows recipient name)
