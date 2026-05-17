@@ -390,9 +390,7 @@ export function MailHeader() {
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex items-center gap-1.5">
-            <div className="w-7 h-7 rounded-lg bg-[#4285F4] flex items-center justify-center shrink-0">
-              <Mail className="w-3.5 h-3.5 text-white" />
-            </div>
+            <img src="/logo.svg" alt="EzyMail" className="w-7 h-7 rounded-lg shrink-0" />
             <span className="text-base sm:text-lg font-bold hidden xs:block whitespace-nowrap">
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>

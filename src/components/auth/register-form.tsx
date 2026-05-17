@@ -217,9 +217,7 @@ export function RegisterForm() {
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
           {/* Logo */}
           <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-[#4285F4] flex items-center justify-center">
-              <Mail className="w-5 h-5 text-white" />
-            </div>
+            <img src="/logo.svg" alt="EzyMail" className="w-10 h-10 rounded-xl" />
             <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>
