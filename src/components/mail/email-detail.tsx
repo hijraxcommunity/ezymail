@@ -958,10 +958,6 @@ export function EmailDetail() {
                             <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
                               {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'}
                             </span>
-                            <span className="text-xs text-gray-400 truncate">
-                              &lt;{msg.sender?.email || msg.recipientEmail}&gt;
-                            </span>
-                            <span className="text-xs text-gray-300 dark:text-gray-600">&middot;</span>
                             <button
                               onClick={() => setShowInfoBox(!showInfoBox)}
                               className="flex items-center gap-1 shrink-0 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
@@ -988,7 +984,8 @@ export function EmailDetail() {
                           const senderEm = msg.sender?.email || msg.recipientEmail || ''
                           const recipNm = msg.recipient ? `${msg.recipient.firstName} ${msg.recipient.lastName}` : msg.recipientEmail || ''
                           const recipEm = msg.recipient?.email || msg.recipientEmail || ''
-                          const ccData: string[] = (() => { try { const cc = (msg as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc ? JSON.parse(cc) : [] } catch { return [] } return [] })()
+                          const ccData: string[] = (() => { try { const cc = (msg as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
+                          const bccData: string[] = (() => { try { const bcc = (msg as unknown as Record<string, unknown>).bcc; if (!bcc) return []; if (Array.isArray(bcc)) return bcc; if (typeof bcc === 'string') return bcc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
 
                           return (
                             <motion.div
@@ -998,7 +995,7 @@ export function EmailDetail() {
                               transition={{ duration: 0.2, ease: 'easeInOut' }}
                               className="overflow-hidden"
                             >
-                              <div className="ml-10 rounded-xl border border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900/80 p-3 sm:p-3.5 space-y-2.5 mb-2">
+                              <div className="mx-10 rounded-xl border border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900/80 p-3 sm:p-3.5 space-y-2.5 mb-2">
                                 {/* From */}
                                 <div className="flex items-start gap-3">
                                   <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">From</span>
@@ -1052,6 +1049,26 @@ export function EmailDetail() {
                                       <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{ccData.join(', ')}</p>
                                       <button
                                         onClick={() => { navigator.clipboard.writeText(ccData.join(', ')); toast.success('CC emails copied') }}
+                                        className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                                        title="Copy emails"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* BCC */}
+                                {bccData.length > 0 && (
+                                  <div className="flex items-start gap-3">
+                                    <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">BCC</span>
+                                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                                      <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                        <Mail className="w-3 h-3 text-gray-500" />
+                                      </div>
+                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{bccData.join(', ')}</p>
+                                      <button
+                                        onClick={() => { navigator.clipboard.writeText(bccData.join(', ')); toast.success('BCC emails copied') }}
                                         className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
                                         title="Copy emails"
                                       >
