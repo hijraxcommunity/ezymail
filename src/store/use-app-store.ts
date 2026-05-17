@@ -4,7 +4,7 @@ import type { User, Email, Folder } from '@prisma/client';
 
 export type AuthView = 'login' | 'register' | 'forgot-password' | null;
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred' | 'archive' | 'search' | 'folder' | 'scheduled' | 'snoozed';
-export type SettingsView = 'profile' | 'security' | 'preferences' | 'filters' | 'account' | null;
+export type SettingsView = string | null;
 export type AdminView = 'dashboard' | 'users' | 'reports' | 'logs' | 'settings' | null;
 
 interface UserSafe {
