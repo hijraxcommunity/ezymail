@@ -54,6 +54,8 @@ model Email {
   id              String   @id @default(cuid())
   senderId        String
   recipientEmail  String
+  cc              String?
+  bcc             String?
   subject         String
   body            String   @default("")
   bodyHtml        String   @default("")
