@@ -1,11 +1,12 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, Trash2, Clock, CalendarDays, MessageSquare, Mail } from 'lucide-react'
+import { Star, Paperclip, Archive, Trash2, Clock, CalendarDays, MessageSquare } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
 const SWIPE_THRESHOLD = 60
@@ -126,10 +127,16 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
 
   /* ─── Email data ─── */
   const isSent = email.folder === 'sent'
-  // Show email address instead of name
-  const contactEmail = isSent
-    ? (email.recipient?.email || email.recipientEmail)
-    : (email.sender?.email || email.recipientEmail)
+  // For sent emails, show the recipient; for others, show the sender
+  const contactPerson = isSent
+    ? (email.recipient || null)
+    : email.sender
+  const contactName = contactPerson
+    ? `${contactPerson.firstName} ${contactPerson.lastName}`
+    : (isSent ? email.recipientEmail : email.sender?.email || email.recipientEmail)
+  const initials = contactPerson
+    ? `${contactPerson.firstName?.charAt(0) || ''}${contactPerson.lastName?.charAt(0) || ''}`.toUpperCase()
+    : 'U'
   const timeAgo = formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })
   const snippet = email.body
     ?.substring(0, 100)
@@ -255,7 +262,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
               }}
               className={`shrink-0 items-center justify-center relative z-10 cursor-pointer ${multiSelectMode ? 'flex' : 'hidden md:flex'}`}
               style={{ minWidth: 36, minHeight: 44 }}
-              aria-label={`Select email from ${contactEmail}`}
+              aria-label={`Select email from ${contactName}`}
             >
               <div
                 className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
@@ -272,10 +279,19 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
               </div>
             </div>
 
-            {/* Email icon */}
-            <div className="w-10 h-10 shrink-0 rounded-full bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center">
-              <Mail className="w-5 h-5 text-[#4285F4]" />
-            </div>
+            {/* Avatar */}
+            <Avatar className="w-10 h-10 shrink-0">
+              <AvatarImage src={contactPerson?.avatar} />
+              <AvatarFallback
+                className={`text-white text-xs font-semibold ${
+                  contactPerson
+                    ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
+                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                }`}
+              >
+                {initials}
+              </AvatarFallback>
+            </Avatar>
 
             {/* Content */}
             <div className="flex-1 min-w-0">
@@ -287,7 +303,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                       : 'text-[#444746] dark:text-gray-300'
                   }`}
                 >
-                  {contactEmail}
+                  {contactName}
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
                   {timeAgo}
@@ -424,7 +440,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
           }}
           className="shrink-0 flex items-center justify-center relative z-10 cursor-pointer"
           style={{ minWidth: 36, minHeight: 44 }}
-          aria-label={`Select email from ${contactEmail}`}
+          aria-label={`Select email from ${contactName}`}
         >
           <div
             className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
@@ -441,10 +457,19 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
           </div>
         </div>
 
-        {/* Email icon */}
-        <div className="w-10 h-10 shrink-0 rounded-full bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center">
-          <Mail className="w-5 h-5 text-[#4285F4]" />
-        </div>
+        {/* Avatar */}
+        <Avatar className="w-10 h-10 shrink-0">
+          <AvatarImage src={contactPerson?.avatar} />
+          <AvatarFallback
+            className={`text-white text-xs font-semibold ${
+              contactPerson
+                ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
+                : 'bg-gradient-to-br from-gray-400 to-gray-500'
+            }`}
+          >
+            {initials}
+          </AvatarFallback>
+        </Avatar>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
@@ -456,7 +481,7 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
                   : 'text-[#444746] dark:text-gray-300'
               }`}
             >
-              {contactEmail}
+              {contactName}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
               {timeAgo}
