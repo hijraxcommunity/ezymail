@@ -104,6 +104,8 @@ export async function GET(request: NextRequest) {
       id: email.id,
       senderId: email.senderId,
       recipientEmail: email.recipientEmail,
+      cc: email.cc,
+      bcc: email.bcc,
       subject: email.subject,
       body: email.body,
       bodyHtml: email.bodyHtml,
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { to, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority } = body;
+    const { to, cc, bcc, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority } = body;
 
     // Validate fields
     if (!to || !to.trim()) {
@@ -193,56 +195,129 @@ export async function POST(request: NextRequest) {
     const isScheduled = scheduledAt && new Date(scheduledAt).getTime() > Date.now();
     const emailPriority = (priority === 'high' || priority === 'low') ? priority : 'normal';
 
-    // Create email in recipient's inbox
+    // Parse CC and BCC recipients
+    const ccEmails = cc
+      ? cc.split(',').map((e: string) => e.trim().toLowerCase()).filter((e: string) => e.length > 0)
+      : [];
+    const bccEmails = bcc
+      ? bcc.split(',').map((e: string) => e.trim().toLowerCase()).filter((e: string) => e.length > 0)
+      : [];
+
+    // Remove main recipient from CC/BCC lists (avoid duplicates)
+    const cleanCc = ccEmails.filter((e: string) => e !== recipientEmail);
+    const cleanBcc = bccEmails.filter((e: string) => e !== recipientEmail);
+
+    // Validate CC recipients
+    for (const ccAddr of cleanCc) {
+      if (!ccAddr.endsWith('@ezy.af')) {
+        return NextResponse.json({ error: `CC recipient ${ccAddr} is not a valid @ezy.af address` }, { status: 400 });
+      }
+    }
+
+    // Validate BCC recipients
+    for (const bccAddr of cleanBcc) {
+      if (!bccAddr.endsWith('@ezy.af')) {
+        return NextResponse.json({ error: `BCC recipient ${bccAddr} is not a valid @ezy.af address` }, { status: 400 });
+      }
+    }
+
+    // Common email data
+    const ccValue = cleanCc.length > 0 ? cleanCc.join(', ') : null;
+    const bccValue = cleanBcc.length > 0 ? cleanBcc.join(', ') : null;
+
+    const commonData = {
+      senderId: session.userId,
+      recipientEmail,
+      cc: ccValue,
+      bcc: bccValue,
+      subject: subject.trim(),
+      body: emailBody.trim(),
+      bodyHtml: bodyHtml || '',
+      attachments: attachmentsJson,
+      sentAt: isScheduled ? null : new Date(),
+      scheduledAt: isScheduled ? new Date(scheduledAt) : null,
+      priority: emailPriority,
+    };
+
+    const includeOptions = {
+      sender: {
+        select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+      },
+      recipient: {
+        select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+      },
+    };
+
+    // Create email in main recipient's inbox
     const inboxEmail = await db.email.create({
       data: {
-        senderId: session.userId,
-        recipientEmail,
-        subject: subject.trim(),
-        body: emailBody.trim(),
-        bodyHtml: bodyHtml || '',
-        attachments: attachmentsJson,
+        ...commonData,
         folder: 'inbox',
         parentEmailId: replyToId || null,
-        sentAt: isScheduled ? null : new Date(),
-        scheduledAt: isScheduled ? new Date(scheduledAt) : null,
-        priority: emailPriority,
       },
-      include: {
-        sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-        },
-        recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-        },
-      },
+      include: includeOptions,
     });
 
-    // Create email in sender's sent folder
-    // The sent copy should NOT be part of the reply thread (no parentEmailId)
-    // Only the inbox copy participates in the thread to avoid duplicates
+    // Create email in sender's sent folder (no parentEmailId to avoid thread duplication)
     const sentEmail = await db.email.create({
       data: {
-        senderId: session.userId,
-        recipientEmail,
-        subject: subject.trim(),
-        body: emailBody.trim(),
-        bodyHtml: bodyHtml || '',
-        attachments: attachmentsJson,
+        ...commonData,
         folder: 'sent',
-        sentAt: isScheduled ? null : new Date(),
-        scheduledAt: isScheduled ? new Date(scheduledAt) : null,
-        priority: emailPriority,
       },
-      include: {
-        sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-        },
-        recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-        },
-      },
+      include: includeOptions,
     });
+
+    // Create inbox copies for CC recipients
+    for (const ccAddr of cleanCc) {
+      const ccUser = await db.user.findUnique({ where: { email: ccAddr } });
+      if (!ccUser || ccUser.status === 'suspended') continue;
+
+      await db.email.create({
+        data: {
+          ...commonData,
+          recipientEmail: ccAddr,
+          folder: 'inbox',
+          parentEmailId: replyToId || null,
+        },
+      });
+
+      // Fire-and-forget push notification to CC recipient
+      if (!isScheduled) {
+        sendPushNotification({
+          recipientUserId: ccUser.id,
+          senderName: '', // will be filled below
+          subject: `${subject.trim()} (CC)`,
+          emailId: inboxEmail.id,
+        }).catch(() => {});
+      }
+    }
+
+    // Create inbox copies for BCC recipients (they don't see each other)
+    for (const bccAddr of cleanBcc) {
+      const bccUser = await db.user.findUnique({ where: { email: bccAddr } });
+      if (!bccUser || bccUser.status === 'suspended') continue;
+
+      // BCC recipients get their own copy WITHOUT the bcc field visible
+      await db.email.create({
+        data: {
+          ...commonData,
+          recipientEmail: bccAddr,
+          folder: 'inbox',
+          bcc: null, // Hide BCC list from BCC recipients
+          parentEmailId: replyToId || null,
+        },
+      });
+
+      // Fire-and-forget push notification to BCC recipient
+      if (!isScheduled) {
+        sendPushNotification({
+          recipientUserId: bccUser.id,
+          senderName: '',
+          subject: `${subject.trim()} (BCC)`,
+          emailId: inboxEmail.id,
+        }).catch(() => {});
+      }
+    }
 
     // Send push notification to recipient (non-blocking, does not delay response)
     if (!isScheduled) {

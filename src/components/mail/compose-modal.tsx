@@ -227,9 +227,18 @@ export function ComposeModal() {
         if (replyMode === 'reply') {
           setTo(senderEmail)
         } else {
-          // Reply All: include sender + recipient
+          // Reply All: sender goes in To, recipient + CC go in CC
           const recipientEmail = replyToEmail.recipient?.email || ''
-          setTo([senderEmail, recipientEmail].filter(Boolean).join(', '))
+          // Parse CC from the original email if available
+          const originalCc = (() => { try { const cc = (replyToEmail as unknown as Record<string, unknown>).cc; if (!cc) return []; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean); if (Array.isArray(cc)) return cc } catch { return [] } return [] })()
+          // Build CC list: original recipient + original CC, excluding sender (that goes in To)
+          const allCc = [recipientEmail, ...originalCc].filter(e => e && e !== senderEmail)
+          const uniqueCc = [...new Set(allCc)]
+          setTo(senderEmail)
+          if (uniqueCc.length > 0) {
+            setCc(uniqueCc.join(', '))
+            setShowCc(true)
+          }
         }
         const subject = replyToEmail.subject?.startsWith('Re: ')
           ? replyToEmail.subject
