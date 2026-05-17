@@ -207,17 +207,39 @@ export async function POST(request: NextRequest) {
     const cleanCc = ccEmails.filter((e: string) => e !== recipientEmail);
     const cleanBcc = bccEmails.filter((e: string) => e !== recipientEmail);
 
-    // Validate CC recipients
+    // Validate CC recipients format
     for (const ccAddr of cleanCc) {
       if (!ccAddr.endsWith('@ezy.af')) {
         return NextResponse.json({ error: `CC recipient ${ccAddr} is not a valid @ezy.af address` }, { status: 400 });
       }
     }
 
-    // Validate BCC recipients
+    // Validate CC recipients exist
+    for (const ccAddr of cleanCc) {
+      const ccUser = await db.user.findUnique({ where: { email: ccAddr } });
+      if (!ccUser) {
+        return NextResponse.json({ error: `CC recipient ${ccAddr} does not have an EzyMail account` }, { status: 400 });
+      }
+      if (ccUser.status === 'suspended') {
+        return NextResponse.json({ error: `CC recipient ${ccAddr} has a suspended account` }, { status: 400 });
+      }
+    }
+
+    // Validate BCC recipients format
     for (const bccAddr of cleanBcc) {
       if (!bccAddr.endsWith('@ezy.af')) {
         return NextResponse.json({ error: `BCC recipient ${bccAddr} is not a valid @ezy.af address` }, { status: 400 });
+      }
+    }
+
+    // Validate BCC recipients exist
+    for (const bccAddr of cleanBcc) {
+      const bccUser = await db.user.findUnique({ where: { email: bccAddr } });
+      if (!bccUser) {
+        return NextResponse.json({ error: `BCC recipient ${bccAddr} does not have an EzyMail account` }, { status: 400 });
+      }
+      if (bccUser.status === 'suspended') {
+        return NextResponse.json({ error: `BCC recipient ${bccAddr} has a suspended account` }, { status: 400 });
       }
     }
 
@@ -277,6 +299,7 @@ export async function POST(request: NextRequest) {
           ...commonData,
           recipientEmail: ccAddr,
           folder: 'inbox',
+          cc: null, // Hide CC list from CC recipients
           parentEmailId: replyToId || null,
         },
       });
@@ -297,12 +320,13 @@ export async function POST(request: NextRequest) {
       const bccUser = await db.user.findUnique({ where: { email: bccAddr } });
       if (!bccUser || bccUser.status === 'suspended') continue;
 
-      // BCC recipients get their own copy WITHOUT the bcc field visible
+      // BCC recipients get their own copy WITHOUT cc or bcc fields visible
       await db.email.create({
         data: {
           ...commonData,
           recipientEmail: bccAddr,
           folder: 'inbox',
+          cc: null, // Hide CC list from BCC recipients
           bcc: null, // Hide BCC list from BCC recipients
           parentEmailId: replyToId || null,
         },
