@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
   Paperclip, Forward, FileText, Download, Tag, Check,
-  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp
+  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
+  ChevronDown, Lock, Copy, Mail
 } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -398,11 +399,13 @@ export function EmailDetail() {
   const [thread, setThread] = useState<EmailWithSender[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
+  const [showInfoBox, setShowInfoBox] = useState(false)
 
   /* ─── Fetch email ─── */
   const fetchEmail = useCallback(async () => {
     if (!selectedEmailId) return
     setLoading(true)
+    setShowInfoBox(false)
     try {
       const res = await fetch(`/api/emails/${selectedEmailId}`)
       const data = await res.json()
@@ -943,7 +946,7 @@ export function EmailDetail() {
                   {isSelected ? (
                     /* Selected email — always fully shown */
                     <div className="py-1">
-                      <div className="flex items-center gap-2.5 mb-2">
+                      <div className="flex items-center gap-2.5 mb-1">
                         <Avatar className="w-8 h-8 shrink-0">
                           <AvatarImage src={msg.sender?.avatar || undefined} />
                           <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">
@@ -951,19 +954,140 @@ export function EmailDetail() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
                               {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'}
                             </span>
                             <span className="text-xs text-gray-400 truncate">
                               &lt;{msg.sender?.email || msg.recipientEmail}&gt;
                             </span>
+                            <span className="text-xs text-gray-300 dark:text-gray-600">&middot;</span>
+                            <button
+                              onClick={() => setShowInfoBox(!showInfoBox)}
+                              className="flex items-center gap-1 shrink-0 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
+                            >
+                              <span>to me</span>
+                              <motion.span
+                                animate={{ rotate: showInfoBox ? 180 : 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <ChevronDown className="w-3 h-3" />
+                              </motion.span>
+                            </button>
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
                           {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
                         </div>
                       </div>
+
+                      {/* ─── Gmail-style inline info box ─── */}
+                      <AnimatePresence>
+                        {showInfoBox && (() => {
+                          const senderNm = msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'
+                          const senderEm = msg.sender?.email || msg.recipientEmail || ''
+                          const recipNm = msg.recipient ? `${msg.recipient.firstName} ${msg.recipient.lastName}` : msg.recipientEmail || ''
+                          const recipEm = msg.recipient?.email || msg.recipientEmail || ''
+                          const ccData: string[] = (() => { try { const cc = (msg as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc ? JSON.parse(cc) : [] } catch { return [] } return [] })()
+
+                          return (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+                              className="overflow-hidden"
+                            >
+                              <div className="ml-10 rounded-xl border border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900/80 p-3 sm:p-3.5 space-y-2.5 mb-2">
+                                {/* From */}
+                                <div className="flex items-start gap-3">
+                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">From</span>
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gradient-to-br from-[#4285F4] to-[#34A853] flex items-center justify-center">
+                                      <span className="text-[9px] font-semibold text-white">{getInitials(msg.sender)}</span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{senderNm}</p>
+                                      <p className="text-xs text-gray-500 truncate">{senderEm}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText(senderEm); toast.success('Email copied') }}
+                                      className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                                      title="Copy email"
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* To */}
+                                <div className="flex items-start gap-3">
+                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">To</span>
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gradient-to-br from-[#FBBC04] to-[#EA4335] flex items-center justify-center">
+                                      <span className="text-[9px] font-semibold text-white">{getInitials(msg.recipient)}</span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{recipNm}</p>
+                                      <p className="text-xs text-gray-500 truncate">{recipEm}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText(recipEm); toast.success('Email copied') }}
+                                      className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                                      title="Copy email"
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* CC */}
+                                {ccData.length > 0 && (
+                                  <div className="flex items-start gap-3">
+                                    <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">CC</span>
+                                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                                      <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                        <Mail className="w-3 h-3 text-gray-500" />
+                                      </div>
+                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{ccData.join(', ')}</p>
+                                      <button
+                                        onClick={() => { navigator.clipboard.writeText(ccData.join(', ')); toast.success('CC emails copied') }}
+                                        className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                                        title="Copy emails"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Date */}
+                                <div className="flex items-start gap-3">
+                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">Date</span>
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                      <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                                      </svg>
+                                    </div>
+                                    <p className="text-sm text-[#1F1F1F] dark:text-white">{format(new Date(msg.createdAt), 'd MMM yyyy, h:mm a')}</p>
+                                  </div>
+                                </div>
+
+                                {/* Encryption */}
+                                <div className="flex items-start gap-3">
+                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right"></span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Lock className="w-3 h-3 text-gray-400" />
+                                    <span className="text-xs text-gray-500">Standard encryption (TLS).</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })()}
+                      </AnimatePresence>
+
                       <div>
                         <div
                           className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
