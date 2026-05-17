@@ -198,7 +198,7 @@ function ContactForm({ open, onOpenChange, contact, onSave, isEditing }: Contact
             <Input
               id="contact-phone"
               type="tel"
-              placeholder="+1 (555) 000-0000"
+              placeholder="93700000000"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="rounded-xl"
