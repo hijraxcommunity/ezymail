@@ -63,11 +63,15 @@ export async function GET(request: NextRequest) {
       where.snoozedUntil = null;
     }
 
-    // Filter out reply emails (with parentEmailId) from the list view
+    // Filter out reply emails (with parentEmailId) from the sent folder list
     // Replies should only appear inside the thread view of the parent email
     // includeThreads=true is used by notification polling to detect new replies
+    // In inbox: show replies so recipients can see them
+    // In sent: hide replies (duplicates, only show parent sent copy)
     if (!includeThreads && !search) {
-      where.parentEmailId = null;
+      if (folder === 'sent') {
+        where.parentEmailId = null;
+      }
     }
 
     if (search) {
