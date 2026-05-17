@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Sun, Moon, Menu, Mail, X,
+  Search, Sun, Moon, Menu, Mail, Settings, User, Shield, LogOut, X,
   Loader2, Clock, ArrowRight, Filter, Bookmark, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/store/use-app-store'
 import { AdvancedSearchDialog } from './advanced-search-dialog'
@@ -221,13 +222,15 @@ export function MailHeader() {
     setSidebarOpen,
     searchQuery,
     setSearchQuery,
+    setSettingsView,
+    setAdminView,
+    logout,
     emails,
     recentSearches,
     addRecentSearch,
     clearRecentSearches,
     savedSearches,
     removeSavedSearch,
-    setSettingsView,
   } = useAppStore()
   const { theme, setTheme } = useTheme()
 
@@ -348,6 +351,24 @@ export function MailHeader() {
     searchInputRef.current?.blur()
   }
 
+  /* ─── Keyboard shortcut: Ctrl+K or / to focus search ─── */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      } else if (e.key === '/') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const initials = user
     ? `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
@@ -463,6 +484,14 @@ export function MailHeader() {
               <Filter className="w-3.5 h-3.5 text-gray-500" />
             </Button>
 
+            {/* Keyboard shortcut hint */}
+            {!searchFocused && !searchQuery && (
+              <div className="absolute right-10 sm:right-16 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-0.5 pointer-events-none">
+                <kbd className="h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[10px] font-medium text-gray-400 shadow-sm">
+                  /
+                </kbd>
+              </div>
+            )}
 
             {/* Loading spinner */}
             {searchLoading && (
@@ -504,7 +533,7 @@ export function MailHeader() {
           <Button
             variant="ghost"
             className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 relative"
-            onClick={() => setSettingsView('profile')}
+            onClick={() => setSettingsView('settings')}
           >
             <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
               <AvatarImage src={user?.avatar || undefined} />
@@ -526,8 +555,6 @@ export function MailHeader() {
         open={advancedSearchOpen}
         onOpenChange={setAdvancedSearchOpen}
       />
-
-
     </>
   )
 }

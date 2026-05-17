@@ -5,13 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  Sun, Moon, Monitor, Bell, Volume2, Save, Loader2, Camera,
+  X, Sun, Moon, Monitor, Bell, Volume2, Save, Loader2, Camera,
   Eye, EyeOff, Shield, Smartphone, Globe, Clock, Lock, Download,
   Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
-  Bold, Italic, Link as LinkIcon, List, ImagePlus,
-  RefreshCw, LogOut, CalendarDays, Filter, User, Settings,
-  PenLine, ArrowLeft, Send, Languages, Undo2,
-  ChevronRight
+  Bold, Italic, Link as LinkIcon, List, ImagePlus, ChevronRight,
+  RefreshCw, LogOut, CalendarDays, Filter, ArrowLeft, User, Palette,
+  BellRing, FileText, ShieldCheck, Settings as SettingsIcon
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -26,10 +25,8 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+// Tabs removed — now using list → detail pattern
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -87,17 +84,6 @@ interface TwoFAStatus {
   createdAt: string | null
 }
 
-// ─── Sidebar section type ───────────────────────────────────────────────────
-
-type SettingsSection =
-  | 'profile'
-  | 'security'
-  | 'appearance'
-  | 'notifications'
-  | 'compose'
-  | 'filters'
-  | 'account'
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getPasswordStrength(password: string) {
@@ -154,25 +140,15 @@ const tabVariants = {
   exit: { opacity: 0, x: -8, transition: { duration: 0.15 } },
 }
 
-// ─── Sidebar navigation config ──────────────────────────────────────────────
-
-const sidebarSections: { key: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: 'profile', label: 'Profile', icon: User },
-  { key: 'security', label: 'Security', icon: Shield },
-  { key: 'appearance', label: 'Appearance', icon: Sun },
-  { key: 'notifications', label: 'Notifications', icon: Bell },
-  { key: 'compose', label: 'Compose', icon: PenLine },
-  { key: 'filters', label: 'Filters & Rules', icon: Filter },
-  { key: 'account', label: 'Account', icon: Settings },
-]
-
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export function SettingsPanel() {
-  const { user, settingsView, setSettingsView, setAdminView, logout } = useAppStore()
+  const { settingsView, setSettingsView } = useAppStore()
   const { theme, setTheme } = useTheme()
 
-  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null)
+  // Determine if showing list or a detail page
+  const isListView = settingsView === 'settings' || settingsView === 'profile' || !settingsView
+  const activeSection = isListView ? null : settingsView?.replace('settings-', '') || null
 
   // ─── Profile state ──────────────────────────────────────────────────────
   const [profile, setProfile] = useState<ProfileData | null>(null)
@@ -215,21 +191,6 @@ export function SettingsPanel() {
   const [soundNotif, setSoundNotif] = useState(true)
   const [dateFormat, setDateFormat] = useState<'12h' | '24h'>('12h')
   const [savingPrefs, setSavingPrefs] = useState(false)
-
-  // ─── New preferences state ──────────────────────────────────────────────
-  const [readReceipts, setReadReceipts] = useState(false)
-  const [undoSendTimeout, setUndoSendTimeout] = useState<number>(10)
-  const [defaultReplyMode, setDefaultReplyMode] = useState<'reply' | 'replyAll'>('reply')
-  const [autoAdvance, setAutoAdvance] = useState(true)
-  const [language, setLanguage] = useState('en')
-
-  // ─── Vacation responder state ───────────────────────────────────────────
-  const [vacationEnabled, setVacationEnabled] = useState(false)
-  const [vacationSubject, setVacationSubject] = useState('')
-  const [vacationMessage, setVacationMessage] = useState('')
-  const [vacationStartDate, setVacationStartDate] = useState('')
-  const [vacationEndDate, setVacationEndDate] = useState('')
-  const [savingVacation, setSavingVacation] = useState(false)
 
   // ─── Signature editor ───────────────────────────────────────────────────
   const signatureEditor = useEditor({
@@ -274,17 +235,6 @@ export function SettingsPanel() {
             if (prefs.desktopNotif !== undefined) setDesktopNotif(prefs.desktopNotif)
             if (prefs.soundNotif !== undefined) setSoundNotif(prefs.soundNotif)
             if (prefs.dateFormat) setDateFormat(prefs.dateFormat)
-            if (prefs.readReceipts !== undefined) setReadReceipts(prefs.readReceipts)
-            if (prefs.undoSendTimeout !== undefined) setUndoSendTimeout(prefs.undoSendTimeout)
-            if (prefs.defaultReplyMode) setDefaultReplyMode(prefs.defaultReplyMode)
-            if (prefs.autoAdvance !== undefined) setAutoAdvance(prefs.autoAdvance)
-            if (prefs.language) setLanguage(prefs.language)
-            // Vacation responder
-            if (prefs.vacationEnabled !== undefined) setVacationEnabled(prefs.vacationEnabled)
-            if (prefs.vacationSubject !== undefined) setVacationSubject(prefs.vacationSubject)
-            if (prefs.vacationMessage !== undefined) setVacationMessage(prefs.vacationMessage)
-            if (prefs.vacationStartDate !== undefined) setVacationStartDate(prefs.vacationStartDate)
-            if (prefs.vacationEndDate !== undefined) setVacationEndDate(prefs.vacationEndDate)
           } catch {
             // ignore parse errors
           }
@@ -593,11 +543,6 @@ export function SettingsPanel() {
         desktopNotif,
         soundNotif,
         dateFormat,
-        readReceipts,
-        undoSendTimeout,
-        defaultReplyMode,
-        autoAdvance,
-        language,
       }
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
@@ -669,52 +614,12 @@ export function SettingsPanel() {
     }
   }
 
-  // ─── Vacation responder handler ────────────────────────────────────────
-  const handleSaveVacation = async () => {
-    setSavingVacation(true)
-    try {
-      const res = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          preferences: {
-            vacationEnabled,
-            vacationSubject,
-            vacationMessage,
-            vacationStartDate,
-            vacationEndDate,
-          },
-        }),
-      })
-      if (res.ok) {
-        toast.success('Vacation responder updated')
-      } else {
-        toast.error('Failed to save vacation responder')
-      }
-    } catch {
-      toast.error('Failed to save vacation responder')
-    } finally {
-      setSavingVacation(false)
-    }
-  }
-
-  // ─── Logout handler ────────────────────────────────────────────────────
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } catch { /* ignore */ }
-    logout()
-  }
-
   // ─── Derived values ────────────────────────────────────────────────────
   const initials = profile
     ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
 
-  // ─── Close handler ─────────────────────────────────────────────────────
-  const handleClose = () => setSettingsView(null)
-
-  // ─── Render: Loading state ─────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────
   if (!profile && profileLoading) {
     return (
       <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 flex items-center justify-center">
@@ -723,267 +628,215 @@ export function SettingsPanel() {
     )
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────
+  const handleClose = () => setSettingsView(null)
+  const goBack = () => setSettingsView('settings')
+  const navigateTo = (section: string) => setSettingsView(`settings-${section}`)
+
+  // Settings list items
+  const settingsItems = [
+    { key: 'profile', label: 'Profile', description: 'Manage your personal information, avatar, and bio', icon: User, color: 'bg-[#4285F4]/10 text-[#4285F4]' },
+    { key: 'security', label: 'Security', description: 'Password, sessions, login history, and two-factor authentication', icon: ShieldCheck, color: 'bg-[#34A853]/10 text-[#34A853]' },
+    { key: 'preferences', label: 'Appearance & Preferences', description: 'Theme, density, notifications, date format, and signature', icon: Palette, color: 'bg-[#FBBC05]/10 text-[#E37400]' },
+    { key: 'filters', label: 'Filters & Rules', description: 'Email filters, auto-labeling, and automated rules', icon: Filter, color: 'bg-[#EA4335]/10 text-[#EA4335]' },
+    { key: 'account', label: 'Account', description: 'Export data and manage your account', icon: SettingsIcon, color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+  ]
+
+  // Detail page titles
+  const sectionTitles: Record<string, string> = {
+    profile: 'Profile',
+    security: 'Security',
+    preferences: 'Appearance & Preferences',
+    filters: 'Filters & Rules',
+    account: 'Account',
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 overflow-hidden flex flex-col">
-      {/* ── Header ── */}
-      <header className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <div className="flex items-center justify-between px-4 h-14">
-          <div className="flex items-center gap-3">
-            {activeSection ? (
-              <Button variant="ghost" size="icon" onClick={() => setActiveSection(null)} className="h-9 w-9">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            ) : (
-              <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            )}
-            <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white">
-              {activeSection
-                ? sidebarSections.find(s => s.key === activeSection)?.label || 'Settings'
-                : 'Settings'}
-            </h2>
-          </div>
-          {!activeSection && (
-            <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
-              <X className="w-5 h-5" />
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+        <div className="flex items-center gap-3 px-4 h-14">
+          {!isListView && (
+            <Button variant="ghost" size="icon" onClick={goBack} className="h-9 w-9 -ml-1">
+              <ArrowLeft className="w-5 h-5" />
             </Button>
           )}
+          <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white flex-1">
+            {isListView ? 'Settings' : (sectionTitles[activeSection || ''] || 'Settings')}
+          </h2>
+          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
+            <X className="w-5 h-5" />
+          </Button>
         </div>
-      </header>
+      </div>
 
-      {/* ── Body ── */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-
-        {/* ── Level 1: Settings List ── */}
-        {!activeSection && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="max-w-2xl mx-auto p-4 sm:p-6 space-y-3 pb-24"
-          >
-            {/* User card at top */}
-            <div className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900 mb-4">
-              <Avatar className="w-14 h-14">
-                <AvatarImage src={user?.avatar || undefined} />
-                <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-lg font-bold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-[#1F1F1F] dark:text-white truncate">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
-              </div>
-            </div>
-
-            {/* Settings items list */}
-            {sidebarSections.map((section) => (
-              <motion.button
-                key={section.key}
-                type="button"
-                onClick={() => setActiveSection(section.key)}
-                whileTap={{ scale: 0.98 }}
-                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-left group"
+        <AnimatePresence mode="wait">
+          {isListView ? (
+            <motion.div
+              key="settings-list"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="max-w-2xl mx-auto p-4 sm:p-6 space-y-2 pb-8"
+            >
+              <motion.div
+                className="flex items-center gap-3 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900 mb-4"
+                {...fadeInUp}
               >
-                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 group-hover:bg-[#D3E3FD] dark:group-hover:bg-[#4285F4]/15 transition-colors">
-                  <section.icon className="w-5 h-5 text-gray-500 dark:text-gray-400 group-hover:text-[#4285F4] dark:group-hover:text-[#A8C7FA] transition-colors" />
-                </div>
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={profile?.avatar || undefined} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-sm font-bold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">{section.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {section.key === 'profile' && 'Manage your personal information and avatar'}
-                    {section.key === 'security' && 'Password, sessions, login history, 2FA'}
-                    {section.key === 'appearance' && 'Theme, density, language, date format'}
-                    {section.key === 'notifications' && 'Desktop alerts, sounds, read receipts'}
-                    {section.key === 'compose' && 'Signature, undo send, reply behavior'}
-                    {section.key === 'filters' && 'Email rules and automatic actions'}
-                    {section.key === 'account' && 'Export data, vacation responder, delete account'}
+                  <p className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
+                    {profile?.displayName || `${profile?.firstName} ${profile?.lastName}`}
                   </p>
+                  <p className="text-xs text-gray-500 truncate">{profile?.email}</p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors flex-shrink-0" />
-              </motion.button>
-            ))}
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </motion.div>
 
-            {/* Admin Panel */}
-            {user?.role === 'admin' && (
-              <>
-                <Separator />
+              {settingsItems.map((item, index) => (
                 <motion.button
+                  key={item.key}
                   type="button"
-                  onClick={() => {
-                    setSettingsView(null)
-                    setAdminView('dashboard')
-                  }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-left group"
+                  onClick={() => navigateTo(item.key)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                  className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-left group"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
-                    <Shield className="w-5 h-5 text-gray-500 dark:text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${item.color}`}>
+                    <item.icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Manage users, view reports and system logs</p>
+                    <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">{item.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{item.description}</p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 flex-shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors flex-shrink-0" />
                 </motion.button>
-              </>
-            )}
+              ))}
 
-            {/* Log Out */}
-            <Separator />
-            <motion.button
-              type="button"
-              onClick={handleLogout}
-              whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-[#EA4335]/5 dark:hover:bg-[#EA4335]/10 transition-colors text-left group"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#EA4335]/10 flex items-center justify-center flex-shrink-0">
-                <LogOut className="w-5 h-5 text-[#EA4335]" />
-              </div>
-              <p className="text-sm font-medium text-[#EA4335]">Log Out</p>
-            </motion.button>
-          </motion.div>
-        )}
-
-        {/* ── Level 2: Section Detail Pages ── */}
-        <AnimatePresence mode="wait">
-          {activeSection === 'profile' && (
-            <motion.div key="profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <ProfileTabContent
-                profile={profile}
-                setProfile={setProfile}
-                initials={initials}
-                avatarUploading={avatarUploading}
-                savingProfile={savingProfile}
-                avatarInputRef={avatarInputRef}
-                handleAvatarUpload={handleAvatarUpload}
-                handleSaveProfile={handleSaveProfile}
-              />
+              <motion.div {...fadeInUp} className="pt-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch('/api/auth/logout', { method: 'POST' })
+                    toast.success('Logged out')
+                    useAppStore.getState().logout()
+                  }}
+                  className="w-full flex items-center gap-3 p-4 rounded-2xl text-[#EA4335] hover:bg-[#FCE8E6] dark:hover:bg-[#3B1A17] transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#EA4335]/10 flex items-center justify-center flex-shrink-0">
+                    <LogOut className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
+              </motion.div>
             </motion.div>
-          )}
-          {activeSection === 'security' && (
-            <motion.div key="security" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <SecurityTabContent
-                currentPassword={currentPassword}
-                setCurrentPassword={setCurrentPassword}
-                newPassword={newPassword}
-                setNewPassword={setNewPassword}
-                confirmPassword={confirmPassword}
-                setConfirmPassword={setConfirmPassword}
-                showCurrentPassword={showCurrentPassword}
-                setShowCurrentPassword={setShowCurrentPassword}
-                showNewPassword={showNewPassword}
-                setShowNewPassword={setShowNewPassword}
-                savingPassword={savingPassword}
-                passwordStrength={passwordStrength}
-                handleChangePassword={handleChangePassword}
-                sessions={sessions}
-                sessionsLoading={sessionsLoading}
-                loadSessions={loadSessions}
-                handleRevokeSession={handleRevokeSession}
-                handleRevokeAllOthers={handleRevokeAllOthers}
-                loginLogs={loginLogs}
-                loginLogsLoading={loginLogsLoading}
-                loadLoginLogs={loadLoginLogs}
-                twoFA={twoFA}
-                twoFALoading={twoFALoading}
-                load2FA={load2FA}
-                twoFASetup={twoFASetup}
-                twoFASecret={twoFASecret}
-                twoFAUri={twoFAUri}
-                twoFABackupCodes={twoFABackupCodes}
-                twoFAVerifyCode={twoFAVerifyCode}
-                setTwoFAVerifyCode={setTwoFAVerifyCode}
-                twoFAVerifying={twoFAVerifying}
-                handleSetup2FA={handleSetup2FA}
-                handleVerify2FA={handleVerify2FA}
-                setTwoFASetup={setTwoFASetup}
-                twoFADisabling={twoFADisabling}
-                disable2FAPassword={disable2FAPassword}
-                setDisable2FAPassword={setDisable2FAPassword}
-                handleDisable2FA={handleDisable2FA}
-              />
-            </motion.div>
-          )}
-          {activeSection === 'appearance' && (
-            <motion.div key="appearance" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <AppearanceTabContent
-                emailDensity={emailDensity}
-                setEmailDensity={setEmailDensity}
-                previewLines={previewLines}
-                setPreviewLines={setPreviewLines}
-                conversationView={conversationView}
-                setConversationView={setConversationView}
-                theme={theme || 'system'}
-                setTheme={setTheme}
-                dateFormat={dateFormat}
-                setDateFormat={setDateFormat}
-                language={language}
-                setLanguage={setLanguage}
-                savingPrefs={savingPrefs}
-                handleSavePreferences={handleSavePreferences}
-              />
-            </motion.div>
-          )}
-          {activeSection === 'notifications' && (
-            <motion.div key="notifications" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <NotificationsTabContent
-                desktopNotif={desktopNotif}
-                setDesktopNotif={setDesktopNotif}
-                soundNotif={soundNotif}
-                setSoundNotif={setSoundNotif}
-                readReceipts={readReceipts}
-                setReadReceipts={setReadReceipts}
-                savingPrefs={savingPrefs}
-                handleSavePreferences={handleSavePreferences}
-              />
-            </motion.div>
-          )}
-          {activeSection === 'compose' && (
-            <motion.div key="compose" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <ComposeTabContent
-                signatureEditor={signatureEditor}
-                savingSignature={savingSignature}
-                handleSaveSignature={handleSaveSignature}
-                undoSendTimeout={undoSendTimeout}
-                setUndoSendTimeout={setUndoSendTimeout}
-                defaultReplyMode={defaultReplyMode}
-                setDefaultReplyMode={setDefaultReplyMode}
-                autoAdvance={autoAdvance}
-                setAutoAdvance={setAutoAdvance}
-                savingPrefs={savingPrefs}
-                handleSavePreferences={handleSavePreferences}
-              />
-            </motion.div>
-          )}
-          {activeSection === 'filters' && (
-            <motion.div key="filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <FiltersTab />
-            </motion.div>
-          )}
-          {activeSection === 'account' && (
-            <motion.div key="account" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <AccountTabContent
-                exporting={exporting}
-                handleExport={handleExport}
-                vacationEnabled={vacationEnabled}
-                setVacationEnabled={setVacationEnabled}
-                vacationSubject={vacationSubject}
-                setVacationSubject={setVacationSubject}
-                vacationMessage={vacationMessage}
-                setVacationMessage={setVacationMessage}
-                vacationStartDate={vacationStartDate}
-                setVacationStartDate={setVacationStartDate}
-                vacationEndDate={vacationEndDate}
-                setVacationEndDate={setVacationEndDate}
-                savingVacation={savingVacation}
-                handleSaveVacation={handleSaveVacation}
-              />
-            </motion.div>
+          ) : (
+            <>
+              {activeSection === 'profile' && (
+                <motion.div key="detail-profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <ProfileTabContent
+                    profile={profile}
+                    setProfile={setProfile}
+                    initials={initials}
+                    avatarUploading={avatarUploading}
+                    savingProfile={savingProfile}
+                    avatarInputRef={avatarInputRef}
+                    handleAvatarUpload={handleAvatarUpload}
+                    handleSaveProfile={handleSaveProfile}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'security' && (
+                <motion.div key="detail-security" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <SecurityTabContent
+                    currentPassword={currentPassword}
+                    setCurrentPassword={setCurrentPassword}
+                    newPassword={newPassword}
+                    setNewPassword={setNewPassword}
+                    confirmPassword={confirmPassword}
+                    setConfirmPassword={setConfirmPassword}
+                    showCurrentPassword={showCurrentPassword}
+                    setShowCurrentPassword={setShowCurrentPassword}
+                    showNewPassword={showNewPassword}
+                    setShowNewPassword={setShowNewPassword}
+                    savingPassword={savingPassword}
+                    passwordStrength={passwordStrength}
+                    handleChangePassword={handleChangePassword}
+                    sessions={sessions}
+                    sessionsLoading={sessionsLoading}
+                    loadSessions={loadSessions}
+                    handleRevokeSession={handleRevokeSession}
+                    handleRevokeAllOthers={handleRevokeAllOthers}
+                    loginLogs={loginLogs}
+                    loginLogsLoading={loginLogsLoading}
+                    loadLoginLogs={loadLoginLogs}
+                    twoFA={twoFA}
+                    twoFALoading={twoFALoading}
+                    load2FA={load2FA}
+                    twoFASetup={twoFASetup}
+                    twoFASecret={twoFASecret}
+                    twoFAUri={twoFAUri}
+                    twoFABackupCodes={twoFABackupCodes}
+                    twoFAVerifyCode={twoFAVerifyCode}
+                    setTwoFAVerifyCode={setTwoFAVerifyCode}
+                    twoFAVerifying={twoFAVerifying}
+                    handleSetup2FA={handleSetup2FA}
+                    handleVerify2FA={handleVerify2FA}
+                    setTwoFASetup={setTwoFASetup}
+                    twoFADisabling={twoFADisabling}
+                    disable2FAPassword={disable2FAPassword}
+                    setDisable2FAPassword={setDisable2FAPassword}
+                    handleDisable2FA={handleDisable2FA}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'preferences' && (
+                <motion.div key="detail-preferences" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <PreferencesTabContent
+                    emailDensity={emailDensity}
+                    setEmailDensity={setEmailDensity}
+                    previewLines={previewLines}
+                    setPreviewLines={setPreviewLines}
+                    conversationView={conversationView}
+                    setConversationView={setConversationView}
+                    theme={theme || 'system'}
+                    setTheme={setTheme}
+                    desktopNotif={desktopNotif}
+                    setDesktopNotif={setDesktopNotif}
+                    soundNotif={soundNotif}
+                    setSoundNotif={setSoundNotif}
+                    dateFormat={dateFormat}
+                    setDateFormat={setDateFormat}
+                    savingPrefs={savingPrefs}
+                    handleSavePreferences={handleSavePreferences}
+                    signatureEditor={signatureEditor}
+                    savingSignature={savingSignature}
+                    handleSaveSignature={handleSaveSignature}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'filters' && (
+                <motion.div key="detail-filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <FiltersTab />
+                </motion.div>
+              )}
+              {activeSection === 'account' && (
+                <motion.div key="detail-account" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <AccountTabContent
+                    exporting={exporting}
+                    handleExport={handleExport}
+                  />
+                </motion.div>
+              )}
+            </>
           )}
         </AnimatePresence>
       </div>
@@ -991,7 +844,7 @@ export function SettingsPanel() {
   )
 }
 
-// ─── Profile Section ───────────────────────────────────────────────────────
+// ─── Profile Tab ──────────────────────────────────────────────────────────
 
 function ProfileTabContent({
   profile, setProfile, initials, avatarUploading, savingProfile,
@@ -1013,12 +866,7 @@ function ProfileTabContent({
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Profile</h2>
-        <p className="text-sm text-gray-500">Manage your personal information and account details</p>
-      </motion.div>
-
+    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-8">
       {/* Avatar */}
       <motion.div className="flex flex-col items-center gap-3" {...fadeInUp}>
         <div className="relative group">
@@ -1043,113 +891,108 @@ function ProfileTabContent({
       {/* Personal Information */}
       <motion.div className="space-y-4" {...fadeInUp}>
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Personal Information</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="displayName" className="text-sm">Display Name</Label>
+            <Input
+              id="displayName"
+              value={profile.displayName || ''}
+              onChange={(e) => update('displayName', e.target.value)}
+              placeholder="How others see you"
+              className="h-10 rounded-xl"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="displayName" className="text-sm">Display Name</Label>
+              <Label htmlFor="firstName" className="text-sm">First Name *</Label>
               <Input
-                id="displayName"
-                value={profile.displayName || ''}
-                onChange={(e) => update('displayName', e.target.value)}
-                placeholder="How others see you"
+                id="firstName"
+                value={profile.firstName}
+                onChange={(e) => update('firstName', e.target.value)}
                 className="h-10 rounded-xl"
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="firstName" className="text-sm">First Name *</Label>
-                <Input
-                  id="firstName"
-                  value={profile.firstName}
-                  onChange={(e) => update('firstName', e.target.value)}
-                  className="h-10 rounded-xl"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lastName" className="text-sm">Last Name *</Label>
-                <Input
-                  id="lastName"
-                  value={profile.lastName}
-                  onChange={(e) => update('lastName', e.target.value)}
-                  className="h-10 rounded-xl"
-                />
-              </div>
-            </div>
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm">Email</Label>
-              <div className="relative">
-                <Input
-                  id="email"
-                  value={profile.email}
-                  readOnly
-                  className="h-10 rounded-xl bg-gray-50 dark:bg-gray-900 pr-16"
-                />
-                <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4285F4] border-[#4285F4]/30 text-[10px] px-1.5">
-                  @ezy.af
-                </Badge>
-              </div>
-              <p className="text-[11px] text-gray-400">Your email address cannot be changed</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bio" className="text-sm">Bio</Label>
-              <Textarea
-                id="bio"
-                value={profile.bio || ''}
-                onChange={(e) => update('bio', e.target.value)}
-                placeholder="Tell others about yourself"
-                className="rounded-xl min-h-[70px] resize-none"
+              <Label htmlFor="lastName" className="text-sm">Last Name *</Label>
+              <Input
+                id="lastName"
+                value={profile.lastName}
+                onChange={(e) => update('lastName', e.target.value)}
+                className="h-10 rounded-xl"
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-sm">Phone</Label>
-                <Input
-                  id="phone"
-                  value={profile.phone || ''}
-                  onChange={(e) => update('phone', e.target.value)}
-                  placeholder="+1 (555) 000-0000"
-                  className="h-10 rounded-xl"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="dob" className="text-sm">Date of Birth</Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={profile.dateOfBirth || ''}
-                  onChange={(e) => update('dateOfBirth', e.target.value)}
-                  className="h-10 rounded-xl"
-                />
-              </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-sm">Email</Label>
+            <div className="relative">
+              <Input
+                id="email"
+                value={profile.email}
+                readOnly
+                className="h-10 rounded-xl bg-gray-50 dark:bg-gray-900 pr-16"
+              />
+              <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4285F4] border-[#4285F4]/30 text-[10px] px-1.5">
+                @ezy.af
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-[11px] text-gray-400">Your email address cannot be changed</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bio" className="text-sm">Bio</Label>
+            <Textarea
+              id="bio"
+              value={profile.bio || ''}
+              onChange={(e) => update('bio', e.target.value)}
+              placeholder="Tell others about yourself"
+              className="rounded-xl min-h-[70px] resize-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="phone" className="text-sm">Phone</Label>
+            <Input
+              id="phone"
+              value={profile.phone || ''}
+              onChange={(e) => update('phone', e.target.value)}
+              placeholder="+1 (555) 000-0000"
+              className="h-10 rounded-xl"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dob" className="text-sm">Date of Birth</Label>
+            <Input
+              id="dob"
+              type="date"
+              value={profile.dateOfBirth || ''}
+              onChange={(e) => update('dateOfBirth', e.target.value)}
+              className="h-10 rounded-xl"
+            />
+          </div>
+        </div>
       </motion.div>
+
+      <Separator />
 
       {/* Account Info (read-only) */}
       <motion.div className="space-y-4" {...fadeInUp}>
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Account Info</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 flex items-center gap-2">
-                <CalendarDays className="w-4 h-4" /> Account Created
-              </span>
-              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
-                {formatDate(profile.createdAt)}
-              </span>
-            </div>
-            <Separator />
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Last Login
-              </span>
-              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
-                {formatDate(profile.lastLogin)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500 flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" /> Account Created
+            </span>
+            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+              {formatDate(profile.createdAt)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500 flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Last Login
+            </span>
+            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+              {formatDate(profile.lastLogin)}
+            </span>
+          </div>
+        </div>
       </motion.div>
 
       <motion.div {...fadeInUp}>
@@ -1169,7 +1012,7 @@ function ProfileTabContent({
   )
 }
 
-// ─── Security Section ──────────────────────────────────────────────────────
+// ─── Security Tab ─────────────────────────────────────────────────────────
 
 function SecurityTabContent({
   currentPassword, setCurrentPassword,
@@ -1236,12 +1079,7 @@ function SecurityTabContent({
   }, [activeSection, loadSessions, loadLoginLogs, load2FA])
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Security</h2>
-        <p className="text-sm text-gray-500">Protect your account with password, 2FA, and session management</p>
-      </motion.div>
-
+    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-4 pb-8">
       {/* Section Navigation */}
       <motion.div className="space-y-1" {...fadeInUp}>
         {([
@@ -1270,12 +1108,9 @@ function SecurityTabContent({
               </div>
               <span className="text-sm font-medium">{item.label}</span>
             </div>
-            <div className="flex items-center gap-2">
-              {activeSection === item.key && (
-                <Badge variant="secondary" className="text-[10px] px-1.5">Active</Badge>
-              )}
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </div>
+            {activeSection === item.key && (
+              <Badge variant="secondary" className="text-[10px] px-1.5">Active</Badge>
+            )}
           </button>
         ))}
       </motion.div>
@@ -1287,85 +1122,83 @@ function SecurityTabContent({
         {activeSection === 'password' && (
           <motion.div key="password" {...tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Change Password</h3>
-            <Card className="border-gray-200 dark:border-gray-800">
-              <CardContent className="p-4 sm:p-6 space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="currentPwd" className="text-sm">Current Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="currentPwd"
-                      type={showCurrentPassword ? 'text' : 'password'}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="h-10 rounded-xl pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      aria-label="Toggle password visibility"
-                    >
-                      {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newPwd" className="text-sm">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="newPwd"
-                      type={showNewPassword ? 'text' : 'password'}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="h-10 rounded-xl pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      aria-label="Toggle password visibility"
-                    >
-                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {newPassword && (
-                    <div className="space-y-1">
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map(i => (
-                          <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                            i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
-                          }`} />
-                        ))}
-                      </div>
-                      <p className={`text-xs font-medium ${
-                        passwordStrength.label === 'Weak' ? 'text-[#EA4335]' :
-                        passwordStrength.label === 'Medium' ? 'text-[#FBBC05]' : 'text-[#34A853]'
-                      }`}>{passwordStrength.label}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirmPwd" className="text-sm">Confirm New Password</Label>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="currentPwd" className="text-sm">Current Password</Label>
+                <div className="relative">
                   <Input
-                    id="confirmPwd"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="h-10 rounded-xl"
+                    id="currentPwd"
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="h-10 rounded-xl pr-10"
                   />
-                  {confirmPassword && newPassword !== confirmPassword && (
-                    <p className="text-xs text-[#EA4335]">Passwords do not match</p>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Toggle password visibility"
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
-                <Button
-                  onClick={handleChangePassword}
-                  disabled={savingPassword}
-                  className="w-full h-10 rounded-xl bg-[#34A853] hover:bg-[#2d9249] text-white font-medium"
-                >
-                  {savingPassword ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Changing...</> : 'Change Password'}
-                </Button>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="newPwd" className="text-sm">New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="newPwd"
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-10 rounded-xl pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Toggle password visibility"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {newPassword && (
+                  <div className="space-y-1">
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                          i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+                        }`} />
+                      ))}
+                    </div>
+                    <p className={`text-xs font-medium ${
+                      passwordStrength.label === 'Weak' ? 'text-[#EA4335]' :
+                      passwordStrength.label === 'Medium' ? 'text-[#FBBC05]' : 'text-[#34A853]'
+                    }`}>{passwordStrength.label}</p>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirmPwd" className="text-sm">Confirm New Password</Label>
+                <Input
+                  id="confirmPwd"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="h-10 rounded-xl"
+                />
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-[#EA4335]">Passwords do not match</p>
+                )}
+              </div>
+              <Button
+                onClick={handleChangePassword}
+                disabled={savingPassword}
+                className="w-full h-10 rounded-xl bg-[#34A853] hover:bg-[#2d9249] text-white font-medium"
+              >
+                {savingPassword ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Changing...</> : 'Change Password'}
+              </Button>
+            </div>
           </motion.div>
         )}
 
@@ -1653,248 +1486,9 @@ function SecurityTabContent({
   )
 }
 
-// ─── Appearance Section ─────────────────────────────────────────────────────
+// ─── Preferences Tab ──────────────────────────────────────────────────────
 
-function AppearanceTabContent({
-  emailDensity, setEmailDensity,
-  previewLines, setPreviewLines,
-  conversationView, setConversationView,
-  theme, setTheme,
-  dateFormat, setDateFormat,
-  language, setLanguage,
-  savingPrefs, handleSavePreferences,
-}: {
-  emailDensity: 'comfortable' | 'cozy' | 'compact'
-  setEmailDensity: (v: 'comfortable' | 'cozy' | 'compact') => void
-  previewLines: 'none' | '1' | '2' | '3'
-  setPreviewLines: (v: 'none' | '1' | '2' | '3') => void
-  conversationView: boolean
-  setConversationView: (v: boolean) => void
-  theme: string
-  setTheme: (v: string) => void
-  dateFormat: '12h' | '24h'
-  setDateFormat: (v: '12h' | '24h') => void
-  language: string
-  setLanguage: (v: string) => void
-  savingPrefs: boolean
-  handleSavePreferences: () => void
-}) {
-  return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Appearance</h2>
-        <p className="text-sm text-gray-500">Customize how your inbox looks and feels</p>
-      </motion.div>
-
-      {/* Theme */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Theme</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Sun className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Color Theme</p>
-                  <p className="text-xs text-gray-500">Choose your preferred theme</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
-                {([
-                  { value: 'light', icon: Sun },
-                  { value: 'dark', icon: Moon },
-                  { value: 'system', icon: Monitor },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setTheme(opt.value)}
-                    className={`p-2 rounded-md transition-all ${
-                      theme === opt.value
-                        ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                        : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                    aria-label={opt.value}
-                  >
-                    <opt.icon className="w-4 h-4" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Email Density */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Email Display</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            <div>
-              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Email Density</Label>
-              <p className="text-xs text-gray-500 mt-0.5">Choose how compact emails appear in your inbox</p>
-            </div>
-            <RadioGroup value={emailDensity} onValueChange={(v) => setEmailDensity(v as typeof emailDensity)} className="space-y-2">
-              {[
-                { value: 'comfortable' as const, label: 'Comfortable', desc: 'More spacing, relaxed reading' },
-                { value: 'cozy' as const, label: 'Cozy', desc: 'Balanced spacing' },
-                { value: 'compact' as const, label: 'Compact', desc: 'More emails visible at once' },
-              ].map((opt) => (
-                <div key={opt.value} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
-                  <RadioGroupItem value={opt.value} id={`density-${opt.value}`} />
-                  <Label htmlFor={`density-${opt.value}`} className="cursor-pointer flex-1">
-                    <span className="text-sm font-medium">{opt.label}</span>
-                    <span className="text-xs text-gray-500 ml-2">{opt.desc}</span>
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Message Preview Lines */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            <div>
-              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Message Preview Lines</Label>
-              <p className="text-xs text-gray-500 mt-0.5">How many lines of preview to show</p>
-            </div>
-            <RadioGroup value={previewLines} onValueChange={(v) => setPreviewLines(v as typeof previewLines)} className="flex gap-3">
-              {(['none', '1', '2', '3'] as const).map((val) => (
-                <div key={val} className="flex items-center space-x-2">
-                  <RadioGroupItem value={val} id={`preview-${val}`} />
-                  <Label htmlFor={`preview-${val}`} className="text-sm cursor-pointer">
-                    {val === 'none' ? 'None' : val}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <Separator />
-
-      {/* Mail Behavior */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Mail Behavior</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
-                  <p className="text-xs text-gray-500">Group emails as threads</p>
-                </div>
-              </div>
-              <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <Separator />
-
-      {/* Date Format */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Date & Time</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Time Format</p>
-                  <p className="text-xs text-gray-500">12-hour or 24-hour clock</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setDateFormat('12h')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    dateFormat === '12h'
-                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  12h
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDateFormat('24h')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    dateFormat === '24h'
-                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  24h
-                </button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <Separator />
-
-      {/* Language */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Language</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Languages className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Display Language</p>
-                  <p className="text-xs text-gray-500">Choose your preferred language</p>
-                </div>
-              </div>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger className="w-[160px] h-10 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="fa">Dari / دری</SelectItem>
-                  <SelectItem value="ps">Pashto / پښتو</SelectItem>
-                  <SelectItem value="ar">Arabic / العربية</SelectItem>
-                  <SelectItem value="ur">Urdu / اردو</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Save button */}
-      <motion.div {...fadeInUp}>
-        <Button
-          onClick={handleSavePreferences}
-          disabled={savingPrefs}
-          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
-        >
-          {savingPrefs ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Preferences</>}
-        </Button>
-      </motion.div>
-    </div>
-  )
-}
-
-// ─── Notification Settings (original sub-component) ─────────────────────────
+// ─── Notification Settings ────────────────────────────────────────────────
 
 function NotificationSettings({
   desktopNotif, setDesktopNotif,
@@ -1964,7 +1558,7 @@ function NotificationSettings({
   }
 
   return (
-    <div className="space-y-3">
+    <motion.div className="space-y-3" {...fadeInUp}>
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Notifications</h3>
         {getPermissionBadge()}
@@ -2051,170 +1645,270 @@ function NotificationSettings({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   )
 }
 
-// ─── Notifications Section ──────────────────────────────────────────────────
+// ─── Preferences Tab ───────────────────────────────────────────────────────
 
-function NotificationsTabContent({
+function PreferencesTabContent({
+  emailDensity, setEmailDensity,
+  previewLines, setPreviewLines,
+  conversationView, setConversationView,
+  theme, setTheme,
   desktopNotif, setDesktopNotif,
   soundNotif, setSoundNotif,
-  readReceipts, setReadReceipts,
+  dateFormat, setDateFormat,
   savingPrefs, handleSavePreferences,
+  signatureEditor, savingSignature, handleSaveSignature,
 }: {
+  emailDensity: 'comfortable' | 'cozy' | 'compact'
+  setEmailDensity: (v: 'comfortable' | 'cozy' | 'compact') => void
+  previewLines: 'none' | '1' | '2' | '3'
+  setPreviewLines: (v: 'none' | '1' | '2' | '3') => void
+  conversationView: boolean
+  setConversationView: (v: boolean) => void
+  theme: string
+  setTheme: (v: string) => void
   desktopNotif: boolean
   setDesktopNotif: (v: boolean) => void
   soundNotif: boolean
   setSoundNotif: (v: boolean) => void
-  readReceipts: boolean
-  setReadReceipts: (v: boolean) => void
+  dateFormat: '12h' | '24h'
+  setDateFormat: (v: '12h' | '24h') => void
   savingPrefs: boolean
   handleSavePreferences: () => void
+  signatureEditor: ReturnType<typeof useEditor> | null
+  savingSignature: boolean
+  handleSaveSignature: () => void
 }) {
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Notifications</h2>
-        <p className="text-sm text-gray-500">Control how and when you receive notifications</p>
+    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
+      {/* Email Density */}
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Email Display</h3>
+        <Card className="border-gray-200 dark:border-gray-800">
+          <CardContent className="p-4 space-y-4">
+            <div>
+              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Email Density</Label>
+              <p className="text-xs text-gray-500 mt-0.5">Choose how compact emails appear in your inbox</p>
+            </div>
+            <RadioGroup value={emailDensity} onValueChange={(v) => setEmailDensity(v as typeof emailDensity)} className="space-y-2">
+              {[
+                { value: 'comfortable' as const, label: 'Comfortable', desc: 'More spacing, relaxed reading' },
+                { value: 'cozy' as const, label: 'Cozy', desc: 'Balanced spacing' },
+                { value: 'compact' as const, label: 'Compact', desc: 'More emails visible at once' },
+              ].map((opt) => (
+                <div key={opt.value} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                  <RadioGroupItem value={opt.value} id={`density-${opt.value}`} />
+                  <Label htmlFor={`density-${opt.value}`} className="cursor-pointer flex-1">
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    <span className="text-xs text-gray-500 ml-2">{opt.desc}</span>
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </CardContent>
+        </Card>
       </motion.div>
 
-      {/* Core notification settings (original NotificationSettings component) */}
-      <motion.div {...fadeInUp}>
-        <NotificationSettings
-          desktopNotif={desktopNotif}
-          setDesktopNotif={setDesktopNotif}
-          soundNotif={soundNotif}
-          setSoundNotif={setSoundNotif}
-        />
+      {/* Message Preview Lines */}
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <Card className="border-gray-200 dark:border-gray-800">
+          <CardContent className="p-4 space-y-4">
+            <div>
+              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Message Preview Lines</Label>
+              <p className="text-xs text-gray-500 mt-0.5">How many lines of preview to show</p>
+            </div>
+            <RadioGroup value={previewLines} onValueChange={(v) => setPreviewLines(v as typeof previewLines)} className="flex gap-3">
+              {(['none', '1', '2', '3'] as const).map((val) => (
+                <div key={val} className="flex items-center space-x-2">
+                  <RadioGroupItem value={val} id={`preview-${val}`} />
+                  <Label htmlFor={`preview-${val}`} className="text-sm cursor-pointer">
+                    {val === 'none' ? 'None' : val}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </CardContent>
+        </Card>
       </motion.div>
 
       <Separator />
 
-      {/* Read Receipts (new) */}
+      {/* Mail Behavior */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Privacy</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Read Receipts</p>
-                  <p className="text-xs text-gray-500">Let senders know when you&apos;ve read their emails</p>
-                </div>
-              </div>
-              <Switch
-                checked={readReceipts}
-                onCheckedChange={setReadReceipts}
-                className="data-[state=checked]:bg-[#4285F4]"
-              />
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Mail Behavior</h3>
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+              <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
+              <p className="text-xs text-gray-500">Group emails as threads</p>
+            </div>
+          </div>
+          <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />
+        </div>
       </motion.div>
 
-      {/* Save button */}
+      <Separator />
+
+      {/* Appearance */}
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Appearance</h3>
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+              <Sun className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Theme</p>
+              <p className="text-xs text-gray-500">Choose your preferred theme</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
+            {([
+              { value: 'light', icon: Sun },
+              { value: 'dark', icon: Moon },
+              { value: 'system', icon: Monitor },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTheme(opt.value)}
+                className={`p-2 rounded-md transition-all ${
+                  theme === opt.value
+                    ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+                aria-label={opt.value}
+              >
+                <opt.icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      <Separator />
+
+      {/* Notifications */}
+      <NotificationSettings
+        desktopNotif={desktopNotif}
+        setDesktopNotif={setDesktopNotif}
+        soundNotif={soundNotif}
+        setSoundNotif={setSoundNotif}
+      />
+
+      <Separator />
+
+      {/* Date Format */}
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Date Format</h3>
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+              <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Time Format</p>
+              <p className="text-xs text-gray-500">12-hour or 24-hour clock</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setDateFormat('12h')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                dateFormat === '12h'
+                  ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              12h
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFormat('24h')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                dateFormat === '24h'
+                  ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              24h
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
       <motion.div {...fadeInUp}>
         <Button
           onClick={handleSavePreferences}
           disabled={savingPrefs}
-          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
+          className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
         >
           {savingPrefs ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Preferences</>}
         </Button>
       </motion.div>
-    </div>
-  )
-}
 
-// ─── Compose Section ────────────────────────────────────────────────────────
-
-function ComposeTabContent({
-  signatureEditor, savingSignature, handleSaveSignature,
-  undoSendTimeout, setUndoSendTimeout,
-  defaultReplyMode, setDefaultReplyMode,
-  autoAdvance, setAutoAdvance,
-  savingPrefs, handleSavePreferences,
-}: {
-  signatureEditor: ReturnType<typeof useEditor> | null
-  savingSignature: boolean
-  handleSaveSignature: () => void
-  undoSendTimeout: number
-  setUndoSendTimeout: (v: number) => void
-  defaultReplyMode: 'reply' | 'replyAll'
-  setDefaultReplyMode: (v: 'reply' | 'replyAll') => void
-  autoAdvance: boolean
-  setAutoAdvance: (v: boolean) => void
-  savingPrefs: boolean
-  handleSavePreferences: () => void
-}) {
-  return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Compose</h2>
-        <p className="text-sm text-gray-500">Configure your email composing preferences</p>
-      </motion.div>
+      <Separator />
 
       {/* Signature */}
       <motion.div className="space-y-3" {...fadeInUp}>
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Email Signature</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-0 space-y-0">
-            {/* Toolbar */}
-            <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-              <button
-                type="button"
-                onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  signatureEditor?.isActive('bold') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-                aria-label="Bold"
-              >
-                <Bold className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  signatureEditor?.isActive('italic') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-                aria-label="Italic"
-              >
-                <Italic className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = window.prompt('Enter URL:')
-                  if (url) signatureEditor?.chain().focus().setLink({ href: url }).run()
-                }}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  signatureEditor?.isActive('link') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-                aria-label="Link"
-              >
-                <LinkIcon className="w-4 h-4" />
-              </button>
-              <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
-              <button
-                type="button"
-                onClick={() => signatureEditor?.chain().focus().toggleBulletList().run()}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  signatureEditor?.isActive('bulletList') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-                aria-label="Bullet list"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-3">
-              <EditorContent editor={signatureEditor} />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+            <button
+              type="button"
+              onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
+              className={`p-1.5 rounded-lg transition-colors ${
+                signatureEditor?.isActive('bold') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Bold"
+            >
+              <Bold className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
+              className={`p-1.5 rounded-lg transition-colors ${
+                signatureEditor?.isActive('italic') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Italic"
+            >
+              <Italic className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const url = window.prompt('Enter URL:')
+                if (url) signatureEditor?.chain().focus().setLink({ href: url }).run()
+              }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                signatureEditor?.isActive('link') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Link"
+            >
+              <LinkIcon className="w-4 h-4" />
+            </button>
+            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => signatureEditor?.chain().focus().toggleBulletList().run()}
+              className={`p-1.5 rounded-lg transition-colors ${
+                signatureEditor?.isActive('bulletList') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Bullet list"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+          <EditorContent editor={signatureEditor} />
+        </div>
         <Button
           onClick={handleSaveSignature}
           disabled={savingSignature}
@@ -2224,152 +1918,25 @@ function ComposeTabContent({
           {savingSignature ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Signature</>}
         </Button>
       </motion.div>
-
-      <Separator />
-
-      {/* Compose Preferences */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Sending Behavior</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            {/* Undo Send Timeout */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Undo2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Undo Send</p>
-                  <p className="text-xs text-gray-500">Cancellation period after sending an email</p>
-                </div>
-              </div>
-              <Select value={String(undoSendTimeout)} onValueChange={(v) => setUndoSendTimeout(Number(v))}>
-                <SelectTrigger className="w-[100px] h-10 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5 sec</SelectItem>
-                  <SelectItem value="10">10 sec</SelectItem>
-                  <SelectItem value="15">15 sec</SelectItem>
-                  <SelectItem value="30">30 sec</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator />
-
-            {/* Default Reply Mode */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <Send className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Default Reply Mode</p>
-                  <p className="text-xs text-gray-500">Choose whether Reply or Reply All is default</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setDefaultReplyMode('reply')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    defaultReplyMode === 'reply'
-                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Reply
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDefaultReplyMode('replyAll')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    defaultReplyMode === 'replyAll'
-                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Reply All
-                </button>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Auto-advance */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Auto-advance</p>
-                  <p className="text-xs text-gray-500">Move to the next email after deleting or archiving</p>
-                </div>
-              </div>
-              <Switch
-                checked={autoAdvance}
-                onCheckedChange={setAutoAdvance}
-                className="data-[state=checked]:bg-[#4285F4]"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Save button */}
-      <motion.div {...fadeInUp}>
-        <Button
-          onClick={handleSavePreferences}
-          disabled={savingPrefs}
-          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
-        >
-          {savingPrefs ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Preferences</>}
-        </Button>
-      </motion.div>
     </div>
   )
 }
 
-// ─── Account Section ────────────────────────────────────────────────────────
+// ─── Account Tab ──────────────────────────────────────────────────────────
 
 function AccountTabContent({
   exporting, handleExport,
-  vacationEnabled, setVacationEnabled,
-  vacationSubject, setVacationSubject,
-  vacationMessage, setVacationMessage,
-  vacationStartDate, setVacationStartDate,
-  vacationEndDate, setVacationEndDate,
-  savingVacation, handleSaveVacation,
 }: {
   exporting: boolean
   handleExport: (format: 'json' | 'csv') => void
-  vacationEnabled: boolean
-  setVacationEnabled: (v: boolean) => void
-  vacationSubject: string
-  setVacationSubject: (v: string) => void
-  vacationMessage: string
-  setVacationMessage: (v: string) => void
-  vacationStartDate: string
-  setVacationStartDate: (v: string) => void
-  vacationEndDate: string
-  setVacationEndDate: (v: string) => void
-  savingVacation: boolean
-  handleSaveVacation: () => void
 }) {
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-8">
-      <motion.div {...fadeInUp}>
-        <h2 className="text-xl font-bold text-[#1F1F1F] dark:text-white mb-1">Account</h2>
-        <p className="text-sm text-gray-500">Manage data export, vacation responder, and account settings</p>
-      </motion.div>
-
+    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-8">
       {/* Export Data */}
       <motion.div className="space-y-4" {...fadeInUp}>
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Export Data</h3>
         <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
+          <CardContent className="p-4 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
                 <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -2405,93 +1972,11 @@ function AccountTabContent({
 
       <Separator />
 
-      {/* Vacation Responder */}
-      <motion.div className="space-y-4" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Vacation Responder</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            {/* Enable toggle */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                  <CalendarDays className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Vacation Auto-Reply</p>
-                  <p className="text-xs text-gray-500">Automatically reply to emails while you&apos;re away</p>
-                </div>
-              </div>
-              <Switch
-                checked={vacationEnabled}
-                onCheckedChange={setVacationEnabled}
-                className="data-[state=checked]:bg-[#4285F4]"
-              />
-            </div>
-
-            {vacationEnabled && (
-              <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <div className="space-y-1.5">
-                  <Label htmlFor="vacationSubject" className="text-sm">Subject</Label>
-                  <Input
-                    id="vacationSubject"
-                    value={vacationSubject}
-                    onChange={(e) => setVacationSubject(e.target.value)}
-                    placeholder="Out of Office: [Your Name]"
-                    className="h-10 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="vacationMessage" className="text-sm">Message</Label>
-                  <Textarea
-                    id="vacationMessage"
-                    value={vacationMessage}
-                    onChange={(e) => setVacationMessage(e.target.value)}
-                    placeholder="Hi, I'm currently out of the office and will respond when I return."
-                    className="rounded-xl min-h-[100px] resize-none"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="vacationStart" className="text-sm">Start Date</Label>
-                    <Input
-                      id="vacationStart"
-                      type="date"
-                      value={vacationStartDate}
-                      onChange={(e) => setVacationStartDate(e.target.value)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="vacationEnd" className="text-sm">End Date</Label>
-                    <Input
-                      id="vacationEnd"
-                      type="date"
-                      value={vacationEndDate}
-                      onChange={(e) => setVacationEndDate(e.target.value)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                </div>
-                <Button
-                  onClick={handleSaveVacation}
-                  disabled={savingVacation}
-                  className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
-                >
-                  {savingVacation ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Vacation Settings</>}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <Separator />
-
       {/* Danger Zone */}
       <motion.div className="space-y-4" {...fadeInUp}>
         <h3 className="text-sm font-semibold text-[#EA4335] uppercase tracking-wider">Danger Zone</h3>
         <Card className="border-[#EA4335]/30 bg-[#EA4335]/5">
-          <CardContent className="p-4 sm:p-6 space-y-4">
+          <CardContent className="p-4 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-[#EA4335]/10 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4 text-[#EA4335]" />
