@@ -391,6 +391,28 @@ export function ComposeModal() {
       if (!subject.trim()) e.subject = 'Subject is required'
       const text = editor?.getText().trim()
       if (!text || text.length === 0) e.body = 'Message body is required'
+      // Validate CC recipients if provided
+      if (showCc && cc.trim()) {
+        const ccParts = cc.split(',').map(r => r.trim()).filter(Boolean)
+        for (const part of ccParts) {
+          const processed = processRecipients(part)
+          if (!processed.endsWith('@ezy.af')) {
+            e.cc = `"${part}" is not a valid @ezy.af address`
+            break
+          }
+        }
+      }
+      // Validate BCC recipients if provided
+      if (showBcc && bcc.trim()) {
+        const bccParts = bcc.split(',').map(r => r.trim()).filter(Boolean)
+        for (const part of bccParts) {
+          const processed = processRecipients(part)
+          if (!processed.endsWith('@ezy.af')) {
+            e.bcc = `"${part}" is not a valid @ezy.af address`
+            break
+          }
+        }
+      }
       setErrors(e)
       if (Object.keys(e).length > 0) return
 
@@ -806,11 +828,15 @@ export function ComposeModal() {
                     <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
                     <Input
                       value={cc}
-                      onChange={e => setCc(e.target.value)}
+                      onChange={e => {
+                        setCc(e.target.value)
+                        if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
+                      }}
                       placeholder="CC recipients (comma-separated)"
                       className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
                     />
                   </div>
+                  {errors.cc && <p className="text-xs text-red-500 px-4 pb-2">{errors.cc}</p>}
                 </div>
               )}
 
@@ -821,11 +847,15 @@ export function ComposeModal() {
                     <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
                     <Input
                       value={bcc}
-                      onChange={e => setBcc(e.target.value)}
+                      onChange={e => {
+                        setBcc(e.target.value)
+                        if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
+                      }}
                       placeholder="BCC recipients (comma-separated)"
                       className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
                     />
                   </div>
+                  {errors.bcc && <p className="text-xs text-red-500 px-4 pb-2">{errors.bcc}</p>}
                 </div>
               )}
 
