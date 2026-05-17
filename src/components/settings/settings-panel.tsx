@@ -1021,7 +1021,7 @@ function ProfileTabContent({
                   id="phone"
                   value={profile.phone || ''}
                   onChange={(e) => update('phone', e.target.value)}
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="93700000000"
                   className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
                 />
               </div>
