@@ -980,9 +980,7 @@ export function EmailDetail() {
                       {/* ─── Gmail-style inline info box ─── */}
                       <AnimatePresence>
                         {showInfoBox && (() => {
-                          const senderNm = msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'
                           const senderEm = msg.sender?.email || msg.recipientEmail || ''
-                          const recipNm = msg.recipient ? `${msg.recipient.firstName} ${msg.recipient.lastName}` : msg.recipientEmail || ''
                           const recipEm = msg.recipient?.email || msg.recipientEmail || ''
                           const ccData: string[] = (() => { try { const cc = (msg as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
                           const bccData: string[] = (() => { try { const bcc = (msg as unknown as Record<string, unknown>).bcc; if (!bcc) return []; if (Array.isArray(bcc)) return bcc; if (typeof bcc === 'string') return bcc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
@@ -1000,13 +998,10 @@ export function EmailDetail() {
                                 <div className="flex items-start gap-3">
                                   <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">From</span>
                                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gradient-to-br from-[#4285F4] to-[#34A853] flex items-center justify-center">
-                                      <span className="text-[9px] font-semibold text-white">{getInitials(msg.sender)}</span>
+                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                      <Mail className="w-3 h-3 text-gray-500" />
                                     </div>
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{senderNm}</p>
-                                      <p className="text-xs text-gray-500 truncate">{senderEm}</p>
-                                    </div>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{senderEm}</p>
                                     <button
                                       onClick={() => { navigator.clipboard.writeText(senderEm); toast.success('Email copied') }}
                                       className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
@@ -1021,13 +1016,10 @@ export function EmailDetail() {
                                 <div className="flex items-start gap-3">
                                   <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">To</span>
                                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gradient-to-br from-[#FBBC04] to-[#EA4335] flex items-center justify-center">
-                                      <span className="text-[9px] font-semibold text-white">{getInitials(msg.recipient)}</span>
+                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                      <Mail className="w-3 h-3 text-gray-500" />
                                     </div>
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{recipNm}</p>
-                                      <p className="text-xs text-gray-500 truncate">{recipEm}</p>
-                                    </div>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{recipEm}</p>
                                     <button
                                       onClick={() => { navigator.clipboard.writeText(recipEm); toast.success('Email copied') }}
                                       className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
