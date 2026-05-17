@@ -18,7 +18,12 @@ export const metadata: Metadata = {
   title: "EzyMail - Email made Ezy",
   description: "A modern, fast, and secure email platform. Send and receive emails with ease using your @ezy.af address.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   manifest: "/manifest.json",
   appleWebApp: {
