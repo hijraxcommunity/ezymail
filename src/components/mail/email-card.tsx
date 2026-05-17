@@ -182,10 +182,6 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
             e.stopPropagation()
             doArchive()
           }}
-          onTouchEnd={(e) => {
-            e.stopPropagation()
-            doArchive()
-          }}
         >
           <div className="flex items-center gap-2 text-white">
             <Archive className="w-5 h-5" />
@@ -198,10 +194,6 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
           style={{ opacity: backgroundOpacity }}
           className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
           onClick={(e) => {
-            e.stopPropagation()
-            doDelete()
-          }}
-          onTouchEnd={(e) => {
             e.stopPropagation()
             doDelete()
           }}

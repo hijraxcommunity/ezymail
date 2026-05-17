@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/use-app-store'
+import { toast } from 'sonner'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
 import { MailHeader } from '@/components/mail/mail-header'
@@ -19,8 +20,8 @@ import { useNotifications } from '@/hooks/use-notifications'
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
 
 function UndoSnackbar() {
-  const { undoAction, setUndoAction, addEmail } = useAppStore()
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const { undoAction, setUndoAction, addEmail, totalEmails, setTotalEmails } = useAppStore()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!undoAction) return
@@ -37,33 +38,38 @@ function UndoSnackbar() {
   const handleUndo = useCallback(async () => {
     if (!undoAction) return
 
+    // Capture values before clearing
+    const action = undoAction
+
     // Restore the email locally
-    addEmail(undoAction.email)
+    addEmail(action.email)
+    setTotalEmails(totalEmails + 1)
+
+    // Clear undo immediately to prevent double-clicks
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setUndoAction(null)
 
     // Restore on the server
     try {
-      if (undoAction.type === 'archive') {
-        await fetch(`/api/emails/${undoAction.id}`, {
+      if (action.type === 'archive') {
+        await fetch(`/api/emails/${action.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ isArchived: false }),
         })
-      } else if (undoAction.type === 'delete') {
-        // Move back to inbox from trash
-        const folder = undoAction.email.folder === 'trash' ? 'inbox' : (undoAction.email.folder || 'inbox')
-        await fetch(`/api/emails/${undoAction.id}`, {
+      } else if (action.type === 'delete') {
+        // Move back to original folder from trash
+        const folder = action.email.folder === 'trash' ? 'inbox' : (action.email.folder || 'inbox')
+        await fetch(`/api/emails/${action.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder }),
+          body: JSON.stringify({ folder, isArchived: false }),
         })
       }
     } catch {
-      // silent
+      toast.error('Failed to undo')
     }
-
-    if (timerRef.current) clearTimeout(timerRef.current)
-    setUndoAction(null)
-  }, [undoAction, addEmail, setUndoAction])
+  }, [undoAction, addEmail, setUndoAction, totalEmails, setTotalEmails])
 
   if (!undoAction) return null
 
@@ -82,7 +88,7 @@ function UndoSnackbar() {
           </span>
           <button
             onClick={handleUndo}
-            className="px-4 py-1.5 text-sm font-bold uppercase tracking-wide text-[#8AB4F8] hover:text-white rounded-md hover:bg-white/10 transition-colors"
+            className="px-4 py-1.5 text-sm font-bold uppercase tracking-wide text-[#8AB4F8] hover:text-white rounded-md hover:bg-white/10 transition-colors cursor-pointer"
           >
             UNDO
           </button>
