@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   // Required for Prisma + pg adapter in Vercel serverless
-  serverExternalPackages: ['pg', '@prisma/adapter-pg'],
+  serverExternalPackages: ['pg', '@prisma/adapter-pg', 'sharp'],
   // Allow sharp image processing
   images: {
     remotePatterns: [
