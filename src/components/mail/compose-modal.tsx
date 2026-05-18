@@ -40,7 +40,7 @@ interface PendingSendData {
   subject: string
   html: string
   replyToId?: string
-  attachments?: Array<{ name: string; url: string; size: number; type: string }>
+  attachments?: Array<{ name: string; url: string; size: number; type: string; data?: string }>
   priority?: string
   scheduledAt?: string | null
   sentEmailId?: string
@@ -313,7 +313,7 @@ export function ComposeModal() {
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
       if (data.replyToId) payload.replyToId = data.replyToId
       if (data.attachments && data.attachments.length > 0) {
-        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type }))
+        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
       }
       if (data.priority === 'high') payload.priority = 'high'
       if (data.scheduledAt) payload.scheduledAt = data.scheduledAt
@@ -425,31 +425,38 @@ export function ComposeModal() {
         setIsUploading(true)
         setUploadProgress(0)
         try {
-          const result = await new Promise<Array<{ name: string; url: string; size: number; type: string }>>((resolve, reject) => {
+          const result = await new Promise<Array<{ name: string; url: string; size: number; type: string; data: string }>>((resolve, reject) => {
             const formData = new FormData()
             currentAttachments.forEach(file => formData.append('files', file))
             const xhr = new XMLHttpRequest()
             xhr.open('POST', '/api/upload')
+            xhr.withCredentials = true
             xhr.upload.addEventListener('progress', (ev) => {
               if (ev.lengthComputable) {
                 setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
               }
             })
             xhr.addEventListener('load', () => {
-              if (xhr.status === 200) {
-                const data = JSON.parse(xhr.responseText)
-                resolve(data.files)
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const data = JSON.parse(xhr.responseText)
+                  resolve(data.files)
+                } catch {
+                  reject(new Error('Invalid response from server'))
+                }
               } else {
                 try {
                   const err = JSON.parse(xhr.responseText)
-                  reject(new Error(err.error || 'Upload failed'))
+                  reject(new Error(err.error || `Upload failed (status ${xhr.status})`))
                 } catch {
-                  reject(new Error('Upload failed'))
+                  reject(new Error(`Upload failed (status ${xhr.status})`))
                 }
               }
             })
-            xhr.addEventListener('error', () => reject(new Error('Network error')))
+            xhr.addEventListener('error', () => reject(new Error('Network error — check your connection')))
             xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+            xhr.timeout = 120000 // 2 minute timeout
+            xhr.addEventListener('timeout', () => reject(new Error('Upload timed out — try a smaller file')))
             xhr.send(formData)
           })
           uploadedFiles = result
@@ -524,7 +531,7 @@ export function ComposeModal() {
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
       if (data.replyToId) payload.replyToId = data.replyToId
       if (data.attachments && data.attachments.length > 0) {
-        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type }))
+        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
       }
       if (data.priority === 'high') payload.priority = 'high'
       payload.sentAt = new Date().toISOString()

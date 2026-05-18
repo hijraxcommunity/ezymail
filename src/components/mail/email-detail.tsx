@@ -154,7 +154,7 @@ function ThreadMessage({
 
 /* ─── Attachment Gallery ─── */
 
-function AttachmentGallery({ attachments }: { attachments: Array<{ name: string; url: string; size?: string | number }> }) {
+function AttachmentGallery({ attachments }: { attachments: Array<{ name: string; url: string; size?: string | number; data?: string }> }) {
   const images = attachments.filter((a) => isImageFile(a.name))
   const docs = attachments.filter((a) => !isImageFile(a.name))
 
@@ -169,9 +169,9 @@ function AttachmentGallery({ attachments }: { attachments: Array<{ name: string;
       {images.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {images.map((att, idx) => (
-            <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+            <a key={idx} href={att.data || att.url} target="_blank" rel="noopener noreferrer"
               className="group relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-square flex items-center justify-center">
-              <img src={att.url} alt={att.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+              <img src={att.data || att.url} alt={att.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <p className="text-[10px] text-white truncate">{att.name}</p>
@@ -183,7 +183,7 @@ function AttachmentGallery({ attachments }: { attachments: Array<{ name: string;
       {docs.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {docs.map((att, idx) => (
-            <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+            <a key={idx} href={att.data || att.url} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-[#4285F4]/30 hover:bg-[#D3E3FD]/30 dark:hover:bg-[#4285F4]/5 transition-colors group">
               <div className="w-10 h-10 rounded-lg bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5 text-[#4285F4]" />
