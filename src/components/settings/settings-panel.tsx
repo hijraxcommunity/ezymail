@@ -8,8 +8,9 @@ import {
   X, Sun, Moon, Monitor, Bell, Volume2, Save, Loader2, Camera,
   Eye, EyeOff, Shield, Smartphone, Globe, Clock, Lock, Download,
   Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
-  Bold, Italic, Link as LinkIcon, List, ImagePlus, ChevronRight,
-  RefreshCw, LogOut, CalendarDays, Filter
+  Bold, Italic, Link as LinkIcon, List, ChevronRight,
+  RefreshCw, LogOut, CalendarDays, Filter, ArrowLeft, User, Palette,
+  BellRing, FileText, ShieldCheck, Settings as SettingsIcon
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -24,7 +25,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+// Tabs removed — now using list → detail pattern
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -145,16 +146,16 @@ export function SettingsPanel() {
   const { settingsView, setSettingsView, user, setAdminView } = useAppStore()
   const { theme, setTheme } = useTheme()
 
-  // Determine default tab based on how the panel was opened
-  const defaultTab = settingsView === 'profile' ? 'profile' : 'profile'
-
-  const [activeTab, setActiveTab] = useState(defaultTab)
+  // Determine if showing list or a detail page
+  const isListView = settingsView === 'settings' || settingsView === 'profile' || !settingsView
+  const activeSection = isListView ? null : settingsView?.replace('settings-', '') || null
 
   // ─── Profile state ──────────────────────────────────────────────────────
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState(0)
 
   // ─── Password state ─────────────────────────────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('')
@@ -316,10 +317,21 @@ export function SettingsPanel() {
       return
     }
     setAvatarUploading(true)
+    setAvatarUploadProgress(0)
     const formData = new FormData()
     formData.append('avatar', file)
+    // Simulate upload progress
+    const progressInterval = setInterval(() => {
+      setAvatarUploadProgress(prev => {
+        if (prev >= 85) return prev
+        return prev + Math.random() * 15 + 5
+      })
+    }, 150)
     try {
       const res = await fetch('/api/user/avatar', { method: 'POST', body: formData })
+      clearInterval(progressInterval)
+      setAvatarUploadProgress(100)
+      await new Promise(r => setTimeout(r, 400))
       if (res.ok) {
         const data = await res.json()
         setProfile(prev => prev ? { ...prev, avatar: data.avatar } : prev)
@@ -330,9 +342,11 @@ export function SettingsPanel() {
         toast.error('Failed to upload avatar')
       }
     } catch {
+      clearInterval(progressInterval)
       toast.error('Failed to upload avatar')
     } finally {
       setAvatarUploading(false)
+      setAvatarUploadProgress(0)
     }
   }
 
@@ -619,9 +633,6 @@ export function SettingsPanel() {
     ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
 
-  // ─── Close handler ─────────────────────────────────────────────────────
-  const handleClose = () => setSettingsView(null)
-
   // ─── Render ────────────────────────────────────────────────────────────
   if (!profile && profileLoading) {
     return (
@@ -631,146 +642,279 @@ export function SettingsPanel() {
     )
   }
 
+  const handleClose = () => setSettingsView(null)
+  const goBack = () => setSettingsView('settings')
+  const navigateTo = (section: string) => setSettingsView(`settings-${section}`)
+
+  // Settings list items with value previews
+  const settingsItems = [
+    { key: 'profile', label: 'Profile', description: 'Manage your personal information, avatar, and bio', icon: User, color: 'bg-[#4285F4]/10 text-[#4285F4]', preview: profile?.displayName || `${profile?.firstName} ${profile?.lastName}` },
+    { key: 'security', label: 'Security', description: 'Password, sessions, login history, and two-factor authentication', icon: ShieldCheck, color: 'bg-[#34A853]/10 text-[#34A853]', badge: 'Protected' },
+    { key: 'preferences', label: 'Appearance & Preferences', description: 'Theme, density, notifications, date format, and signature', icon: Palette, color: 'bg-[#FBBC05]/10 text-[#E37400]', preview: theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'System' },
+    { key: 'filters', label: 'Filters & Rules', description: 'Email filters, auto-labeling, and automated rules', icon: Filter, color: 'bg-[#EA4335]/10 text-[#EA4335]' },
+    { key: 'account', label: 'Account', description: 'Export data and manage your account', icon: SettingsIcon, color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+  ]
+
+  // Add admin panel item for admin users
+  if (user?.role === 'admin') {
+    settingsItems.push({ key: 'admin', label: 'Admin Panel', description: 'Manage users, reports, announcements, and system settings', icon: Shield, color: 'bg-[#4285F4]/10 text-[#4285F4]' })
+  }
+
+  // Detail page titles
+  const sectionTitles: Record<string, string> = {
+    profile: 'Profile',
+    security: 'Security',
+    preferences: 'Appearance & Preferences',
+    filters: 'Filters & Rules',
+    account: 'Account',
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <div className="flex items-center justify-between px-4 h-14">
-          <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white">Settings</h2>
-          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9">
+      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl">
+        <div className="flex items-center gap-3 px-4 h-14">
+          {!isListView && (
+            <Button variant="ghost" size="icon" onClick={goBack} className="h-9 w-9 -ml-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          )}
+          <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white flex-1">
+            {isListView ? 'Settings' : (sectionTitles[activeSection || ''] || 'Settings')}
+          </h2>
+          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
             <X className="w-5 h-5" />
           </Button>
         </div>
-
-        {/* Tab bar */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="px-4">
-            <TabsList className="w-full h-11 bg-gray-100 dark:bg-gray-900 rounded-xl">
-              <TabsTrigger value="profile" className="flex-1 text-xs sm:text-sm gap-1.5 rounded-lg">
-                <span className="hidden sm:inline">Profile</span>
-                <span className="sm:hidden">Profile</span>
-              </TabsTrigger>
-              <TabsTrigger value="security" className="flex-1 text-xs sm:text-sm gap-1.5 rounded-lg">
-                <span className="hidden sm:inline">Security</span>
-                <span className="sm:hidden">Security</span>
-              </TabsTrigger>
-              <TabsTrigger value="preferences" className="flex-1 text-xs sm:text-sm gap-1.5 rounded-lg">
-                <span className="hidden sm:inline">Preferences</span>
-                <span className="sm:hidden">Prefs</span>
-              </TabsTrigger>
-              <TabsTrigger value="filters" className="flex-1 text-xs sm:text-sm gap-1.5 rounded-lg">
-                <span className="hidden sm:inline">Filters</span>
-                <span className="sm:hidden">Filters</span>
-              </TabsTrigger>
-              <TabsTrigger value="account" className="flex-1 text-xs sm:text-sm gap-1.5 rounded-lg">
-                <span className="hidden sm:inline">Account</span>
-                <span className="sm:hidden">Account</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
-        </Tabs>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <AnimatePresence mode="wait">
-          {activeTab === 'profile' && (
-            <motion.div key="profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <ProfileTabContent
-                profile={profile}
-                setProfile={setProfile}
-                initials={initials}
-                avatarUploading={avatarUploading}
-                savingProfile={savingProfile}
-                avatarInputRef={avatarInputRef}
-                handleAvatarUpload={handleAvatarUpload}
-                handleSaveProfile={handleSaveProfile}
-              />
+          {isListView ? (
+            <motion.div
+              key="settings-list"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="max-w-2xl mx-auto p-4 sm:p-6 space-y-3 pb-8"
+            >
+              {/* Profile Card */}
+              <motion.div
+                {...fadeInUp}
+                onClick={() => navigateTo('profile')}
+                className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#D3E3FD]/60 to-[#E6F4EA]/60 dark:from-[#4285F4]/10 dark:to-[#34A853]/10 border border-[#D3E3FD]/50 dark:border-[#4285F4]/20 cursor-pointer hover:from-[#D3E3FD]/80 hover:to-[#E6F4EA]/80 dark:hover:from-[#4285F4]/15 dark:hover:to-[#34A853]/15 transition-all"
+              >
+                <div className="relative">
+                  <Avatar className="h-14 w-14 ring-2 ring-white dark:ring-gray-800 shadow-sm">
+                    <AvatarImage src={profile?.avatar || undefined} />
+                    <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-lg font-bold">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#34A853] rounded-full border-2 border-white dark:border-gray-900" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-semibold text-[#1F1F1F] dark:text-white truncate">
+                    {profile?.displayName || `${profile?.firstName} ${profile?.lastName}`}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{profile?.email}</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </motion.div>
+
+              {/* Settings Items Group */}
+              <motion.div {...fadeInUp} className="pt-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">General</p>
+                <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+                  {settingsItems.map((item, index) => (
+                    <motion.button
+                      key={item.key}
+                      type="button"
+                      onClick={() => navigateTo(item.key)}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15, delay: index * 0.03 }}
+                      className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left group"
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${item.color}`}>
+                        <item.icon className="w-[18px] h-[18px]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">{item.label}</p>
+                        <p className="text-[11px] text-gray-400 mt-px line-clamp-1">{item.description}</p>
+                      </div>
+                      {item.preview && (
+                        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-md truncate max-w-[80px]">
+                          {item.preview}
+                        </span>
+                      )}
+                      {item.badge && (
+                        <span className="text-[10px] font-medium text-[#34A853] bg-[#34A853]/10 px-2 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors flex-shrink-0" />
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Sign Out */}
+              <motion.div {...fadeInUp} className="pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch('/api/auth/logout', { method: 'POST' })
+                    toast.success('Logged out')
+                    useAppStore.getState().logout()
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[#EA4335] hover:bg-[#FCE8E6] dark:hover:bg-[#3B1A17] transition-colors border border-transparent hover:border-[#EA4335]/20"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-[#EA4335]/10 flex items-center justify-center flex-shrink-0">
+                    <LogOut className="w-[18px] h-[18px]" />
+                  </div>
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
+              </motion.div>
+
+              {/* App Version Footer */}
+              <motion.p {...fadeInUp} className="text-center text-[11px] text-gray-400 dark:text-gray-600 pt-4">
+                EzyMail v1.0 &middot; Made with love
+              </motion.p>
             </motion.div>
-          )}
-          {activeTab === 'security' && (
-            <motion.div key="security" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <SecurityTabContent
-                currentPassword={currentPassword}
-                setCurrentPassword={setCurrentPassword}
-                newPassword={newPassword}
-                setNewPassword={setNewPassword}
-                confirmPassword={confirmPassword}
-                setConfirmPassword={setConfirmPassword}
-                showCurrentPassword={showCurrentPassword}
-                setShowCurrentPassword={setShowCurrentPassword}
-                showNewPassword={showNewPassword}
-                setShowNewPassword={setShowNewPassword}
-                savingPassword={savingPassword}
-                passwordStrength={passwordStrength}
-                handleChangePassword={handleChangePassword}
-                sessions={sessions}
-                sessionsLoading={sessionsLoading}
-                loadSessions={loadSessions}
-                handleRevokeSession={handleRevokeSession}
-                handleRevokeAllOthers={handleRevokeAllOthers}
-                loginLogs={loginLogs}
-                loginLogsLoading={loginLogsLoading}
-                loadLoginLogs={loadLoginLogs}
-                twoFA={twoFA}
-                twoFALoading={twoFALoading}
-                load2FA={load2FA}
-                twoFASetup={twoFASetup}
-                twoFASecret={twoFASecret}
-                twoFAUri={twoFAUri}
-                twoFABackupCodes={twoFABackupCodes}
-                twoFAVerifyCode={twoFAVerifyCode}
-                setTwoFAVerifyCode={setTwoFAVerifyCode}
-                twoFAVerifying={twoFAVerifying}
-                handleSetup2FA={handleSetup2FA}
-                handleVerify2FA={handleVerify2FA}
-                setTwoFASetup={setTwoFASetup}
-                twoFADisabling={twoFADisabling}
-                disable2FAPassword={disable2FAPassword}
-                setDisable2FAPassword={setDisable2FAPassword}
-                handleDisable2FA={handleDisable2FA}
-              />
-            </motion.div>
-          )}
-          {activeTab === 'preferences' && (
-            <motion.div key="preferences" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <PreferencesTabContent
-                emailDensity={emailDensity}
-                setEmailDensity={setEmailDensity}
-                previewLines={previewLines}
-                setPreviewLines={setPreviewLines}
-                conversationView={conversationView}
-                setConversationView={setConversationView}
-                theme={theme || 'system'}
-                setTheme={setTheme}
-                desktopNotif={desktopNotif}
-                setDesktopNotif={setDesktopNotif}
-                soundNotif={soundNotif}
-                setSoundNotif={setSoundNotif}
-                dateFormat={dateFormat}
-                setDateFormat={setDateFormat}
-                savingPrefs={savingPrefs}
-                handleSavePreferences={handleSavePreferences}
-                signatureEditor={signatureEditor}
-                savingSignature={savingSignature}
-                handleSaveSignature={handleSaveSignature}
-              />
-            </motion.div>
-          )}
-          {activeTab === 'filters' && (
-            <motion.div key="filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <FiltersTab />
-            </motion.div>
-          )}
-          {activeTab === 'account' && (
-            <motion.div key="account" {...tabVariants} initial="initial" animate="animate" exit="exit">
-              <AccountTabContent
-                exporting={exporting}
-                handleExport={handleExport}
-                isAdmin={user?.role === 'admin'}
-                onOpenAdminPanel={() => { setSettingsView(null); setAdminView('dashboard') }}
-              />
-            </motion.div>
+          ) : (
+            <>
+              {activeSection === 'profile' && (
+                <motion.div key="detail-profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <ProfileTabContent
+                    profile={profile}
+                    setProfile={setProfile}
+                    initials={initials}
+                    avatarUploading={avatarUploading}
+                    avatarUploadProgress={avatarUploadProgress}
+                    savingProfile={savingProfile}
+                    avatarInputRef={avatarInputRef}
+                    handleAvatarUpload={handleAvatarUpload}
+                    handleSaveProfile={handleSaveProfile}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'security' && (
+                <motion.div key="detail-security" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <SecurityTabContent
+                    currentPassword={currentPassword}
+                    setCurrentPassword={setCurrentPassword}
+                    newPassword={newPassword}
+                    setNewPassword={setNewPassword}
+                    confirmPassword={confirmPassword}
+                    setConfirmPassword={setConfirmPassword}
+                    showCurrentPassword={showCurrentPassword}
+                    setShowCurrentPassword={setShowCurrentPassword}
+                    showNewPassword={showNewPassword}
+                    setShowNewPassword={setShowNewPassword}
+                    savingPassword={savingPassword}
+                    passwordStrength={passwordStrength}
+                    handleChangePassword={handleChangePassword}
+                    sessions={sessions}
+                    sessionsLoading={sessionsLoading}
+                    loadSessions={loadSessions}
+                    handleRevokeSession={handleRevokeSession}
+                    handleRevokeAllOthers={handleRevokeAllOthers}
+                    loginLogs={loginLogs}
+                    loginLogsLoading={loginLogsLoading}
+                    loadLoginLogs={loadLoginLogs}
+                    twoFA={twoFA}
+                    twoFALoading={twoFALoading}
+                    load2FA={load2FA}
+                    twoFASetup={twoFASetup}
+                    twoFASecret={twoFASecret}
+                    twoFAUri={twoFAUri}
+                    twoFABackupCodes={twoFABackupCodes}
+                    twoFAVerifyCode={twoFAVerifyCode}
+                    setTwoFAVerifyCode={setTwoFAVerifyCode}
+                    twoFAVerifying={twoFAVerifying}
+                    handleSetup2FA={handleSetup2FA}
+                    handleVerify2FA={handleVerify2FA}
+                    setTwoFASetup={setTwoFASetup}
+                    twoFADisabling={twoFADisabling}
+                    disable2FAPassword={disable2FAPassword}
+                    setDisable2FAPassword={setDisable2FAPassword}
+                    handleDisable2FA={handleDisable2FA}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'preferences' && (
+                <motion.div key="detail-preferences" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <PreferencesTabContent
+                    emailDensity={emailDensity}
+                    setEmailDensity={setEmailDensity}
+                    previewLines={previewLines}
+                    setPreviewLines={setPreviewLines}
+                    conversationView={conversationView}
+                    setConversationView={setConversationView}
+                    theme={theme || 'system'}
+                    setTheme={setTheme}
+                    desktopNotif={desktopNotif}
+                    setDesktopNotif={setDesktopNotif}
+                    soundNotif={soundNotif}
+                    setSoundNotif={setSoundNotif}
+                    dateFormat={dateFormat}
+                    setDateFormat={setDateFormat}
+                    savingPrefs={savingPrefs}
+                    handleSavePreferences={handleSavePreferences}
+                    signatureEditor={signatureEditor}
+                    savingSignature={savingSignature}
+                    handleSaveSignature={handleSaveSignature}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'filters' && (
+                <motion.div key="detail-filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <FiltersTab />
+                </motion.div>
+              )}
+              {activeSection === 'account' && (
+                <motion.div key="detail-account" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <AccountTabContent
+                    exporting={exporting}
+                    handleExport={handleExport}
+                    isAdmin={user?.role === 'admin'}
+                    onOpenAdminPanel={() => { setSettingsView(null); setAdminView('dashboard') }}
+                  />
+                </motion.div>
+              )}
+              {activeSection === 'admin' && (
+                <motion.div key="detail-admin" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
+                    <motion.div className="space-y-3" {...fadeInUp}>
+                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Administration</h3>
+                      <Card className="border-[#4285F4]/20 shadow-sm">
+                        <CardContent className="p-4 space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
+                              <Shield className="w-4 h-4 text-[#4285F4]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">Manage users, reports, announcements, and system settings</p>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => { setSettingsView(null); setAdminView('dashboard') }}
+                            className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
+                          >
+                            <Shield className="w-4 h-4 mr-2" />
+                            Open Admin Panel
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              )}
+            </>
           )}
         </AnimatePresence>
       </div>
@@ -781,13 +925,14 @@ export function SettingsPanel() {
 // ─── Profile Tab ──────────────────────────────────────────────────────────
 
 function ProfileTabContent({
-  profile, setProfile, initials, avatarUploading, savingProfile,
+  profile, setProfile, initials, avatarUploading, avatarUploadProgress, savingProfile,
   avatarInputRef, handleAvatarUpload, handleSaveProfile,
 }: {
   profile: ProfileData | null
   setProfile: React.Dispatch<React.SetStateAction<ProfileData | null>>
   initials: string
   avatarUploading: boolean
+  avatarUploadProgress: number
   savingProfile: boolean
   avatarInputRef: React.RefObject<HTMLInputElement | null>
   handleAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -803,7 +948,20 @@ function ProfileTabContent({
     <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-8">
       {/* Avatar */}
       <motion.div className="flex flex-col items-center gap-3" {...fadeInUp}>
-        <div className="relative group">
+        <div className="relative group" style={{ width: 96, height: 96 }}>
+          {/* Upload progress SVG ring */}
+          {avatarUploading && (
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 96 96">
+              <circle cx="48" cy="48" r="45" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-200 dark:text-gray-700" />
+              <circle
+                cx="48" cy="48" r="45" fill="none" stroke="#4285F4" strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 45}`}
+                strokeDashoffset={`${2 * Math.PI * 45 * (1 - avatarUploadProgress / 100)}`}
+                className="transition-all duration-200 ease-out"
+              />
+            </svg>
+          )}
           <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
             <AvatarImage src={profile.avatar || undefined} />
             <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xl sm:text-2xl font-bold">
@@ -812,128 +970,150 @@ function ProfileTabContent({
           </Avatar>
           <button
             onClick={() => avatarInputRef.current?.click()}
-            className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            className={`absolute inset-0 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+              avatarUploading
+                ? 'bg-black/50 opacity-100'
+                : 'bg-black/40 opacity-0 group-hover:opacity-100'
+            }`}
             aria-label="Change avatar"
           >
-            {avatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
+            {avatarUploading ? (
+              <span className="text-white text-xs font-bold tabular-nums">{Math.round(avatarUploadProgress)}%</span>
+            ) : (
+              <Camera className="w-6 h-6 text-white" />
+            )}
           </button>
           <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
         </div>
-        <p className="text-xs text-gray-500">Click to change photo</p>
+        <p className="text-xs text-gray-500">
+          {avatarUploading ? 'Uploading...' : 'Click to change photo'}
+        </p>
       </motion.div>
 
       {/* Personal Information */}
       <motion.div className="space-y-4" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Personal Information</h3>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="displayName" className="text-sm">Display Name</Label>
-            <Input
-              id="displayName"
-              value={profile.displayName || ''}
-              onChange={(e) => update('displayName', e.target.value)}
-              placeholder="How others see you"
-              className="h-10 rounded-xl"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Personal Information</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-4 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="firstName" className="text-sm">First Name *</Label>
+              <Label htmlFor="displayName" className="text-sm text-gray-600 dark:text-gray-400">Display Name</Label>
               <Input
-                id="firstName"
-                value={profile.firstName}
-                onChange={(e) => update('firstName', e.target.value)}
-                className="h-10 rounded-xl"
+                id="displayName"
+                value={profile.displayName || ''}
+                onChange={(e) => update('displayName', e.target.value)}
+                placeholder="How others see you"
+                className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="firstName" className="text-sm text-gray-600 dark:text-gray-400">First Name *</Label>
+                <Input
+                  id="firstName"
+                  value={profile.firstName}
+                  onChange={(e) => update('firstName', e.target.value)}
+                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lastName" className="text-sm text-gray-600 dark:text-gray-400">Last Name *</Label>
+                <Input
+                  id="lastName"
+                  value={profile.lastName}
+                  onChange={(e) => update('lastName', e.target.value)}
+                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="lastName" className="text-sm">Last Name *</Label>
-              <Input
-                id="lastName"
-                value={profile.lastName}
-                onChange={(e) => update('lastName', e.target.value)}
-                className="h-10 rounded-xl"
+              <Label htmlFor="email" className="text-sm text-gray-600 dark:text-gray-400">Email Address</Label>
+              <div className="relative">
+                <Input
+                  id="email"
+                  value={profile.email}
+                  readOnly
+                  className="h-10 rounded-xl bg-gray-50 dark:bg-gray-900 pr-16 border-gray-200 dark:border-gray-700"
+                />
+                <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4285F4] border-[#4285F4]/30 text-[10px] px-1.5">
+                  @ezy.af
+                </Badge>
+              </div>
+              <p className="text-[11px] text-gray-400">Your email address cannot be changed</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bio" className="text-sm text-gray-600 dark:text-gray-400">Bio</Label>
+              <Textarea
+                id="bio"
+                value={profile.bio || ''}
+                onChange={(e) => update('bio', e.target.value)}
+                placeholder="Tell others about yourself"
+                className="rounded-xl min-h-[70px] resize-none border-gray-200 dark:border-gray-700"
               />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-sm">Email</Label>
-            <div className="relative">
-              <Input
-                id="email"
-                value={profile.email}
-                readOnly
-                className="h-10 rounded-xl bg-gray-50 dark:bg-gray-900 pr-16"
-              />
-              <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4285F4] border-[#4285F4]/30 text-[10px] px-1.5">
-                @ezy.af
-              </Badge>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="phone" className="text-sm text-gray-600 dark:text-gray-400">Phone</Label>
+                <Input
+                  id="phone"
+                  value={profile.phone || ''}
+                  onChange={(e) => update('phone', e.target.value)}
+                  placeholder="93700000000"
+                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dob" className="text-sm text-gray-600 dark:text-gray-400">Date of Birth</Label>
+                <Input
+                  id="dob"
+                  type="date"
+                  value={profile.dateOfBirth || ''}
+                  onChange={(e) => update('dateOfBirth', e.target.value)}
+                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+                />
+              </div>
             </div>
-            <p className="text-[11px] text-gray-400">Your email address cannot be changed</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="bio" className="text-sm">Bio</Label>
-            <Textarea
-              id="bio"
-              value={profile.bio || ''}
-              onChange={(e) => update('bio', e.target.value)}
-              placeholder="Tell others about yourself"
-              className="rounded-xl min-h-[70px] resize-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-sm">Phone</Label>
-            <Input
-              id="phone"
-              value={profile.phone || ''}
-              onChange={(e) => update('phone', e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className="h-10 rounded-xl"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dob" className="text-sm">Date of Birth</Label>
-            <Input
-              id="dob"
-              type="date"
-              value={profile.dateOfBirth || ''}
-              onChange={(e) => update('dateOfBirth', e.target.value)}
-              className="h-10 rounded-xl"
-            />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </motion.div>
-
-      <Separator />
 
       {/* Account Info (read-only) */}
       <motion.div className="space-y-4" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Account Info</h3>
-        <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500 flex items-center gap-2">
-              <CalendarDays className="w-4 h-4" /> Account Created
-            </span>
-            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
-              {formatDate(profile.createdAt)}
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500 flex items-center gap-2">
-              <Clock className="w-4 h-4" /> Last Login
-            </span>
-            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
-              {formatDate(profile.lastLogin)}
-            </span>
-          </div>
-        </div>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Account Details</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-0 divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="flex justify-between items-center px-4 py-3">
+              <span className="text-sm text-gray-500 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-gray-400" /> Account Created
+              </span>
+              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+                {formatDate(profile.createdAt)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-4 py-3">
+              <span className="text-sm text-gray-500 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400" /> Last Login
+              </span>
+              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+                {formatDate(profile.lastLogin)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-4 py-3">
+              <span className="text-sm text-gray-500 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-gray-400" /> Account Role
+              </span>
+              <Badge variant="outline" className="text-[10px] px-1.5">
+                {profile.role}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
       <motion.div {...fadeInUp}>
         <Button
           onClick={handleSaveProfile}
           disabled={savingProfile}
-          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
+          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
         >
           {savingProfile ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
@@ -1017,33 +1197,36 @@ function SecurityTabContent({
       {/* Section Navigation */}
       <motion.div className="space-y-1" {...fadeInUp}>
         {([
-          { key: 'password' as const, label: 'Change Password', icon: Lock },
-          { key: 'sessions' as const, label: 'Active Sessions', icon: Smartphone },
-          { key: 'login-history' as const, label: 'Login History', icon: Clock },
-          { key: '2fa' as const, label: 'Two-Factor Authentication', icon: Shield },
+          { key: 'password' as const, label: 'Change Password', description: 'Update your account password', icon: Lock },
+          { key: 'sessions' as const, label: 'Active Sessions', description: 'Manage devices logged into your account', icon: Smartphone },
+          { key: 'login-history' as const, label: 'Login History', description: 'Recent login activity and attempts', icon: Clock },
+          { key: '2fa' as const, label: 'Two-Factor Auth', description: 'Add extra security to your account', icon: Shield },
         ]).map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => setActiveSection(item.key)}
-            className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-colors ${
+            className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all ${
               activeSection === item.key
-                ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4]'
+                ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4] shadow-sm'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-900 text-[#1F1F1F] dark:text-gray-300'
             }`}
           >
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                 activeSection === item.key
-                  ? 'bg-[#4285F4]/10'
+                  ? 'bg-[#4285F4]/15'
                   : 'bg-gray-100 dark:bg-gray-800'
               }`}>
                 <item.icon className="w-4 h-4" />
               </div>
-              <span className="text-sm font-medium">{item.label}</span>
+              <div className="text-left">
+                <span className="text-sm font-medium">{item.label}</span>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 hidden sm:block">{item.description}</p>
+              </div>
             </div>
             {activeSection === item.key && (
-              <Badge variant="secondary" className="text-[10px] px-1.5">Active</Badge>
+              <Badge className="text-[10px] px-1.5 bg-[#4285F4] text-white border-0">Active</Badge>
             )}
           </button>
         ))}
@@ -1618,115 +1801,106 @@ function PreferencesTabContent({
 }) {
   return (
     <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
-      {/* Email Density */}
+      {/* Email Density & Display */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Email Display</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Email Display</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4 space-y-4">
             <div>
               <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Email Density</Label>
-              <p className="text-xs text-gray-500 mt-0.5">Choose how compact emails appear in your inbox</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">Choose how compact emails appear in your inbox</p>
             </div>
-            <RadioGroup value={emailDensity} onValueChange={(v) => setEmailDensity(v as typeof emailDensity)} className="space-y-2">
+            <RadioGroup value={emailDensity} onValueChange={(v) => setEmailDensity(v as typeof emailDensity)} className="space-y-1">
               {[
                 { value: 'comfortable' as const, label: 'Comfortable', desc: 'More spacing, relaxed reading' },
                 { value: 'cozy' as const, label: 'Cozy', desc: 'Balanced spacing' },
                 { value: 'compact' as const, label: 'Compact', desc: 'More emails visible at once' },
               ].map((opt) => (
-                <div key={opt.value} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
-                  <RadioGroupItem value={opt.value} id={`density-${opt.value}`} />
+                <div key={opt.value} className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                  <RadioGroupItem value={opt.value} id={`density-${opt.value}`} className="data-[state=checked]:border-[#4285F4] data-[state=checked]:text-[#4285F4]" />
                   <Label htmlFor={`density-${opt.value}`} className="cursor-pointer flex-1">
                     <span className="text-sm font-medium">{opt.label}</span>
-                    <span className="text-xs text-gray-500 ml-2">{opt.desc}</span>
+                    <span className="text-[11px] text-gray-500 ml-2">{opt.desc}</span>
                   </Label>
                 </div>
               ))}
             </RadioGroup>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Message Preview Lines */}
-      <motion.div className="space-y-3" {...fadeInUp}>
-        <Card className="border-gray-200 dark:border-gray-800">
-          <CardContent className="p-4 space-y-4">
-            <div>
-              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Message Preview Lines</Label>
-              <p className="text-xs text-gray-500 mt-0.5">How many lines of preview to show</p>
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Preview Lines</Label>
+              <p className="text-[11px] text-gray-500 mt-0.5 mb-2">How many lines of preview to show</p>
+              <RadioGroup value={previewLines} onValueChange={(v) => setPreviewLines(v as typeof previewLines)} className="flex gap-2">
+                {(['none', '1', '2', '3'] as const).map((val) => (
+                  <div key={val} className="flex items-center space-x-2">
+                    <RadioGroupItem value={val} id={`preview-${val}`} className="data-[state=checked]:border-[#4285F4] data-[state=checked]:text-[#4285F4]" />
+                    <Label htmlFor={`preview-${val}`} className="text-sm cursor-pointer">
+                      {val === 'none' ? 'None' : val}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
             </div>
-            <RadioGroup value={previewLines} onValueChange={(v) => setPreviewLines(v as typeof previewLines)} className="flex gap-3">
-              {(['none', '1', '2', '3'] as const).map((val) => (
-                <div key={val} className="flex items-center space-x-2">
-                  <RadioGroupItem value={val} id={`preview-${val}`} />
-                  <Label htmlFor={`preview-${val}`} className="text-sm cursor-pointer">
-                    {val === 'none' ? 'None' : val}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
           </CardContent>
         </Card>
       </motion.div>
-
-      <Separator />
 
       {/* Mail Behavior */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Mail Behavior</h3>
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-              <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Mail Behavior</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
+                  <Globe className="w-4 h-4 text-[#4285F4]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
+                  <p className="text-[11px] text-gray-500">Group emails as threads</p>
+                </div>
+              </div>
+              <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
-              <p className="text-xs text-gray-500">Group emails as threads</p>
-            </div>
-          </div>
-          <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />
-        </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
-      <Separator />
-
-      {/* Appearance */}
+      {/* Appearance & Theme */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Appearance</h3>
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-              <Sun className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            </div>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Appearance</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-4 space-y-4">
             <div>
-              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Theme</p>
-              <p className="text-xs text-gray-500">Choose your preferred theme</p>
+              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Theme</Label>
+              <p className="text-[11px] text-gray-500 mt-0.5">Choose your preferred theme</p>
             </div>
-          </div>
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
-            {([
-              { value: 'light', icon: Sun },
-              { value: 'dark', icon: Moon },
-              { value: 'system', icon: Monitor },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setTheme(opt.value)}
-                className={`p-2 rounded-md transition-all ${
-                  theme === opt.value
-                    ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                aria-label={opt.value}
-              >
-                <opt.icon className="w-4 h-4" />
-              </button>
-            ))}
-          </div>
-        </div>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: 'light', icon: Sun, label: 'Light' },
+                { value: 'dark', icon: Moon, label: 'Dark' },
+                { value: 'system', icon: Monitor, label: 'System' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setTheme(opt.value)}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                    theme === opt.value
+                      ? 'border-[#4285F4] bg-[#4285F4]/5 text-[#4285F4]'
+                      : 'border-gray-100 dark:border-gray-800 text-gray-500 hover:border-gray-300 dark:hover:border-gray-700'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    theme === opt.value ? 'bg-[#4285F4]/10' : 'bg-gray-50 dark:bg-gray-900'
+                  }`}>
+                    <opt.icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-medium">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
-
-      <Separator />
 
       {/* Notifications */}
       <NotificationSettings
@@ -1736,113 +1910,115 @@ function PreferencesTabContent({
         setSoundNotif={setSoundNotif}
       />
 
-      <Separator />
-
       {/* Date Format */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Date Format</h3>
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Date & Time</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#FBBC05]/10 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-[#E37400]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Time Format</p>
+                  <p className="text-[11px] text-gray-500">12-hour or 24-hour clock</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setDateFormat('12h')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    dateFormat === '12h'
+                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  12h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFormat('24h')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    dateFormat === '24h'
+                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  24h
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Time Format</p>
-              <p className="text-xs text-gray-500">12-hour or 24-hour clock</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
-            <button
-              type="button"
-              onClick={() => setDateFormat('12h')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                dateFormat === '12h'
-                  ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              12h
-            </button>
-            <button
-              type="button"
-              onClick={() => setDateFormat('24h')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                dateFormat === '24h'
-                  ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              24h
-            </button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
       <motion.div {...fadeInUp}>
         <Button
           onClick={handleSavePreferences}
           disabled={savingPrefs}
-          className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
+          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
         >
           {savingPrefs ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Preferences</>}
         </Button>
       </motion.div>
 
-      <Separator />
-
       {/* Signature */}
       <motion.div className="space-y-3" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Email Signature</h3>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          {/* Toolbar */}
-          <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-            <button
-              type="button"
-              onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded-lg transition-colors ${
-                signatureEditor?.isActive('bold') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-              aria-label="Bold"
-            >
-              <Bold className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded-lg transition-colors ${
-                signatureEditor?.isActive('italic') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-              aria-label="Italic"
-            >
-              <Italic className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const url = window.prompt('Enter URL:')
-                if (url) signatureEditor?.chain().focus().setLink({ href: url }).run()
-              }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                signatureEditor?.isActive('link') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-              aria-label="Link"
-            >
-              <LinkIcon className="w-4 h-4" />
-            </button>
-            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
-            <button
-              type="button"
-              onClick={() => signatureEditor?.chain().focus().toggleBulletList().run()}
-              className={`p-1.5 rounded-lg transition-colors ${
-                signatureEditor?.isActive('bulletList') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-              aria-label="Bullet list"
-            >
-              <List className="w-4 h-4" />
-            </button>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Email Signature</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+          <div className="rounded-t-xl border border-b-0 border-gray-100 dark:border-gray-800 overflow-hidden">
+            {/* Toolbar */}
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80">
+              <button
+                type="button"
+                onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  signatureEditor?.isActive('bold') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Bold"
+              >
+                <Bold className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  signatureEditor?.isActive('italic') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Italic"
+              >
+                <Italic className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = window.prompt('Enter URL:')
+                  if (url) signatureEditor?.chain().focus().setLink({ href: url }).run()
+                }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  signatureEditor?.isActive('link') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Link"
+              >
+                <LinkIcon className="w-4 h-4" />
+              </button>
+              <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
+              <button
+                type="button"
+                onClick={() => signatureEditor?.chain().focus().toggleBulletList().run()}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  signatureEditor?.isActive('bulletList') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Bullet list"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+            <EditorContent editor={signatureEditor} />
           </div>
-          <EditorContent editor={signatureEditor} />
-        </div>
+        </Card>
         <Button
           onClick={handleSaveSignature}
           disabled={savingSignature}
@@ -1867,12 +2043,12 @@ function AccountTabContent({
   onOpenAdminPanel?: () => void
 }) {
   return (
-    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-8">
+    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
       {/* Admin Panel */}
       {isAdmin && onOpenAdminPanel && (
-        <motion.div className="space-y-4" {...fadeInUp}>
-          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Administration</h3>
-          <Card className="border-[#4285F4]/30 bg-[#4285F4]/5">
+        <motion.div className="space-y-3" {...fadeInUp}>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Administration</h3>
+          <Card className="border-[#4285F4]/20 shadow-sm">
             <CardContent className="p-4 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
@@ -1880,9 +2056,8 @@ function AccountTabContent({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Manage users, reports, announcements, and system settings</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Manage users, reports, announcements, and system settings</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
               </div>
               <Button
                 onClick={onOpenAdminPanel}
@@ -1896,28 +2071,26 @@ function AccountTabContent({
         </motion.div>
       )}
 
-      <Separator />
-
       {/* Export Data */}
-      <motion.div className="space-y-4" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Export Data</h3>
-        <Card className="border-gray-200 dark:border-gray-800">
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Export Data</h3>
+        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
+                <Download className="w-4 h-4 text-[#4285F4]" />
               </div>
               <div>
                 <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Download Your Data</p>
-                <p className="text-xs text-gray-500 mt-0.5">Export all your emails, contacts, folders, and settings</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Export all your emails, contacts, folders, and settings</p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
                 onClick={() => handleExport('json')}
                 disabled={exporting}
-                className="flex-1 h-10 rounded-xl"
+                className="h-10 rounded-xl border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900"
               >
                 {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 JSON
@@ -1926,7 +2099,7 @@ function AccountTabContent({
                 variant="outline"
                 onClick={() => handleExport('csv')}
                 disabled={exporting}
-                className="flex-1 h-10 rounded-xl"
+                className="h-10 rounded-xl border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900"
               >
                 {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 CSV
@@ -1936,12 +2109,10 @@ function AccountTabContent({
         </Card>
       </motion.div>
 
-      <Separator />
-
       {/* Danger Zone */}
-      <motion.div className="space-y-4" {...fadeInUp}>
-        <h3 className="text-sm font-semibold text-[#EA4335] uppercase tracking-wider">Danger Zone</h3>
-        <Card className="border-[#EA4335]/30 bg-[#EA4335]/5">
+      <motion.div className="space-y-3" {...fadeInUp}>
+        <h3 className="text-xs font-semibold text-[#EA4335] uppercase tracking-wider px-1">Danger Zone</h3>
+        <Card className="border-[#EA4335]/30 bg-[#EA4335]/5 shadow-sm">
           <CardContent className="p-4 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-[#EA4335]/10 flex items-center justify-center">
@@ -1949,7 +2120,7 @@ function AccountTabContent({
               </div>
               <div>
                 <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Delete Account</p>
-                <p className="text-xs text-gray-500 mt-0.5">Permanently delete your account and all associated data. This action cannot be undone.</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Permanently delete your account and all associated data. This action cannot be undone.</p>
               </div>
             </div>
             <AlertDialog>
