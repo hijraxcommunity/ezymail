@@ -732,7 +732,14 @@ export function SettingsPanel() {
                     <motion.button
                       key={item.key}
                       type="button"
-                      onClick={() => navigateTo(item.key)}
+                      onClick={() => {
+                        if (item.key === 'admin') {
+                          setSettingsView(null)
+                          setAdminView('dashboard')
+                        } else {
+                          navigateTo(item.key)
+                        }
+                      }}
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.15, delay: index * 0.03 }}
@@ -880,40 +887,10 @@ export function SettingsPanel() {
                   <AccountTabContent
                     exporting={exporting}
                     handleExport={handleExport}
-                    isAdmin={user?.role === 'admin'}
-                    onOpenAdminPanel={() => { setSettingsView(null); setAdminView('dashboard') }}
                   />
                 </motion.div>
               )}
-              {activeSection === 'admin' && (
-                <motion.div key="detail-admin" {...tabVariants} initial="initial" animate="animate" exit="exit">
-                  <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
-                    <motion.div className="space-y-3" {...fadeInUp}>
-                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Administration</h3>
-                      <Card className="border-[#4285F4]/20 shadow-sm">
-                        <CardContent className="p-4 space-y-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
-                              <Shield className="w-4 h-4 text-[#4285F4]" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
-                              <p className="text-[11px] text-gray-500 mt-0.5">Manage users, reports, announcements, and system settings</p>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => { setSettingsView(null); setAdminView('dashboard') }}
-                            className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
-                          >
-                            <Shield className="w-4 h-4 mr-2" />
-                            Open Admin Panel
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
+
             </>
           )}
         </AnimatePresence>
@@ -2035,42 +2012,13 @@ function PreferencesTabContent({
 // ─── Account Tab ──────────────────────────────────────────────────────────
 
 function AccountTabContent({
-  exporting, handleExport, isAdmin, onOpenAdminPanel,
+  exporting, handleExport,
 }: {
   exporting: boolean
   handleExport: (format: 'json' | 'csv') => void
-  isAdmin?: boolean
-  onOpenAdminPanel?: () => void
 }) {
   return (
     <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
-      {/* Admin Panel */}
-      {isAdmin && onOpenAdminPanel && (
-        <motion.div className="space-y-3" {...fadeInUp}>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Administration</h3>
-          <Card className="border-[#4285F4]/20 shadow-sm">
-            <CardContent className="p-4 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
-                  <Shield className="w-4 h-4 text-[#4285F4]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Admin Panel</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Manage users, reports, announcements, and system settings</p>
-                </div>
-              </div>
-              <Button
-                onClick={onOpenAdminPanel}
-                className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium"
-              >
-                <Shield className="w-4 h-4 mr-2" />
-                Open Admin Panel
-              </Button>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
       {/* Export Data */}
       <motion.div className="space-y-3" {...fadeInUp}>
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Export Data</h3>
