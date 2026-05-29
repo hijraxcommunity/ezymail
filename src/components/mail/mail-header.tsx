@@ -446,7 +446,7 @@ export function MailHeader() {
                   searchInputRef.current?.blur()
                 }
               }}
-              placeholder="Search... (e.g. from:sarah is:unread)"
+              placeholder="Search... (e.g. from:ahmad is:unread)"
               className="h-8 sm:h-9 rounded-full pl-8 pr-14 sm:pr-20 bg-gray-100 dark:bg-gray-900 border-0 focus-visible:ring-1 focus-visible:ring-[#4285F4]/30 text-sm"
               style={{ caretColor: '#4285F4' }}
             />
