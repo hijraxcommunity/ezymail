@@ -210,7 +210,7 @@ export function AdvancedSearchDialog({ open, onOpenChange }: AdvancedSearchDialo
             </Label>
             <Input
               id="adv-query"
-              placeholder='e.g. "from:sarah is:unread" or plain text'
+              placeholder='e.g. "from:ahmad is:unread" or plain text'
               value={form.query}
               onChange={(e) => updateField('query', e.target.value)}
               className="h-9 text-sm"
