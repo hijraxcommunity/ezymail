@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X } from 'lucide-react'
+import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Building2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -68,12 +68,85 @@ const STEPS = [
   { id: 4, label: 'Review', icon: Shield },
 ]
 
+// ─── Illustration Side ────────────────────────────────────────────────────
+
+function IllustrationSide() {
+  return (
+    <div className="hidden lg:flex lg:w-[55%] bg-gradient-to-br from-[#34A853] via-[#2d9249] to-[#1a6e35] relative overflow-hidden flex-col items-center justify-center p-12">
+      {/* Decorative circles */}
+      <div className="absolute top-[-80px] right-[-80px] w-[300px] h-[300px] rounded-full bg-white/5" />
+      <div className="absolute bottom-[-60px] left-[-60px] w-[250px] h-[250px] rounded-full bg-white/5" />
+      <div className="absolute top-[35%] right-[15%] w-[120px] h-[120px] rounded-full bg-white/[0.03]" />
+      <div className="absolute bottom-[30%] right-[50%] w-[80px] h-[80px] rounded-full bg-white/[0.04]" />
+
+      {/* Floating elements */}
+      <div className="absolute top-[18%] left-[18%] opacity-20">
+        <svg className="w-14 h-14 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
+        </svg>
+      </div>
+      <div className="absolute bottom-[20%] right-[18%] opacity-15 rotate-[15deg]">
+        <svg className="w-12 h-12 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+        </svg>
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 text-center max-w-md">
+        {/* Shield illustration */}
+        <div className="mx-auto mb-10 w-48 h-48 rounded-3xl bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+          <svg className="w-24 h-24 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+
+        <h2 className="text-4xl font-bold text-white mb-4 leading-tight">
+          Join{' '}
+          <span className="relative inline-block">
+            <span className="relative z-10">EzyMail</span>
+            <motion.span
+              className="absolute bottom-0 left-0 w-full h-3 bg-white/30 rounded-full -z-0"
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+            />
+          </span>
+          <br />today
+        </h2>
+        <p className="text-green-100 text-lg leading-relaxed">
+          Create your free email account in seconds. Enjoy secure, fast, and beautiful email experience.
+        </p>
+
+        {/* Features */}
+        <div className="mt-10 space-y-3">
+          {[
+            'Free @ezy.af email address',
+            'End-to-end encryption',
+            'Smart spam filtering',
+          ].map((feature, i) => (
+            <div key={i} className="flex items-center gap-3 justify-center">
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                <Check className="w-3.5 h-3.5 text-white" />
+              </div>
+              <p className="text-sm text-green-100">{feature}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Register Form Component ───────────────────────────────────────────────
+
 export function RegisterForm() {
   const { setUser, setAuthView } = useAppStore()
   const [step, setStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
 
   // Step 1: Name
   const [firstName, setFirstName] = useState('')
@@ -207,16 +280,20 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-md"
-      >
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
+    <div className="min-h-screen flex bg-white dark:bg-gray-950">
+      {/* Left: Illustration */}
+      <IllustrationSide />
+
+      {/* Right: Register form */}
+      <div className="flex-1 lg:w-[45%] flex flex-col justify-center items-center p-6 sm:p-10">
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="w-full max-w-[420px]"
+        >
           {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-6">
+          <div className="flex items-center gap-2.5 mb-6">
             <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
             <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
@@ -225,7 +302,7 @@ export function RegisterForm() {
           </div>
 
           {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8 px-2 sm:px-4">
+          <div className="flex items-center justify-between mb-6 px-2 sm:px-4">
             {STEPS.map((s, i) => {
               const StepIcon = s.icon
               const isActive = step === s.id
@@ -283,7 +360,7 @@ export function RegisterForm() {
                     <Input
                       {...nameForm.register('firstName')}
                       placeholder="John"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       autoFocus
                     />
                     {nameForm.formState.errors.firstName && (
@@ -295,7 +372,7 @@ export function RegisterForm() {
                     <Input
                       {...nameForm.register('lastName')}
                       placeholder="Doe"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                     />
                     {nameForm.formState.errors.lastName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
@@ -313,7 +390,7 @@ export function RegisterForm() {
                         value={emailUsername}
                         onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
-                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
+                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
                         @ezy.af
@@ -365,7 +442,7 @@ export function RegisterForm() {
                     <select
                       value={month}
                       onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
-                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
                     >
                       <option value={0}>Select month</option>
                       {MONTHS.map((m, i) => (
@@ -379,7 +456,7 @@ export function RegisterForm() {
                       <select
                         value={day}
                         onChange={(e) => setDay(Number(e.target.value))}
-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       >
                         <option value={0}>Day</option>
                         {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
@@ -392,7 +469,7 @@ export function RegisterForm() {
                       <select
                         value={year}
                         onChange={(e) => setYear(Number(e.target.value))}
-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       >
                         <option value={0}>Year</option>
                         {generateYears().map(y => (
@@ -428,7 +505,7 @@ export function RegisterForm() {
                         {...passwordForm.register('password')}
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Create a strong password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                         autoFocus
                       />
                       <button
@@ -465,7 +542,7 @@ export function RegisterForm() {
                         {...passwordForm.register('confirmPassword')}
                         type={showConfirmPassword ? 'text' : 'password'}
                         placeholder="Confirm your password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       />
                       <button
                         type="button"
@@ -566,12 +643,41 @@ export function RegisterForm() {
               Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
             </button>
           </div>
-        </div>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
+          {/* Personal / Business Tabs */}
+          <div className="mt-8 flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('personal')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeTab === 'personal'
+                  ? 'bg-white dark:bg-gray-700 text-[#1F1F1F] dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              Personal
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('business')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeTab === 'business'
+                  ? 'bg-white dark:bg-gray-700 text-[#1F1F1F] dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              Business
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-400 mt-8">
           &copy; 2025 EzyMail. All rights reserved.
         </p>
-      </motion.div>
+      </div>
     </div>
   )
 }
