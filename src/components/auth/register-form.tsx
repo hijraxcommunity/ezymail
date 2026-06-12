@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Building2, Phone, Globe, Briefcase } from 'lucide-react'
+import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -68,75 +68,12 @@ const STEPS = [
   { id: 4, label: 'Review', icon: Shield },
 ]
 
-const BUSINESS_STEPS = [
-  { id: 1, label: 'Business', icon: Building2 },
-  { id: 2, label: 'Contact', icon: Phone },
-  { id: 3, label: 'Password', icon: Lock },
-  { id: 4, label: 'Review', icon: Shield },
-]
-
-// ─── Illustration Side ────────────────────────────────────────────────────
-
-function IllustrationSide() {
-  return (
-    <div
-      className="hidden md:flex md:w-1/2 relative overflow-hidden flex-col items-center justify-center"
-      style={{ background: 'linear-gradient(160deg, #5493EA 0%, #3C92B4 25%, #3A979F 50%, #37A175 75%, #40AA6B 100%)' }}
-    >
-      {/* Decorative blue curved wave shapes */}
-      <svg className="absolute top-[12%] left-[-5%] opacity-30" width="500" height="300" viewBox="0 0 500 300">
-        <path d="M0 150 Q125 50 250 120 Q375 190 500 100 L500 300 L0 300 Z" fill="#6DB9FD" />
-      </svg>
-      <svg className="absolute top-[20%] left-[-5%] opacity-20" width="500" height="300" viewBox="0 0 500 300">
-        <path d="M0 180 Q150 80 300 150 Q400 200 500 130 L500 300 L0 300 Z" fill="white" />
-      </svg>
-
-      {/* Shield + checkmark illustration */}
-      <div className="relative z-10 mb-10">
-        <div className="w-36 h-36 rounded-full bg-white/15 flex items-center justify-center">
-          <svg className="w-20 h-20 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-            <path d="m9 12 2 2 4-4" />
-          </svg>
-        </div>
-      </div>
-
-      <div className="relative z-10 text-center max-w-xs">
-        <h2 className="text-3xl font-bold text-white mb-3 leading-tight">
-          Create your account
-        </h2>
-        <p className="text-[15px] text-white/80 leading-relaxed">
-          Get your free @ezy.af email address in seconds.
-        </p>
-      </div>
-
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3">
-        <div className="w-2 h-2 rounded-full bg-white/40" />
-        <div className="w-2 h-2 rounded-full bg-white/25" />
-        <div className="w-2 h-2 rounded-full bg-white/50" />
-      </div>
-    </div>
-  )
-}
-
-// ─── Register Form Component ───────────────────────────────────────────────
-
 export function RegisterForm() {
-  const { setUser, setAuthView, registerTab } = useAppStore()
+  const { setUser, setAuthView } = useAppStore()
   const [step, setStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [activeTab, setActiveTab] = useState<'personal' | 'business'>(registerTab)
-
-  // Business fields
-  const [businessName, setBusinessName] = useState('')
-  const [businessIndustry, setBusinessIndustry] = useState('')
-  const [businessPhone, setBusinessPhone] = useState('')
-  const [businessWebsite, setBusinessWebsite] = useState('')
-  const [businessEmailUsername, setBusinessEmailUsername] = useState('')
-  const [businessEmailStatus, setBusinessEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
-  const [companySlug, setCompanySlug] = useState('')
 
   // Step 1: Name
   const [firstName, setFirstName] = useState('')
@@ -168,16 +105,9 @@ export function RegisterForm() {
 
   // Build the full email from username + @ezy.af
   const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
-  const slugDomain = companySlug.trim() ? `${companySlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')}.ezy` : ''
-  const businessFullEmail = businessEmailUsername.trim() && companySlug.trim() ? `${businessEmailUsername.trim().toLowerCase()}@${slugDomain}` : ''
-
-  // Auto-generate company slug from business name
-  const generateSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').substring(0, 30)
 
   // Validate username (letters, numbers, dots, underscores, hyphens)
   const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
-  const isBusinessValidUsername = /^[a-zA-Z0-9._-]+$/.test(businessEmailUsername.trim()) && businessEmailUsername.trim().length > 0
-  const isValidSlug = /^[a-z0-9-]+$/.test(companySlug.trim()) && companySlug.trim().length >= 2
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -199,27 +129,6 @@ export function RegisterForm() {
     }, 600)
     return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
   }, [fullEmail, isValidUsername])
-
-  // Check business email availability
-  const businessCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (!businessFullEmail || !isBusinessValidUsername || !isValidSlug) {
-      setBusinessEmailStatus('idle')
-      return
-    }
-    setBusinessEmailStatus('checking')
-    if (businessCheckTimerRef.current) clearTimeout(businessCheckTimerRef.current)
-    businessCheckTimerRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(businessFullEmail)}`)
-        const data = await res.json()
-        setBusinessEmailStatus(data.available ? 'available' : 'taken')
-      } catch {
-        setBusinessEmailStatus('idle')
-      }
-    }, 600)
-    return () => { if (businessCheckTimerRef.current) clearTimeout(businessCheckTimerRef.current) }
-  }, [businessFullEmail, isBusinessValidUsername])
 
   const handleNameNext = () => {
     const fn = nameForm.getValues('firstName')
@@ -261,79 +170,27 @@ export function RegisterForm() {
     })
   }
 
-  const handleBusinessInfoNext = () => {
-    if (!businessName.trim()) {
-      toast.error('Please enter your business name')
-      return
-    }
-    const slug = companySlug.trim() || generateSlug(businessName)
-    if (slug.length < 2) {
-      toast.error('Company slug must be at least 2 characters')
-      return
-    }
-    if (!/^[a-z0-9-]+$/.test(slug)) {
-      toast.error('Company slug can only contain lowercase letters, numbers, and hyphens')
-      return
-    }
-    if (!companySlug.trim()) setCompanySlug(slug)
-    setStep(2)
-  }
-
-  const handleBusinessContactNext = () => {
-    if (!businessFullEmail || !isBusinessValidUsername || !isValidSlug) {
-      toast.error('Please enter a valid business email address')
-      return
-    }
-    if (businessEmailStatus === 'taken') {
-      toast.error('This email is already taken. Please choose another')
-      return
-    }
-    setStep(3)
-  }
-
   const handleRegister = async () => {
     if (!agreedToTerms) {
       toast.error('You must agree to the terms and conditions')
       return
     }
-    if (activeTab === 'personal') {
-      if (!fullEmail || emailStatus === 'taken') {
-        toast.error('Please choose an available email address')
-        return
-      }
-    } else {
-      if (!businessFullEmail || businessEmailStatus === 'taken' || !isValidSlug) {
-        toast.error('Please choose an available email address')
-        return
-      }
+    if (!fullEmail || emailStatus === 'taken') {
+      toast.error('Please choose an available email address')
+      return
     }
     setIsLoading(true)
     try {
-      const body = activeTab === 'personal'
-        ? {
-            firstName,
-            lastName,
-            dateOfBirth: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-            email: fullEmail,
-            password: passwordForm.getValues('password'),
-          }
-        : {
-            firstName: businessName,
-            lastName: '',
-            dateOfBirth: '2000-01-01',
-            email: businessFullEmail,
-            password: passwordForm.getValues('password'),
-            accountType: 'business',
-            businessName,
-            businessIndustry,
-            businessPhone,
-            businessWebsite,
-            companySlug: companySlug.trim() || generateSlug(businessName),
-          }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          dateOfBirth: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          email: fullEmail,
+          password: passwordForm.getValues('password'),
+        }),
       })
       const result = await res.json()
       if (!res.ok) {
@@ -350,30 +207,26 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[#F0F0F0]">
-      {/* Left: Illustration */}
-      <IllustrationSide />
-
-      {/* Right: Register form */}
-      <div className="flex-1 md:w-1/2 flex flex-col min-h-screen md:min-h-0 justify-center items-center px-6 py-10 bg-white">
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="w-full max-w-[420px] flex-1 flex flex-col justify-center"
-        >
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="w-full max-w-md"
+      >
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
           {/* Logo */}
-          <div className="flex items-center gap-2 mb-4">
-            <img src="/favicon-32.png" alt="EzyMail" className="w-9 h-9 rounded-lg" />
-            <span className="text-xl font-bold text-[#1F1F1F]">
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
+            <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>
-            </span>
+            </h1>
           </div>
 
           {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-5 px-2 sm:px-4">
-            {(activeTab === 'personal' ? STEPS : BUSINESS_STEPS).map((s, i) => {
+          <div className="flex items-center justify-between mb-8 px-2 sm:px-4">
+            {STEPS.map((s, i) => {
               const StepIcon = s.icon
               const isActive = step === s.id
               const isCompleted = step > s.id
@@ -409,340 +262,6 @@ export function RegisterForm() {
 
           {/* Step Content */}
           <AnimatePresence mode="wait">
-            {activeTab === 'business' ? (
-              <>
-                {/* BUSINESS STEP 1: Business Info */}
-                {step === 1 && (
-                  <motion.div
-                    key="bstep1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
-                      Tell us about your business
-                    </h2>
-                    <p className="text-sm text-[#444746] mb-5">
-                      Enter your company details to get started
-                    </p>
-                    <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Building2 className="w-3.5 h-3.5 inline mr-1" />
-                          Business name <span className="text-[#EA4335]">*</span>
-                        </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <input
-                            type="text"
-                            placeholder="e.g. EzyTech Solutions"
-                            value={businessName}
-                            onChange={(e) => {
-                              setBusinessName(e.target.value)
-                              // Auto-generate slug when slug field is empty
-                              if (!companySlug.trim()) {
-                                setCompanySlug(generateSlug(e.target.value))
-                              }
-                            }}
-                            autoFocus
-                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Briefcase className="w-3.5 h-3.5 inline mr-1" />
-                          Industry
-                        </label>
-                        <div className="relative">
-                          <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <select
-                            value={businessIndustry}
-                            onChange={(e) => setBusinessIndustry(e.target.value)}
-                            className="w-full h-11 pl-10 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors appearance-none"
-                          >
-                          <option value="">Select your industry</option>
-                          <option value="technology">Technology & IT</option>
-                          <option value="finance">Finance & Banking</option>
-                          <option value="healthcare">Healthcare & Medical</option>
-                          <option value="education">Education</option>
-                          <option value="retail">Retail & E-commerce</option>
-                          <option value="manufacturing">Manufacturing</option>
-                          <option value="marketing">Marketing & Advertising</option>
-                          <option value="consulting">Consulting</option>
-                          <option value="food">Food & Restaurant</option>
-                          <option value="transport">Transport & Logistics</option>
-                          <option value="real-estate">Real Estate</option>
-                          <option value="other">Other</option>
-                        </select>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Globe className="w-3.5 h-3.5 inline mr-1" />
-                          Company email domain <span className="text-[#EA4335]">*</span>
-                        </label>
-                        <div className="relative">
-                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <input
-                            type="text"
-                            placeholder="yourcompany"
-                            value={companySlug}
-                            onChange={(e) => setCompanySlug(e.target.value.replace(/[^a-z0-9-]/g, ''))}
-                            className="w-full h-11 pl-10 pr-16 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                          />
-                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
-                            .ezy
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-[#5F6368] mt-1.5">
-                          Your business emails will be: <span className="font-medium">name@{companySlug.trim() || 'yourcompany'}.ezy</span>
-                        </p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Globe className="w-3.5 h-3.5 inline mr-1" />
-                          Website
-                        </label>
-                        <div className="relative">
-                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <input
-                            type="text"
-                            placeholder="https://yourcompany.com (optional)"
-                            value={businessWebsite}
-                            onChange={(e) => setBusinessWebsite(e.target.value)}
-                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* BUSINESS STEP 2: Contact Info + Email */}
-                {step === 2 && (
-                  <motion.div
-                    key="bstep2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
-                      Business contact details
-                    </h2>
-                    <p className="text-sm text-[#444746] mb-5">
-                      How can we reach your business?
-                    </p>
-                    <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Phone className="w-3.5 h-3.5 inline mr-1" />
-                          Business phone number
-                        </label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <input
-                            type="tel"
-                            placeholder="+93 7XX XXX XXX"
-                            value={businessPhone}
-                            onChange={(e) => setBusinessPhone(e.target.value)}
-                            autoFocus
-                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#1F1F1F]">
-                          <Mail className="w-3.5 h-3.5 inline mr-1" />
-                          Business email address <span className="text-[#EA4335]">*</span>
-                        </label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <input
-                            type="text"
-                            placeholder="info"
-                            value={businessEmailUsername}
-                            onChange={(e) => { setBusinessEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setBusinessEmailStatus('idle') }}
-                            className="w-full h-11 pl-10 pr-32 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                          />
-                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
-                            @{slugDomain || 'company.ezy'}
-                          </span>
-                        </div>
-                        {businessFullEmail && isBusinessValidUsername && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            {businessEmailStatus === 'checking' && (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
-                            )}
-                            {businessEmailStatus === 'available' && (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                <span className="text-xs text-emerald-500 font-medium">{businessFullEmail} is available</span>
-                              </>
-                            )}
-                            {businessEmailStatus === 'taken' && (
-                              <>
-                                <X className="w-3.5 h-3.5 text-red-500" />
-                                <span className="text-xs text-red-500 font-medium">{businessFullEmail} is taken</span>
-                              </>
-                            )}
-                          </div>
-                        )}
-                        <p className="text-[12px] text-[#5F6368] mt-1.5">
-                          Your business email format: <span className="font-medium">username@{slugDomain || 'company.ezy'}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* BUSINESS STEP 3 & 4: Same password and review — reuse existing steps */}
-                {step === 3 && (
-                  <motion.div
-                    key="bstep3"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
-                      Create a password
-                    </h2>
-                    <p className="text-sm text-[#444746] mb-5">
-                      Use 8+ characters with uppercase, lowercase & numbers
-                    </p>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <Input
-                            {...passwordForm.register('password')}
-                            type={showPassword ? 'text' : 'password'}
-                            placeholder="Create a strong password"
-                            className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        {passwordForm.formState.errors.password && (
-                          <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
-                        )}
-                        {passwordValue && (
-                          <div className="space-y-1">
-                            <div className="flex gap-1">
-                              {[1, 2, 3, 4, 5].map(i => (
-                                <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                                  i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
-                                }`} />
-                              ))}
-                            </div>
-                            <p className={`text-xs font-medium ${
-                              passwordStrength.label === 'Weak' ? 'text-red-500' :
-                              passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
-                            }`}>{passwordStrength.label}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                          <Input
-                            {...passwordForm.register('confirmPassword')}
-                            type={showConfirmPassword ? 'text' : 'password'}
-                            placeholder="Confirm your password"
-                            className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        {passwordForm.formState.errors.confirmPassword && (
-                          <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-                {step === 4 && (
-                  <motion.div
-                    key="bstep4"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
-                      Review your business account
-                    </h2>
-                    <p className="text-sm text-[#444746] mb-5">
-                      Double check before creating your account
-                    </p>
-                    <div className="space-y-4 mb-6">
-                      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">Business name</span>
-                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{businessName}</span>
-                        </div>
-                        {businessIndustry && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Industry</span>
-                            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white capitalize">{businessIndustry.replace('-', ' ')}</span>
-                          </div>
-                        )}
-                        {businessPhone && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Phone</span>
-                            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{businessPhone}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">Email domain</span>
-                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">@{slugDomain || 'company.ezy'}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">Email</span>
-                          <span className={`text-sm font-medium ${businessFullEmail && isBusinessValidUsername && businessEmailStatus !== 'taken' ? 'text-[#34A853]' : 'text-red-500'}`}>
-                            {businessFullEmail || 'Not set'}
-                          </span>
-                        </div>
-                        {businessWebsite && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Website</span>
-                            <span className="text-sm font-medium text-[#4285F4] break-all">{businessWebsite}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          id="terms"
-                          checked={agreedToTerms}
-                          onCheckedChange={(c) => setAgreedToTerms(c === true)}
-                          className="data-[state=checked]:bg-[#34A853] data-[state=checked]:border-[#34A853] mt-0.5"
-                        />
-                        <label htmlFor="terms" className="text-sm text-[#444746] cursor-pointer leading-relaxed">
-                          I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
-                        </label>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </>
-            ) : (
-              <>
             {/* STEP 1: Name + Email */}
             {step === 1 && (
               <motion.div
@@ -761,29 +280,23 @@ export function RegisterForm() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                      <Input
-                        {...nameForm.register('firstName')}
-                        placeholder="Ahmad"
-                        className="h-11 pl-10 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                        autoFocus
-                      />
-                    </div>
+                    <Input
+                      {...nameForm.register('firstName')}
+                      placeholder="John"
+                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                      autoFocus
+                    />
                     {nameForm.formState.errors.firstName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                      <Input
-                        {...nameForm.register('lastName')}
-                        placeholder="Amiri"
-                        className="h-11 pl-10 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                      />
-                    </div>
+                    <Input
+                      {...nameForm.register('lastName')}
+                      placeholder="Doe"
+                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                    />
                     {nameForm.formState.errors.lastName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
                     )}
@@ -796,12 +309,11 @@ export function RegisterForm() {
                       Email address
                     </label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         value={emailUsername}
                         onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
-                        className="h-11 pl-10 pr-20 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
                         @ezy.af
@@ -850,52 +362,43 @@ export function RegisterForm() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                      <select
-                        value={month}
-                        onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
-                        className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
-                      >
+                    <select
+                      value={month}
+                      onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
+                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                    >
                       <option value={0}>Select month</option>
                       {MONTHS.map((m, i) => (
                         <option key={m} value={i + 1}>{m}</option>
                       ))}
-                      </select>
-                    </div>
+                    </select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                        <select
-                          value={day}
-                          onChange={(e) => setDay(Number(e.target.value))}
-                          className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
-                        >
+                      <select
+                        value={day}
+                        onChange={(e) => setDay(Number(e.target.value))}
+                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                      >
                         <option value={0}>Day</option>
                         {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </select>
-                      </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
-                        <select
-                          value={year}
-                          onChange={(e) => setYear(Number(e.target.value))}
-                          className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
-                        >
+                      <select
+                        value={year}
+                        onChange={(e) => setYear(Number(e.target.value))}
+                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                      >
                         <option value={0}>Year</option>
                         {generateYears().map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -921,12 +424,11 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         {...passwordForm.register('password')}
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Create a strong password"
-                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                         autoFocus
                       />
                       <button
@@ -959,12 +461,11 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         {...passwordForm.register('confirmPassword')}
                         type={showConfirmPassword ? 'text' : 'password'}
                         placeholder="Confirm your password"
-                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                       />
                       <button
                         type="button"
@@ -1032,12 +533,10 @@ export function RegisterForm() {
                 </div>
               </motion.div>
             )}
-              </>
-            )}
           </AnimatePresence>
 
           {/* Navigation */}
-          <div className="flex gap-3 mt-5">
+          <div className="flex gap-3 mt-6 sm:mt-8">
             {step > 1 && (
               <Button type="button" variant="outline" onClick={() => setStep(step - 1)}
                 className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700">
@@ -1047,20 +546,14 @@ export function RegisterForm() {
             )}
             {step < 4 ? (
               <Button type="button"
-                onClick={() => {
-                  if (activeTab === 'business') {
-                    if (step === 1) handleBusinessInfoNext(); else if (step === 2) handleBusinessContactNext(); else if (step === 3) handlePasswordNext()
-                  } else {
-                    if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext()
-                  }
-                }}
-                className={`h-11 rounded-xl flex-1 text-white font-medium ${activeTab === 'business' ? 'bg-[#34A853] hover:bg-[#2d9249]' : 'bg-[#4285F4] hover:bg-[#1a73e8]'}`}>
+                onClick={() => { if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext() }}
+                className="h-11 rounded-xl flex-1 bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium">
                 Continue
                 <ArrowRight className="w-4 h-4 ml-1.5" />
               </Button>
             ) : (
               <Button type="button" onClick={handleRegister} disabled={isLoading}
-                className={`h-11 rounded-xl flex-1 text-white font-medium ${activeTab === 'business' ? 'bg-[#34A853] hover:bg-[#2d9249]' : 'bg-[#4285F4] hover:bg-[#1a73e8]'}`}>
+                className="h-11 rounded-xl flex-1 bg-[#34A853] hover:bg-[#2d9249] text-white font-medium">
                 {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Create Account'}
               </Button>
             )}
@@ -1069,50 +562,16 @@ export function RegisterForm() {
           {/* Back to login */}
           <div className="text-center mt-5">
             <button onClick={() => setAuthView('login')}
-              className="text-[13px] text-[#444746] hover:text-[#4285F4] transition-colors">
+              className="text-sm text-[#444746] dark:text-gray-400 hover:text-[#4285F4] transition-colors">
               Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
             </button>
           </div>
-
-          {/* Copyright */}
-          <p className="text-center text-[11px] text-[#9AA0A6] mt-6">
-            &copy; 2025 EzyMail. All rights reserved.
-          </p>
-        </motion.div>
-
-        {/* ── Bottom Tab Bar: Personal / Business ── */}
-        <div className="border-t border-[#E5E7EB] bg-white">
-          <div className="flex items-center justify-center gap-1 py-3 px-4">
-            {/* Personal tab - always visible */}
-            <button
-              type="button"
-              onClick={() => { setActiveTab('personal'); setStep(1) }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeTab === 'personal'
-                  ? 'bg-[#4285F4] text-white shadow-sm'
-                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              <span>Personal</span>
-            </button>
-
-            {/* Business tab - only visible on md+ screens (desktop/tablet) */}
-            <button
-              type="button"
-              onClick={() => { setActiveTab('business'); setStep(1) }}
-              className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeTab === 'business'
-                  ? 'bg-[#34A853] text-white shadow-sm'
-                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Business</span>
-            </button>
-          </div>
         </div>
-      </div>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          &copy; 2025 EzyMail. All rights reserved.
+        </p>
+      </motion.div>
     </div>
   )
 }
