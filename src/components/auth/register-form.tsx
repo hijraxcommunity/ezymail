@@ -73,7 +73,7 @@ const STEPS = [
 function IllustrationSide() {
   return (
     <div
-      className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center"
+      className="hidden md:flex md:w-1/2 relative overflow-hidden flex-col items-center justify-center"
       style={{ background: 'linear-gradient(160deg, #5493EA 0%, #3C92B4 25%, #3A979F 50%, #37A175 75%, #40AA6B 100%)' }}
     >
       {/* Decorative blue curved wave shapes */}
@@ -259,12 +259,12 @@ export function RegisterForm() {
       <IllustrationSide />
 
       {/* Right: Register form */}
-      <div className="flex-1 lg:w-1/2 flex flex-col justify-center items-center px-6 py-10 bg-white">
+      <div className="flex-1 md:w-1/2 flex flex-col min-h-screen md:min-h-0 justify-center items-center px-6 py-10 bg-white">
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="w-full max-w-[420px]"
+          className="w-full max-w-[420px] flex-1 flex flex-col justify-center"
         >
           {/* Logo */}
           <div className="flex items-center gap-2 mb-4">
@@ -273,34 +273,6 @@ export function RegisterForm() {
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>
             </span>
-          </div>
-
-          {/* Personal / Business Tabs */}
-          <div className="flex items-center bg-[#F1F3F4] rounded-full p-1 mb-5">
-            <button
-              type="button"
-              onClick={() => setActiveTab('personal')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeTab === 'personal'
-                  ? 'bg-white text-[#1F1F1F] shadow-sm'
-                  : 'text-[#5F6368] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              Personal
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('business')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeTab === 'business'
-                  ? 'bg-white text-[#1F1F1F] shadow-sm'
-                  : 'text-[#5F6368] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              Business
-            </button>
           </div>
 
           {/* Progress Steps */}
@@ -651,6 +623,39 @@ export function RegisterForm() {
             &copy; 2025 EzyMail. All rights reserved.
           </p>
         </motion.div>
+
+        {/* ── Bottom Tab Bar: Personal / Business ── */}
+        <div className="border-t border-[#E5E7EB] bg-white">
+          <div className="flex items-center justify-center gap-1 py-3 px-4">
+            {/* Personal tab - always visible */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('personal')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                activeTab === 'personal'
+                  ? 'bg-[#4285F4] text-white shadow-sm'
+                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span>Personal</span>
+            </button>
+
+            {/* Business tab - only visible on md+ screens (desktop/tablet) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('business')}
+              className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                activeTab === 'business'
+                  ? 'bg-[#34A853] text-white shadow-sm'
+                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              <span>Business</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
