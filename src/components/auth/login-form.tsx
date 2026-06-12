@@ -74,7 +74,7 @@ function IllustrationPanel() {
 // ─── Main Login Form ──────────────────────────────────────────────────────
 
 export function LoginForm() {
-  const { setUser, setAuthView } = useAppStore()
+  const { setUser, setAuthView, setRegisterTab } = useAppStore()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
@@ -249,22 +249,17 @@ export function LoginForm() {
           </div>
 
           {/* Register link */}
-          <div className="text-center space-y-2">
+          <div className="text-center">
             <p className="text-[13px] text-[#444746]">
-              Don&apos;t have an account?{' '}
+              {activeTab === 'personal' ? "Don't have an account?" : 'New to EzyMail?'}{' '}
               <button
-                onClick={() => setAuthView('register')}
+                onClick={() => {
+                  setRegisterTab(activeTab)
+                  setAuthView('register')
+                }}
                 className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
               >
-                Create account
-              </button>
-            </p>
-            <p className="text-[13px] text-[#444746]">
-              <button
-                onClick={() => setAuthView('register')}
-                className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
-              >
-                Create a business account instead
+                Create one
               </button>
             </p>
           </div>
