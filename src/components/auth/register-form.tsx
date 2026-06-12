@@ -122,12 +122,12 @@ function IllustrationSide() {
 // ─── Register Form Component ───────────────────────────────────────────────
 
 export function RegisterForm() {
-  const { setUser, setAuthView } = useAppStore()
+  const { setUser, setAuthView, registerTab } = useAppStore()
   const [step, setStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
+  const [activeTab, setActiveTab] = useState<'personal' | 'business'>(registerTab)
 
   // Business fields
   const [businessName, setBusinessName] = useState('')
@@ -136,6 +136,7 @@ export function RegisterForm() {
   const [businessWebsite, setBusinessWebsite] = useState('')
   const [businessEmailUsername, setBusinessEmailUsername] = useState('')
   const [businessEmailStatus, setBusinessEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [companySlug, setCompanySlug] = useState('')
 
   // Step 1: Name
   const [firstName, setFirstName] = useState('')
@@ -167,11 +168,16 @@ export function RegisterForm() {
 
   // Build the full email from username + @ezy.af
   const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
-  const businessFullEmail = businessEmailUsername.trim() ? `${businessEmailUsername.trim().toLowerCase()}@ezy.af` : ''
+  const slugDomain = companySlug.trim() ? `${companySlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')}.ezy` : ''
+  const businessFullEmail = businessEmailUsername.trim() && companySlug.trim() ? `${businessEmailUsername.trim().toLowerCase()}@${slugDomain}` : ''
+
+  // Auto-generate company slug from business name
+  const generateSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').substring(0, 30)
 
   // Validate username (letters, numbers, dots, underscores, hyphens)
   const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
   const isBusinessValidUsername = /^[a-zA-Z0-9._-]+$/.test(businessEmailUsername.trim()) && businessEmailUsername.trim().length > 0
+  const isValidSlug = /^[a-z0-9-]+$/.test(companySlug.trim()) && companySlug.trim().length >= 2
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -197,7 +203,7 @@ export function RegisterForm() {
   // Check business email availability
   const businessCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!businessFullEmail || !isBusinessValidUsername) {
+    if (!businessFullEmail || !isBusinessValidUsername || !isValidSlug) {
       setBusinessEmailStatus('idle')
       return
     }
@@ -260,12 +266,22 @@ export function RegisterForm() {
       toast.error('Please enter your business name')
       return
     }
+    const slug = companySlug.trim() || generateSlug(businessName)
+    if (slug.length < 2) {
+      toast.error('Company slug must be at least 2 characters')
+      return
+    }
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      toast.error('Company slug can only contain lowercase letters, numbers, and hyphens')
+      return
+    }
+    if (!companySlug.trim()) setCompanySlug(slug)
     setStep(2)
   }
 
   const handleBusinessContactNext = () => {
-    if (!businessFullEmail || !isBusinessValidUsername) {
-      toast.error('Please enter a valid business email username')
+    if (!businessFullEmail || !isBusinessValidUsername || !isValidSlug) {
+      toast.error('Please enter a valid business email address')
       return
     }
     if (businessEmailStatus === 'taken') {
@@ -286,7 +302,7 @@ export function RegisterForm() {
         return
       }
     } else {
-      if (!businessFullEmail || businessEmailStatus === 'taken') {
+      if (!businessFullEmail || businessEmailStatus === 'taken' || !isValidSlug) {
         toast.error('Please choose an available email address')
         return
       }
@@ -312,6 +328,7 @@ export function RegisterForm() {
             businessIndustry,
             businessPhone,
             businessWebsite,
+            companySlug: companySlug.trim() || generateSlug(businessName),
           }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -419,7 +436,13 @@ export function RegisterForm() {
                           type="text"
                           placeholder="e.g. EzyTech Solutions"
                           value={businessName}
-                          onChange={(e) => setBusinessName(e.target.value)}
+                          onChange={(e) => {
+                            setBusinessName(e.target.value)
+                            // Auto-generate slug when slug field is empty
+                            if (!companySlug.trim()) {
+                              setCompanySlug(generateSlug(e.target.value))
+                            }
+                          }}
                           autoFocus
                           className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
                         />
@@ -448,6 +471,27 @@ export function RegisterForm() {
                           <option value="real-estate">Real Estate</option>
                           <option value="other">Other</option>
                         </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+                          <Globe className="w-3.5 h-3.5 inline mr-1" />
+                          Company email domain <span className="text-[#EA4335]">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="yourcompany"
+                            value={companySlug}
+                            onChange={(e) => setCompanySlug(e.target.value.replace(/[^a-z0-9-]/g, ''))}
+                            className="w-full h-11 px-4 pr-16 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
+                            .ezy
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-[#5F6368] mt-1.5">
+                          Your business emails will be: <span className="font-medium">name@{companySlug.trim() || 'yourcompany'}.ezy</span>
+                        </p>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[13px] font-medium text-[#1F1F1F]">
@@ -504,13 +548,13 @@ export function RegisterForm() {
                         <div className="relative">
                           <input
                             type="text"
-                            placeholder="yourbusiness"
+                            placeholder="info"
                             value={businessEmailUsername}
                             onChange={(e) => { setBusinessEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setBusinessEmailStatus('idle') }}
-                            className="w-full h-11 px-4 pr-20 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                            className="w-full h-11 px-4 pr-32 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
                           />
                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
-                            @ezy.af
+                            @{slugDomain || 'company.ezy'}
                           </span>
                         </div>
                         {businessFullEmail && isBusinessValidUsername && (
@@ -533,7 +577,7 @@ export function RegisterForm() {
                           </div>
                         )}
                         <p className="text-[12px] text-[#5F6368] mt-1.5">
-                          This will be your primary business email address
+                          Your business email format: <span className="font-medium">username@{slugDomain || 'company.ezy'}</span>
                         </p>
                       </div>
                     </div>
@@ -649,6 +693,10 @@ export function RegisterForm() {
                             <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{businessPhone}</span>
                           </div>
                         )}
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-500">Email domain</span>
+                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">@{slugDomain || 'company.ezy'}</span>
+                        </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-500">Email</span>
                           <span className={`text-sm font-medium ${businessFullEmail && isBusinessValidUsername && businessEmailStatus !== 'taken' ? 'text-[#34A853]' : 'text-red-500'}`}>
@@ -1004,7 +1052,7 @@ export function RegisterForm() {
             {/* Personal tab - always visible */}
             <button
               type="button"
-              onClick={() => setActiveTab('personal')}
+              onClick={() => { setActiveTab('personal'); setStep(1) }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
                 activeTab === 'personal'
                   ? 'bg-[#4285F4] text-white shadow-sm'
@@ -1018,7 +1066,7 @@ export function RegisterForm() {
             {/* Business tab - only visible on md+ screens (desktop/tablet) */}
             <button
               type="button"
-              onClick={() => setActiveTab('business')}
+              onClick={() => { setActiveTab('business'); setStep(1) }}
               className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
                 activeTab === 'business'
                   ? 'bg-[#34A853] text-white shadow-sm'

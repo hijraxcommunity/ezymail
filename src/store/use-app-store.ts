@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { User, Email, Folder } from '@prisma/client';
 
 export type AuthView = 'login' | 'register' | 'forgot-password' | null;
+export type RegisterTab = 'personal' | 'business';
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred' | 'archive' | 'search' | 'folder' | 'scheduled' | 'snoozed';
 export type SettingsView = string | null;
 export type AdminView = 'dashboard' | 'users' | 'reports' | 'logs' | 'settings' | null;
@@ -100,6 +101,7 @@ interface AppState {
   user: UserSafe | null;
   isAuthenticated: boolean;
   authView: AuthView;
+  registerTab: RegisterTab;
 
   // Mail
   currentFolder: MailView;
@@ -167,6 +169,7 @@ interface AppState {
   // Actions - Auth
   setUser: (user: UserSafe | null) => void;
   setAuthView: (view: AuthView) => void;
+  setRegisterTab: (tab: RegisterTab) => void;
 
   // Actions - Mail
   setCurrentFolder: (folder: MailView) => void;
@@ -252,6 +255,7 @@ export const useAppStore = create<AppState>()(
       user: null,
       isAuthenticated: false,
       authView: 'login',
+      registerTab: 'personal' as RegisterTab,
 
       // Mail
       currentFolder: 'inbox',
@@ -318,6 +322,7 @@ export const useAppStore = create<AppState>()(
       // Actions - Auth
       setUser: (user) => set({ user, isAuthenticated: !!user, authView: null, showOnboarding: false }),
       setAuthView: (view) => set({ authView: view }),
+      setRegisterTab: (tab) => set({ registerTab: tab }),
 
       // Actions - Mail
       setCurrentFolder: (folder) => set({
