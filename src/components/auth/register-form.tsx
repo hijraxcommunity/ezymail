@@ -432,31 +432,36 @@ export function RegisterForm() {
                           <Building2 className="w-3.5 h-3.5 inline mr-1" />
                           Business name <span className="text-[#EA4335]">*</span>
                         </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. EzyTech Solutions"
-                          value={businessName}
-                          onChange={(e) => {
-                            setBusinessName(e.target.value)
-                            // Auto-generate slug when slug field is empty
-                            if (!companySlug.trim()) {
-                              setCompanySlug(generateSlug(e.target.value))
-                            }
-                          }}
-                          autoFocus
-                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                        />
+                        <div className="relative">
+                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="e.g. EzyTech Solutions"
+                            value={businessName}
+                            onChange={(e) => {
+                              setBusinessName(e.target.value)
+                              // Auto-generate slug when slug field is empty
+                              if (!companySlug.trim()) {
+                                setCompanySlug(generateSlug(e.target.value))
+                              }
+                            }}
+                            autoFocus
+                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                          />
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[13px] font-medium text-[#1F1F1F]">
                           <Briefcase className="w-3.5 h-3.5 inline mr-1" />
                           Industry
                         </label>
-                        <select
-                          value={businessIndustry}
-                          onChange={(e) => setBusinessIndustry(e.target.value)}
-                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                        >
+                        <div className="relative">
+                          <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                          <select
+                            value={businessIndustry}
+                            onChange={(e) => setBusinessIndustry(e.target.value)}
+                            className="w-full h-11 pl-10 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors appearance-none"
+                          >
                           <option value="">Select your industry</option>
                           <option value="technology">Technology & IT</option>
                           <option value="finance">Finance & Banking</option>
@@ -471,6 +476,7 @@ export function RegisterForm() {
                           <option value="real-estate">Real Estate</option>
                           <option value="other">Other</option>
                         </select>
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[13px] font-medium text-[#1F1F1F]">
@@ -478,12 +484,13 @@ export function RegisterForm() {
                           Company email domain <span className="text-[#EA4335]">*</span>
                         </label>
                         <div className="relative">
+                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                           <input
                             type="text"
                             placeholder="yourcompany"
                             value={companySlug}
                             onChange={(e) => setCompanySlug(e.target.value.replace(/[^a-z0-9-]/g, ''))}
-                            className="w-full h-11 px-4 pr-16 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                            className="w-full h-11 pl-10 pr-16 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
                           />
                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
                             .ezy
@@ -498,13 +505,16 @@ export function RegisterForm() {
                           <Globe className="w-3.5 h-3.5 inline mr-1" />
                           Website
                         </label>
-                        <input
-                          type="text"
-                          placeholder="https://yourcompany.com (optional)"
-                          value={businessWebsite}
-                          onChange={(e) => setBusinessWebsite(e.target.value)}
-                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                        />
+                        <div className="relative">
+                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="https://yourcompany.com (optional)"
+                            value={businessWebsite}
+                            onChange={(e) => setBusinessWebsite(e.target.value)}
+                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                          />
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -531,14 +541,17 @@ export function RegisterForm() {
                           <Phone className="w-3.5 h-3.5 inline mr-1" />
                           Business phone number
                         </label>
-                        <input
-                          type="tel"
-                          placeholder="+93 7XX XXX XXX"
-                          value={businessPhone}
-                          onChange={(e) => setBusinessPhone(e.target.value)}
-                          autoFocus
-                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
-                        />
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                          <input
+                            type="tel"
+                            placeholder="+93 7XX XXX XXX"
+                            value={businessPhone}
+                            onChange={(e) => setBusinessPhone(e.target.value)}
+                            autoFocus
+                            className="w-full h-11 pl-10 pr-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                          />
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[13px] font-medium text-[#1F1F1F]">
@@ -546,12 +559,13 @@ export function RegisterForm() {
                           Business email address <span className="text-[#EA4335]">*</span>
                         </label>
                         <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                           <input
                             type="text"
                             placeholder="info"
                             value={businessEmailUsername}
                             onChange={(e) => { setBusinessEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setBusinessEmailStatus('idle') }}
-                            className="w-full h-11 px-4 pr-32 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+                            className="w-full h-11 pl-10 pr-32 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
                           />
                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
                             @{slugDomain || 'company.ezy'}
@@ -603,11 +617,12 @@ export function RegisterForm() {
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
                         <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                           <Input
                             {...passwordForm.register('password')}
                             type={showPassword ? 'text' : 'password'}
                             placeholder="Create a strong password"
-                            className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                            className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                             autoFocus
                           />
                           <button
@@ -640,11 +655,12 @@ export function RegisterForm() {
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
                         <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                           <Input
                             {...passwordForm.register('confirmPassword')}
                             type={showConfirmPassword ? 'text' : 'password'}
                             placeholder="Confirm your password"
-                            className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                            className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                           />
                           <button
                             type="button"
@@ -745,23 +761,29 @@ export function RegisterForm() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
-                    <Input
-                      {...nameForm.register('firstName')}
-                      placeholder="John"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                      autoFocus
-                    />
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                      <Input
+                        {...nameForm.register('firstName')}
+                        placeholder="Ahmad"
+                        className="h-11 pl-10 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        autoFocus
+                      />
+                    </div>
                     {nameForm.formState.errors.firstName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
-                    <Input
-                      {...nameForm.register('lastName')}
-                      placeholder="Doe"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                    />
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                      <Input
+                        {...nameForm.register('lastName')}
+                        placeholder="Amiri"
+                        className="h-11 pl-10 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                      />
+                    </div>
                     {nameForm.formState.errors.lastName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
                     )}
@@ -774,11 +796,12 @@ export function RegisterForm() {
                       Email address
                     </label>
                     <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         value={emailUsername}
                         onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
-                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 pl-10 pr-20 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
                         @ezy.af
@@ -827,43 +850,52 @@ export function RegisterForm() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
-                    <select
-                      value={month}
-                      onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
-                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                    >
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                      <select
+                        value={month}
+                        onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
+                        className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
+                      >
                       <option value={0}>Select month</option>
                       {MONTHS.map((m, i) => (
                         <option key={m} value={i + 1}>{m}</option>
                       ))}
-                    </select>
+                      </select>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
-                      <select
-                        value={day}
-                        onChange={(e) => setDay(Number(e.target.value))}
-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                      >
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                        <select
+                          value={day}
+                          onChange={(e) => setDay(Number(e.target.value))}
+                          className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
+                        >
                         <option value={0}>Day</option>
                         {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </select>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
-                      <select
-                        value={year}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
-                      >
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
+                        <select
+                          value={year}
+                          onChange={(e) => setYear(Number(e.target.value))}
+                          className="w-full h-11 pl-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors appearance-none"
+                        >
                         <option value={0}>Year</option>
                         {generateYears().map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -889,11 +921,12 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
                     <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         {...passwordForm.register('password')}
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Create a strong password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                         autoFocus
                       />
                       <button
@@ -926,11 +959,12 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
                     <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6] pointer-events-none" />
                       <Input
                         {...passwordForm.register('confirmPassword')}
                         type={showConfirmPassword ? 'text' : 'password'}
                         placeholder="Confirm your password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                       />
                       <button
                         type="button"
