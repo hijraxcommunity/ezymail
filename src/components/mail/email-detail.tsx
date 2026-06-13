@@ -718,137 +718,6 @@ export function EmailDetail() {
           <span className="sr-only sm:not-sr-only text-sm text-gray-500 cursor-pointer select-none" onClick={handleBack}>
             Back
           </span>
-          {/* Three-dot menu - left corner */}
-          {currentFolder !== 'trash' && currentFolder !== 'snoozed' && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52">
-                <DropdownMenuItem onClick={handleReply} className="gap-2.5 cursor-pointer">
-                  <Reply className="w-4 h-4" /> Reply
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleReplyAll} className="gap-2.5 cursor-pointer">
-                  <ReplyAll className="w-4 h-4" /> Reply to all
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleForward} className="gap-2.5 cursor-pointer">
-                  <Forward className="w-4 h-4" /> Forward
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {/* Snooze submenu */}
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                    <Clock className="w-4 h-4" /> Snooze
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-52">
-                    <DropdownMenuItem onClick={() => handleSnooze(getLaterToday())} className="gap-2.5 cursor-pointer">
-                      <Clock className="w-4 h-4" /> Later Today
-                      <span className="ml-auto text-xs text-gray-400">5:00 PM</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSnooze(getTomorrow())} className="gap-2.5 cursor-pointer">
-                      <Clock className="w-4 h-4" /> Tomorrow
-                      <span className="ml-auto text-xs text-gray-400">9:00 AM</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSnooze(getNextWeek())} className="gap-2.5 cursor-pointer">
-                      <CalendarDays className="w-4 h-4" /> Next Week
-                      <span className="ml-auto text-xs text-gray-400">7 days</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setShowCustomSnooze(true)} className="gap-2.5 cursor-pointer text-[#4285F4]">
-                      <CalendarDays className="w-4 h-4" /> Pick date & time
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                {/* Label submenu */}
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                    <Tag className="w-4 h-4" /> Label
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56 p-2">
-                    <LabelManager emailId={email.id} />
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSeparator />
-                {currentFolder === 'archive' ? (
-                  <>
-                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
-                      <Flag className="w-4 h-4" /> Report
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
-                      <Archive className="w-4 h-4" /> Archive
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
-                      <Flag className="w-4 h-4" /> Report
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          {/* Hidden custom snooze popover for Pick date & time */}
-          {currentFolder !== 'trash' && currentFolder !== 'snoozed' && (
-            <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4] opacity-0 pointer-events-none" tabIndex={-1}>
-                  <CalendarDays className="w-4 h-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" align="start" side="bottom">
-                <div className="p-3 space-y-3">
-                  <Calendar
-                    mode="single"
-                    selected={snoozeDate}
-                    onSelect={setSnoozeDate}
-                    disabled={{ before: new Date() }}
-                    className="rounded-md border p-1"
-                    modifiersClassNames={{
-                      selected: 'bg-[#4285F4] text-white rounded-md',
-                      today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500 shrink-0">Time:</label>
-                    <Input
-                      type="time"
-                      value={snoozeTime}
-                      onChange={(e) => setSnoozeTime(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
-                      onClick={handleCustomSnooze}
-                      disabled={!snoozeDate}
-                    >
-                      <Check className="w-3 h-3 mr-1" />
-                      Snooze
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-xs"
-                      onClick={() => setShowCustomSnooze(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
         </div>
         <div className="flex items-center gap-0.5">
           <TooltipProvider delayDuration={300}>
@@ -916,7 +785,115 @@ export function EmailDetail() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Delete (#)</TooltipContent>
                 </Tooltip>
-
+                {/* Three-dot menu - right side after trash */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onClick={handleReply} className="gap-2.5 cursor-pointer">
+                      <Reply className="w-4 h-4" /> Reply
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleReplyAll} className="gap-2.5 cursor-pointer">
+                      <ReplyAll className="w-4 h-4" /> Reply to all
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleForward} className="gap-2.5 cursor-pointer">
+                      <Forward className="w-4 h-4" /> Forward
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+                        <Clock className="w-4 h-4" /> Snooze
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-52">
+                        <DropdownMenuItem onClick={() => handleSnooze(getLaterToday())} className="gap-2.5 cursor-pointer">
+                          <Clock className="w-4 h-4" /> Later Today
+                          <span className="ml-auto text-xs text-gray-400">5:00 PM</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSnooze(getTomorrow())} className="gap-2.5 cursor-pointer">
+                          <Clock className="w-4 h-4" /> Tomorrow
+                          <span className="ml-auto text-xs text-gray-400">9:00 AM</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSnooze(getNextWeek())} className="gap-2.5 cursor-pointer">
+                          <CalendarDays className="w-4 h-4" /> Next Week
+                          <span className="ml-auto text-xs text-gray-400">7 days</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setShowCustomSnooze(true)} className="gap-2.5 cursor-pointer text-[#4285F4]">
+                          <CalendarDays className="w-4 h-4" /> Pick date & time
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+                        <Tag className="w-4 h-4" /> Label
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-56 p-2">
+                        <LabelManager emailId={email.id} />
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
+                      <Flag className="w-4 h-4" /> Report
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {/* Hidden custom snooze popover for Pick date & time */}
+                <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4] opacity-0 pointer-events-none" tabIndex={-1}>
+                      <CalendarDays className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0" align="end" side="bottom">
+                    <div className="p-3 space-y-3">
+                      <Calendar
+                        mode="single"
+                        selected={snoozeDate}
+                        onSelect={setSnoozeDate}
+                        disabled={{ before: new Date() }}
+                        className="rounded-md border p-1"
+                        modifiersClassNames={{
+                          selected: 'bg-[#4285F4] text-white rounded-md',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-500 shrink-0">Time:</label>
+                        <Input
+                          type="time"
+                          value={snoozeTime}
+                          onChange={(e) => setSnoozeTime(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
+                          onClick={handleCustomSnooze}
+                          disabled={!snoozeDate}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Snooze
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => setShowCustomSnooze(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </>
             ) : (
               <>
@@ -944,7 +921,118 @@ export function EmailDetail() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Delete (#)</TooltipContent>
                 </Tooltip>
-
+                {/* Three-dot menu - right side after trash */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onClick={handleReply} className="gap-2.5 cursor-pointer">
+                      <Reply className="w-4 h-4" /> Reply
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleReplyAll} className="gap-2.5 cursor-pointer">
+                      <ReplyAll className="w-4 h-4" /> Reply to all
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleForward} className="gap-2.5 cursor-pointer">
+                      <Forward className="w-4 h-4" /> Forward
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+                        <Clock className="w-4 h-4" /> Snooze
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-52">
+                        <DropdownMenuItem onClick={() => handleSnooze(getLaterToday())} className="gap-2.5 cursor-pointer">
+                          <Clock className="w-4 h-4" /> Later Today
+                          <span className="ml-auto text-xs text-gray-400">5:00 PM</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSnooze(getTomorrow())} className="gap-2.5 cursor-pointer">
+                          <Clock className="w-4 h-4" /> Tomorrow
+                          <span className="ml-auto text-xs text-gray-400">9:00 AM</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSnooze(getNextWeek())} className="gap-2.5 cursor-pointer">
+                          <CalendarDays className="w-4 h-4" /> Next Week
+                          <span className="ml-auto text-xs text-gray-400">7 days</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setShowCustomSnooze(true)} className="gap-2.5 cursor-pointer text-[#4285F4]">
+                          <CalendarDays className="w-4 h-4" /> Pick date & time
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+                        <Tag className="w-4 h-4" /> Label
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-56 p-2">
+                        <LabelManager emailId={email.id} />
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
+                      <Archive className="w-4 h-4" /> Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
+                      <Flag className="w-4 h-4" /> Report
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {/* Hidden custom snooze popover for Pick date & time */}
+                <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4] opacity-0 pointer-events-none" tabIndex={-1}>
+                      <CalendarDays className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0" align="end" side="bottom">
+                    <div className="p-3 space-y-3">
+                      <Calendar
+                        mode="single"
+                        selected={snoozeDate}
+                        onSelect={setSnoozeDate}
+                        disabled={{ before: new Date() }}
+                        className="rounded-md border p-1"
+                        modifiersClassNames={{
+                          selected: 'bg-[#4285F4] text-white rounded-md',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-500 shrink-0">Time:</label>
+                        <Input
+                          type="time"
+                          value={snoozeTime}
+                          onChange={(e) => setSnoozeTime(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
+                          onClick={handleCustomSnooze}
+                          disabled={!snoozeDate}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Snooze
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => setShowCustomSnooze(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </>
             )}
           </TooltipProvider>
