@@ -1,19 +1,12 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare, MoreVertical, Reply, ReplyAll, Forward, Tag, Flag } from 'lucide-react'
+import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
 const SWIPE_THRESHOLD = 60
@@ -28,7 +21,7 @@ interface EmailCardProps {
 }
 
 export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
-  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction, setReplyToEmail } = useAppStore()
+  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction } = useAppStore()
   const isArchive = currentFolder === 'archive'
 
   /* ─── Swipe state ─── */
@@ -89,59 +82,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     animateOffScreen('right')
     fetch(`/api/emails/${email.id}`, { method: 'DELETE' }).catch(() => {})
   }, [email, removeEmail, animateOffScreen, setUndoAction])
-
-  const doSnooze = useCallback(() => {
-    if (!email) return
-    const laterToday = new Date()
-    laterToday.setHours(17, 0, 0, 0)
-    if (laterToday <= new Date()) laterToday.setDate(laterToday.getDate() + 1)
-    removeEmail(email.id)
-    animateOffScreen('left')
-    fetch(`/api/emails/${email.id}/snooze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snoozeUntil: laterToday.toISOString() }),
-    }).then(() => toast.success('Snoozed until later today')).catch(() => toast.error('Failed to snooze'))
-  }, [email, removeEmail, animateOffScreen])
-
-  const handleMenuReply = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setReplyToEmail({ ...email }, 'reply')
-  }, [email, setReplyToEmail])
-
-  const handleMenuReplyAll = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setReplyToEmail({ ...email }, 'replyAll')
-  }, [email, setReplyToEmail])
-
-  const handleMenuForward = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setReplyToEmail({ ...email }, 'forward')
-  }, [email, setReplyToEmail])
-
-  const handleMenuSnooze = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    doSnooze()
-  }, [doSnooze])
-
-  const handleMenuDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    doDelete()
-  }, [doDelete])
-
-  const handleMenuArchive = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isArchive) {
-      doUnarchive()
-    } else {
-      doArchive()
-    }
-  }, [isArchive, doArchive, doUnarchive])
-
-  const handleMenuReport = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    toast.success('Email reported as spam')
-  }, [])
 
   /* Touch handlers for swipe */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -439,52 +379,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </div>
             </div>
 
-            {/* Three-dot menu - mobile */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onTouchEnd={(e) => e.stopPropagation()}
-                  className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                  aria-label="More actions"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
-                  <Reply className="w-4 h-4" /> Reply
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
-                  <ReplyAll className="w-4 h-4" /> Reply to all
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
-                  <Forward className="w-4 h-4" /> Forward
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
-                  <Clock className="w-4 h-4" /> Snooze
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
-                  e.stopPropagation()
-                  toast.info('Label feature coming soon')
-                }}>
-                  <Tag className="w-4 h-4" /> Label
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
-                  {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
-                  <Flag className="w-4 h-4" /> Report
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
-                  <Trash2 className="w-4 h-4" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* Star toggle - mobile */}
             <button
               onClick={handleStar}
@@ -661,50 +555,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             )}
           </div>
         </div>
-
-        {/* Three-dot menu - desktop */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              aria-label="More actions"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
-              <Reply className="w-4 h-4" /> Reply
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
-              <ReplyAll className="w-4 h-4" /> Reply to all
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
-              <Forward className="w-4 h-4" /> Forward
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
-              <Clock className="w-4 h-4" /> Snooze
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
-              e.stopPropagation()
-              toast.info('Label feature coming soon')
-            }}>
-              <Tag className="w-4 h-4" /> Label
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
-              {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
-              <Flag className="w-4 h-4" /> Report
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
-              <Trash2 className="w-4 h-4" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {/* Star toggle - desktop */}
         <button
