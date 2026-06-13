@@ -498,6 +498,7 @@ export function EmailList() {
                         isSelected={selectedEmailId === email.id}
                         onSelect={() => setSelectedEmailId(email.id)}
                         index={globalIndex++}
+                        currentFolder={currentFolder}
                       />
                       {/* Cancel scheduled button */}
                       {currentFolder === 'scheduled' && email.scheduledAt && (
