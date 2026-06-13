@@ -710,7 +710,7 @@ export function EmailDetail() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 h-full pb-14 md:pb-0 md:border-l md:border-gray-100 md:dark:border-gray-800">
       {/* ─── Toolbar ─── */}
-      <div className="flex items-center justify-between px-3 sm:px-4 h-12 border-b border-gray-100 dark:border-gray-800 shrink-0">
+      <div className="flex items-center justify-between pl-3 sm:pl-4 h-12 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleBack}>
             <ArrowLeft className="w-4 h-4" />
@@ -719,7 +719,7 @@ export function EmailDetail() {
             Back
           </span>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 ml-auto">
           <TooltipProvider delayDuration={300}>
             {currentFolder === 'trash' ? (
               <>
