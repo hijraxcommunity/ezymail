@@ -103,14 +103,14 @@ function UndoSnackbar() {
 function ForgotPasswordForm() {
   const { setAuthView } = useAppStore()
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-white dark:bg-gray-900 sm:bg-transparent">
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-md"
+        className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial"
       >
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8 text-center">
+        <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 text-center flex-1 flex flex-col justify-center sm:justify-start">
           <div className="w-16 h-16 rounded-2xl bg-[#D3E3FD] flex items-center justify-center mx-auto mb-6">
             <svg className="w-8 h-8 text-[#4285F4]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
