@@ -1,12 +1,19 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, Trash2, Clock, CalendarDays, MessageSquare } from 'lucide-react'
+import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare, MoreVertical, Reply, ReplyAll, Forward, Tag, Flag } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
 const SWIPE_THRESHOLD = 60
@@ -17,10 +24,12 @@ interface EmailCardProps {
   isSelected: boolean
   onSelect: () => void
   index: number
+  currentFolder?: string
 }
 
-export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps) {
-  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction } = useAppStore()
+export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
+  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction, setReplyToEmail } = useAppStore()
+  const isArchive = currentFolder === 'archive'
 
   /* ─── Swipe state ─── */
   const swipeX = useMotionValue(0)
@@ -61,13 +70,78 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
     }).catch(() => {})
   }, [email, removeEmail, animateOffScreen, setUndoAction])
 
+  const doUnarchive = useCallback(() => {
+    if (!email) return
+    setUndoAction({ id: email.id, type: 'archive', email, timestamp: Date.now() })
+    removeEmail(email.id)
+    animateOffScreen('left')
+    fetch(`/api/emails/${email.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isArchived: false }),
+    }).then(() => toast.success('Moved to inbox')).catch(() => {})
+  }, [email, removeEmail, animateOffScreen, setUndoAction])
+
   const doDelete = useCallback(() => {
     if (!email) return
     setUndoAction({ id: email.id, type: 'delete', email, timestamp: Date.now() })
     removeEmail(email.id)
-    animateOffScreen('left')
+    animateOffScreen('right')
     fetch(`/api/emails/${email.id}`, { method: 'DELETE' }).catch(() => {})
   }, [email, removeEmail, animateOffScreen, setUndoAction])
+
+  const doSnooze = useCallback(() => {
+    if (!email) return
+    const laterToday = new Date()
+    laterToday.setHours(17, 0, 0, 0)
+    if (laterToday <= new Date()) laterToday.setDate(laterToday.getDate() + 1)
+    removeEmail(email.id)
+    animateOffScreen('left')
+    fetch(`/api/emails/${email.id}/snooze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snoozeUntil: laterToday.toISOString() }),
+    }).then(() => toast.success('Snoozed until later today')).catch(() => toast.error('Failed to snooze'))
+  }, [email, removeEmail, animateOffScreen])
+
+  const handleMenuReply = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setReplyToEmail({ ...email }, 'reply')
+  }, [email, setReplyToEmail])
+
+  const handleMenuReplyAll = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setReplyToEmail({ ...email }, 'replyAll')
+  }, [email, setReplyToEmail])
+
+  const handleMenuForward = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setReplyToEmail({ ...email }, 'forward')
+  }, [email, setReplyToEmail])
+
+  const handleMenuSnooze = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    doSnooze()
+  }, [doSnooze])
+
+  const handleMenuDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    doDelete()
+  }, [doDelete])
+
+  const handleMenuArchive = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isArchive) {
+      doUnarchive()
+    } else {
+      doArchive()
+    }
+  }, [isArchive, doArchive, doUnarchive])
+
+  const handleMenuReport = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    toast.success('Email reported as spam')
+  }, [])
 
   /* Touch handlers for swipe */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -174,33 +248,33 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
     >
       {/* Mobile swipe wrapper */}
       <div className="relative overflow-hidden md:hidden">
-        {/* Archive background (right swipe reveals this) */}
+        {/* Left swipe background: Unarchive (archive folder) or Delete (other folders) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
           className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#4285F4]"
           onClick={(e) => {
             e.stopPropagation()
-            doArchive()
+            isArchive ? doUnarchive() : doDelete()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            <Archive className="w-5 h-5" />
-            <span className="text-sm font-semibold">Archive</span>
+            {isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isArchive ? 'Unarchive' : 'Delete'}</span>
           </div>
         </motion.div>
 
-        {/* Delete background (left swipe reveals this) */}
+        {/* Right swipe background: Delete (archive folder) or Archive (other folders) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
           className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
           onClick={(e) => {
             e.stopPropagation()
-            doDelete()
+            isArchive ? doDelete() : doArchive()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            <span className="text-sm font-semibold">Delete</span>
-            <Trash2 className="w-5 h-5" />
+            <span className="text-sm font-semibold">{isArchive ? 'Delete' : 'Archive'}</span>
+            {isArchive ? <Trash2 className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
           </div>
         </motion.div>
 
@@ -365,7 +439,53 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
               </div>
             </div>
 
-            {/* Star toggle */}
+            {/* Three-dot menu - mobile */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                  className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  aria-label="More actions"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
+                  <Reply className="w-4 h-4" /> Reply
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
+                  <ReplyAll className="w-4 h-4" /> Reply to all
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
+                  <Forward className="w-4 h-4" /> Forward
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
+                  <Clock className="w-4 h-4" /> Snooze
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
+                  e.stopPropagation()
+                  toast.info('Label feature coming soon')
+                }}>
+                  <Tag className="w-4 h-4" /> Label
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
+                  {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
+                  <Flag className="w-4 h-4" /> Report
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
+                  <Trash2 className="w-4 h-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Star toggle - mobile */}
             <button
               onClick={handleStar}
               className={`shrink-0 p-1.5 rounded-full transition-colors ${
@@ -542,7 +662,51 @@ export function EmailCard({ email, isSelected, onSelect, index }: EmailCardProps
           </div>
         </div>
 
-        {/* Star toggle */}
+        {/* Three-dot menu - desktop */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              aria-label="More actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
+              <Reply className="w-4 h-4" /> Reply
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
+              <ReplyAll className="w-4 h-4" /> Reply to all
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
+              <Forward className="w-4 h-4" /> Forward
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
+              <Clock className="w-4 h-4" /> Snooze
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
+              e.stopPropagation()
+              toast.info('Label feature coming soon')
+            }}>
+              <Tag className="w-4 h-4" /> Label
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
+              {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
+              <Flag className="w-4 h-4" /> Report
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
+              <Trash2 className="w-4 h-4" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Star toggle - desktop */}
         <button
           onClick={handleStar}
           className={`shrink-0 p-1.5 rounded-full transition-colors ${

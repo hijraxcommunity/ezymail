@@ -525,6 +525,23 @@ export function EmailDetail() {
     }
   }
 
+  /* ─── Unarchive ─── */
+  const handleUnarchive = async () => {
+    if (!email) return
+    removeEmail(email.id)
+    handleBack()
+    try {
+      await fetch(`/api/emails/${email.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: false }),
+      })
+      toast.success('Moved to inbox')
+    } catch {
+      toast.error('Failed to unarchive')
+    }
+  }
+
   /* ─── Delete ─── */
   const handleDelete = async () => {
     if (!email) return
@@ -737,6 +754,165 @@ export function EmailDetail() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Delete</TooltipContent>
+                </Tooltip>
+              </>
+            ) : currentFolder === 'archive' ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className={`h-9 w-9 ${email.isStarred ? 'text-amber-500' : ''}`} onClick={handleStar}>
+                      <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{email.isStarred ? 'Unstar (s)' : 'Star (s)'}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleUnarchive}>
+                      <ArchiveRestore className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Unarchive</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Delete (#)</TooltipContent>
+                </Tooltip>
+                {/* Snooze button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Popover open={showSnoozePopover} onOpenChange={setShowSnoozePopover}>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4]">
+                          <Clock className="w-4 h-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-60 p-0" align="end" side="bottom">
+                        <div className="px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Snooze</p>
+                        </div>
+                        <Separator />
+                        <div className="p-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSnooze(getLaterToday())}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Later Today</p>
+                              <p className="text-xs text-gray-400">5:00 PM</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSnooze(getTomorrow())}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Tomorrow</p>
+                              <p className="text-xs text-gray-400">9:00 AM</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSnooze(getNextWeek())}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <CalendarDays className="w-4 h-4 text-gray-400" />
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Next Week</p>
+                              <p className="text-xs text-gray-400">7 days</p>
+                            </div>
+                          </button>
+                          <Separator className="my-1" />
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomSnooze(true)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <CalendarDays className="w-4 h-4" />
+                            <span className="text-sm font-medium">Pick date & time</span>
+                          </button>
+                        </div>
+                        <AnimatePresence>
+                          {showCustomSnooze && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.15 }}
+                              className="overflow-hidden"
+                            >
+                              <Separator />
+                              <div className="p-3 space-y-3">
+                                <Calendar
+                                  mode="single"
+                                  selected={snoozeDate}
+                                  onSelect={setSnoozeDate}
+                                  disabled={{ before: new Date() }}
+                                  className="rounded-md border p-1"
+                                  modifiersClassNames={{
+                                    selected: 'bg-[#4285F4] text-white rounded-md',
+                                    today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+                                  }}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-500 shrink-0">Time:</label>
+                                  <Input
+                                    type="time"
+                                    value={snoozeTime}
+                                    onChange={(e) => setSnoozeTime(e.target.value)}
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
+                                    onClick={handleCustomSnooze}
+                                    disabled={!snoozeDate}
+                                  >
+                                    <Check className="w-3 h-3 mr-1" />
+                                    Snooze
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 text-xs"
+                                    onClick={() => setShowCustomSnooze(false)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </PopoverContent>
+                    </Popover>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Snooze (z)</TooltipContent>
+                </Tooltip>
+
+                {/* Labels dropdown */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4]">
+                          <Tag className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <LabelManager emailId={email.id} />
+                    </DropdownMenu>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Labels (l)</TooltipContent>
                 </Tooltip>
               </>
             ) : (
@@ -1168,6 +1344,27 @@ export function EmailDetail() {
                 >
                   <AlarmClockOff className="w-4 h-4" />
                   Unsnooze
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm font-medium text-red-500 border-red-200 hover:bg-red-50"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </Button>
+              </div>
+            ) : currentFolder === 'archive' ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm font-medium text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+                  onClick={handleUnarchive}
+                >
+                  <ArchiveRestore className="w-4 h-4" />
+                  Unarchive
                 </Button>
                 <Button
                   variant="outline"
