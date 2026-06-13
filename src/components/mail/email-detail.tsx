@@ -846,7 +846,7 @@ export function EmailDetail() {
                 {/* Hidden custom snooze popover for Pick date & time */}
                 <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4] opacity-0 pointer-events-none" tabIndex={-1}>
+                    <Button variant="ghost" size="icon" className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1}>
                       <CalendarDays className="w-4 h-4" />
                     </Button>
                   </PopoverTrigger>
@@ -985,7 +985,7 @@ export function EmailDetail() {
                 {/* Hidden custom snooze popover for Pick date & time */}
                 <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-[#4285F4] opacity-0 pointer-events-none" tabIndex={-1}>
+                    <Button variant="ghost" size="icon" className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1}>
                       <CalendarDays className="w-4 h-4" />
                     </Button>
                   </PopoverTrigger>
