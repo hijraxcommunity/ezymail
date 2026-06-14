@@ -30,6 +30,17 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Business fields (nullable — personal users unaffected)
+  accountType         String   @default("personal")  // "personal" | "business"
+  businessName        String?
+  businessEmail       String?  @unique
+  employeeCount       String?
+  subscriptionStatus  String?  // "pending_verification" | "trial" | "active" | "expired"
+  trialStart          DateTime?
+  trialEnd            DateTime?
+  softDeletedAt       DateTime?
+  emailReservedUntil  DateTime?
+
   sentEmails    Email[]  @relation("SentEmails")
   receivedEmails Email[] @relation("ReceivedEmails")
   folders       Folder[]
@@ -45,9 +56,20 @@ model User {
   loginLogs     LoginLog[]
   pushSubscriptions PushSubscription[]
 
+  // Business relations
+  businessVerification BusinessVerification?
+  verificationReviews BusinessVerification[] @relation("VerificationReviewer")
+  teamMembersOwned    TeamMember[]
+  teamMemberships     TeamMember[]  @relation("TeamBusiness")
+  customers           Customer[]
+  campaigns           Campaign[]
+
   @@index([email])
   @@index([status])
   @@index([createdAt])
+  @@index([accountType])
+  @@index([subscriptionStatus])
+  @@index([businessEmail])
 }
 
 model Email {
@@ -196,7 +218,7 @@ model Session {
   location   String?
   lastActive DateTime @default(now())
   expiresAt  DateTime
-  isActive   Boolean  @default(true)
+  isActive   Boolean @default(true)
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -307,4 +329,87 @@ model SystemSettings {
   updatedAt   DateTime @updatedAt
 
   @@index([category])
+}
+
+// ─── Business Models (Add-Only) ──────────────────────────────────────────────
+
+model BusinessVerification {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  documentUrls String    // JSON array of URLs
+  status       String    @default("pending")  // "pending" | "approved" | "rejected"
+  adminNotes   String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedBy   String?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedByUser User?   @relation("VerificationReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model TeamMember {
+  id          String    @id @default(cuid())
+  businessId  String
+  memberEmail String
+  role        String    @default("member")  // "admin" | "member"
+  invitedAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+
+  business    User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  teamBusiness User?    @relation("TeamBusiness", fields: [memberEmail], references: [email])
+
+  @@unique([businessId, memberEmail])
+  @@index([businessId])
+  @@index([memberEmail])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  businessId   String
+  email        String
+  name         String?
+  customFields String?  // JSON
+  createdAt    DateTime @default(now())
+
+  business     User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  campaignRecipients CampaignRecipient[]
+
+  @@unique([businessId, email])
+  @@index([businessId])
+}
+
+model Campaign {
+  id           String   @id @default(cuid())
+  businessId   String
+  subject      String
+  body         String   @default("")
+  bodyHtml     String   @default("")
+  sentAt       DateTime?
+  opens        Int       @default(0)
+  clicks       Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  business     User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  recipients   CampaignRecipient[]
+
+  @@index([businessId])
+  @@index([createdAt])
+}
+
+model CampaignRecipient {
+  id          String    @id @default(cuid())
+  campaignId  String
+  customerId  String
+  openedAt    DateTime?
+  clickedAt   DateTime?
+
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId])
+  @@index([customerId])
 }

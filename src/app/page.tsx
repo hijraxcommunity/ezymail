@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/use-app-store'
 import { toast } from 'sonner'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
+import { BusinessRegisterForm } from '@/components/auth/business-register-form'
 import { MailHeader } from '@/components/mail/mail-header'
 import { MailSidebar } from '@/components/mail/mail-sidebar'
 import { EmailList } from '@/components/mail/email-list'
@@ -15,6 +16,7 @@ import { MobileNav } from '@/components/mail/mobile-nav'
 import { SettingsPanel } from '@/components/settings/settings-panel'
 import { AdminPanel } from '@/components/admin/admin-panel'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
+import { BusinessApp } from '@/components/business/business-app'
 import { useNotifications } from '@/hooks/use-notifications'
 
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
@@ -257,6 +259,17 @@ export default function HomePage() {
               <RegisterForm />
             </motion.div>
           )}
+          {authView === 'business-register' && (
+            <motion.div
+              key="business-register"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <BusinessRegisterForm />
+            </motion.div>
+          )}
           {authView === 'forgot-password' && (
             <motion.div
               key="forgot"
@@ -273,7 +286,13 @@ export default function HomePage() {
     )
   }
 
-  // ─── Main mail view ──────────────────────────────────────────────────────
+  // ─── Business users get their own dashboard ───────────────────────────
+  const user = useAppStore((s) => s.user)
+  if (user?.accountType === 'business') {
+    return <BusinessApp />
+  }
+
+  // ─── Main mail view (personal users) ─────────────────────────────────────
   return (
     <div className="h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
       <MailHeader />

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, Email, Folder } from '@prisma/client';
 
-export type AuthView = 'login' | 'register' | 'forgot-password' | null;
+export type AuthView = 'login' | 'register' | 'business-register' | 'forgot-password' | null;
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred' | 'archive' | 'search' | 'folder' | 'scheduled' | 'snoozed';
 export type SettingsView = string | null;
 export type AdminView = 'dashboard' | 'users' | 'reports' | 'logs' | 'settings' | null;

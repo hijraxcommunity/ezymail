@@ -21,6 +21,12 @@ export async function GET() {
         status: true,
         onboardingDone: true,
         createdAt: true,
+        accountType: true,
+        businessName: true,
+        businessEmail: true,
+        subscriptionStatus: true,
+        trialStart: true,
+        trialEnd: true,
       },
     });
 
