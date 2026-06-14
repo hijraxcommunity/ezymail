@@ -12,10 +12,23 @@ import {
   ArrowDownLeft,
   Loader2,
   Clock,
+  Send,
+  TrendingUp,
+  UserCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
 import { Badge } from '@/components/ui/badge'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts'
 
 /* ─── Types ─── */
 
@@ -48,39 +61,51 @@ interface BusinessProfile {
   lastName: string
 }
 
+/* ─── Chart Colors ─── */
+
+const CHART_COLORS = ['#4285F4', '#34A853', '#FBBC04', '#EA4335', '#8AB4F8', '#F97316']
+
 /* ─── Stat Cards Config ─── */
 
 const statCards = [
   {
     key: 'totalEmailsSent' as const,
-    label: 'Total Emails Sent',
-    icon: <Mail className="w-5 h-5" />,
+    label: 'Emails Sent',
+    icon: <Send className="w-5 h-5" />,
     color: '#4285F4',
     bgColor: 'bg-[#4285F4]/10',
+    format: (v: number) => v.toLocaleString(),
+  },
+  {
+    key: 'totalEmailsReceived' as const,
+    label: 'Emails Received',
+    icon: <Mail className="w-5 h-5" />,
+    color: '#34A853',
+    bgColor: 'bg-[#34A853]/10',
     format: (v: number) => v.toLocaleString(),
   },
   {
     key: 'totalCustomers' as const,
     label: 'Total Customers',
     icon: <Users className="w-5 h-5" />,
-    color: '#34A853',
-    bgColor: 'bg-[#34A853]/10',
+    color: '#FBBC04',
+    bgColor: 'bg-[#FBBC04]/10',
     format: (v: number) => v.toLocaleString(),
   },
   {
     key: 'totalCampaigns' as const,
-    label: 'Active Campaigns',
+    label: 'Campaigns',
     icon: <Megaphone className="w-5 h-5" />,
-    color: '#FBBC05',
-    bgColor: 'bg-[#FBBC05]/10',
+    color: '#EA4335',
+    bgColor: 'bg-[#EA4335]/10',
     format: (v: number) => v.toLocaleString(),
   },
   {
     key: 'openRate' as const,
     label: 'Open Rate',
     icon: <Eye className="w-5 h-5" />,
-    color: '#6366F1',
-    bgColor: 'bg-[#6366F1]/10',
+    color: '#8AB4F8',
+    bgColor: 'bg-[#8AB4F8]/10',
     format: (v: number) => `${v}%`,
     suffix: true,
   },
@@ -94,11 +119,19 @@ const statCards = [
     suffix: true,
   },
   {
+    key: 'totalOpens' as const,
+    label: 'Total Opens',
+    icon: <Eye className="w-5 h-5" />,
+    color: '#06B6D4',
+    bgColor: 'bg-[#06B6D4]/10',
+    format: (v: number) => v.toLocaleString(),
+  },
+  {
     key: 'teamMemberCount' as const,
     label: 'Team Members',
-    icon: <Users className="w-5 h-5" />,
-    color: '#F59E0B',
-    bgColor: 'bg-[#F59E0B]/10',
+    icon: <UserCheck className="w-5 h-5" />,
+    color: '#F97316',
+    bgColor: 'bg-[#F97316]/10',
     format: (v: number) => v.toLocaleString(),
   },
 ]
@@ -109,10 +142,14 @@ function DashboardSkeleton() {
   return (
     <div className="space-y-6">
       <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded-lg w-64 animate-pulse" />
-      <div className="grid grid-cols-3 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-32 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
+      <div className="grid grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-28 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
         ))}
+      </div>
+      <div className="grid grid-cols-2 gap-6">
+        <div className="h-72 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
+        <div className="h-72 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
       </div>
       <div className="h-96 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
     </div>
@@ -161,6 +198,20 @@ export function BusinessDashboard() {
     `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
     'Business'
 
+  // Chart data
+  const emailChart = analytics ? [
+    { name: 'Sent', value: analytics.totalEmailsSent },
+    { name: 'Received', value: analytics.totalEmailsReceived },
+    { name: 'Opens', value: analytics.totalOpens },
+    { name: 'Clicks', value: analytics.totalClicks },
+  ] : []
+
+  const campaignChart = analytics ? [
+    { name: 'Customers', value: analytics.totalCustomers },
+    { name: 'Opens', value: analytics.totalOpens },
+    { name: 'Clicks', value: analytics.totalClicks },
+  ] : []
+
   if (loading) return <DashboardSkeleton />
 
   return (
@@ -176,7 +227,7 @@ export function BusinessDashboard() {
       </div>
 
       {/* ─── Stat Cards ─── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {statCards.map((card, index) => {
           const value = analytics?.[card.key] ?? 0
           return (
@@ -184,7 +235,7 @@ export function BusinessDashboard() {
               key={card.key}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
+              transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' }}
               className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center justify-between">
@@ -193,21 +244,100 @@ export function BusinessDashboard() {
                 >
                   <span style={{ color: card.color }}>{card.icon}</span>
                 </div>
-                <span className="text-sm font-medium text-gray-400">{card.label}</span>
               </div>
               <div className="mt-3">
                 <span className="text-3xl font-bold text-gray-900 dark:text-white">
                   {card.format(value)}
                 </span>
                 {card.suffix && (
-                  <span className="text-lg font-normal text-gray-400 ml-0.5">
-                    avg
-                  </span>
+                  <span className="text-lg font-normal text-gray-400 ml-0.5">avg</span>
                 )}
               </div>
+              <span className="text-xs text-gray-400 mt-1 block">{card.label}</span>
             </motion.div>
           )
         })}
+      </div>
+
+      {/* ─── Charts ─── */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Email Overview Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-5 h-5 text-[#4285F4]" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Email Overview</h3>
+          </div>
+          {emailChart.some((d) => d.value > 0) ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={emailChart} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                  }}
+                />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  {emailChart.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center">
+              <p className="text-sm text-gray-400">No email data yet</p>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Campaign Performance Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.25 }}
+          className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Megaphone className="w-5 h-5 text-[#34A853]" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Campaign Performance</h3>
+          </div>
+          {campaignChart.some((d) => d.value > 0) ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={campaignChart} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                  }}
+                />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  {campaignChart.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center">
+              <p className="text-sm text-gray-400">No campaign data yet</p>
+            </div>
+          )}
+        </motion.div>
       </div>
 
       {/* ─── Recent Activity ─── */}
@@ -220,7 +350,7 @@ export function BusinessDashboard() {
             Your last 10 email interactions
           </p>
         </div>
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto">
           {analytics?.recentActivity && analytics.recentActivity.length > 0 ? (
             analytics.recentActivity.map((item, index) => (
               <motion.div

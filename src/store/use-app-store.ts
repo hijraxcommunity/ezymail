@@ -16,6 +16,7 @@ interface UserSafe {
   role: string;
   status: string;
   onboardingDone: boolean;
+  accountType?: string;
 }
 
 export interface EmailWithSender extends Email {

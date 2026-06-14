@@ -6,7 +6,8 @@ import {
   Users, Mail, HardDrive, Activity, Search, Shield, FileText,
   Loader2, Ban, CheckCircle, Trash2, Eye, X, Server, Clock, Cpu, Wifi,
   Megaphone, Settings, ScrollText, KeyRound, UserCog, AlertTriangle,
-  ChevronDown, Copy, RefreshCw, Filter, Globe, Zap, Database
+  ChevronDown, Copy, RefreshCw, Filter, Globe, Zap, Database,
+  Building2, ClipboardCheck
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -115,6 +116,50 @@ interface SettingsGroup {
   settingValue: string | null
 }
 
+interface BusinessAccount {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  avatar: string | null
+  status: string
+  accountType: string
+  businessName: string
+  businessEmail: string
+  employeeCount: string | null
+  subscriptionStatus: string
+  trialStart: string | null
+  trialEnd: string | null
+  createdAt: string
+  businessVerification: { id: string; status: string; submittedAt: string; reviewedAt: string | null } | null
+  _count: { teamMembersOwned: number; customers: number; campaigns: number }
+}
+
+interface BusinessVerification {
+  id: string
+  documentUrls: string
+  status: string
+  adminNotes: string | null
+  submittedAt: string
+  reviewedAt: string | null
+  reviewedBy: string | null
+  userId: string
+  user: {
+    id: string; email: string; firstName: string; lastName: string; avatar: string | null
+    businessName: string; businessEmail: string; employeeCount: string | null; subscriptionStatus: string; createdAt: string
+  }
+  reviewedByUser: { id: string; email: string; firstName: string; lastName: string } | null
+}
+
+interface BusinessStats {
+  totalBusinessAccounts: number
+  subscriptionBreakdown: { pendingVerification: number; trial: number; active: number; expired: number }
+  recentRegistrations: number
+  totalCustomers: number
+  totalCampaigns: number
+  verificationsPendingReview: number
+}
+
 /* ─── Constants ─── */
 
 const FOLDER_COLORS: Record<string, string> = {
@@ -185,6 +230,14 @@ export function AdminPanel() {
               <Users className="w-3.5 h-3.5 mr-1.5" />
               Users
             </TabsTrigger>
+            <TabsTrigger value="business-accounts">
+              <Building2 className="w-3.5 h-3.5 mr-1.5" />
+              Business Accounts
+            </TabsTrigger>
+            <TabsTrigger value="business-verifications">
+              <ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />
+              Verifications
+            </TabsTrigger>
             <TabsTrigger value="reports">
               <FileText className="w-3.5 h-3.5 mr-1.5" />
               Reports
@@ -204,6 +257,8 @@ export function AdminPanel() {
             {activeTab === 'users' && <UsersTab key="users" />}
             {activeTab === 'reports' && <ReportsTab key="reports" />}
             {activeTab === 'logs' && <LogsTab key="logs" />}
+            {activeTab === 'business-accounts' && <BusinessAccountsTab key="business-accounts" />}
+            {activeTab === 'business-verifications' && <BusinessVerificationsTab key="business-verifications" />}
             {activeTab === 'settings' && <SettingsTab key="settings" />}
           </AnimatePresence>
         </Tabs>
@@ -216,6 +271,7 @@ export function AdminPanel() {
 
 function DashboardTab() {
   const [stats, setStats] = useState<AdminStats | null>(null)
+  const [bStats, setBStats] = useState<BusinessStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [serverTime, setServerTime] = useState(new Date())
 
@@ -237,6 +293,20 @@ function DashboardTab() {
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
+
+  const fetchBusinessStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/business-stats')
+      const json = await res.json()
+      if (json.success && json.data) {
+        setBStats(json.data)
+      }
+    } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => {
+    fetchBusinessStats()
+  }, [fetchBusinessStats])
 
   useEffect(() => {
     const interval = setInterval(() => setServerTime(new Date()), 1000)
@@ -296,6 +366,38 @@ function DashboardTab() {
           )
         })}
       </div>
+
+      {/* Business Stats */}
+      <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Business Accounts', value: bStats?.totalBusinessAccounts ?? 0, icon: Building2, gradient: 'from-teal-500/10 to-teal-600/5', iconBg: 'bg-teal-600' },
+            { label: 'Pending Verifications', value: bStats?.verificationsPendingReview ?? 0, icon: ClipboardCheck, gradient: 'from-yellow-500/10 to-yellow-600/5', iconBg: 'bg-[#FBBC05]' },
+            { label: 'Active Subscriptions', value: bStats?.subscriptionBreakdown?.active ?? 0, icon: CheckCircle, gradient: 'from-green-500/10 to-green-600/5', iconBg: 'bg-[#34A853]' },
+            { label: 'Trial Accounts', value: bStats?.subscriptionBreakdown?.trial ?? 0, icon: Clock, gradient: 'from-blue-500/10 to-blue-600/5', iconBg: 'bg-[#4285F4]' },
+          ].map((card, i) => {
+            const Icon = card.icon
+            return (
+              <Card key={card.label} className="border-0 shadow-sm relative overflow-hidden">
+                <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} pointer-events-none`} />
+                <CardContent className="p-3.5 relative">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-lg ${card.iconBg} flex items-center justify-center shrink-0`}>
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-500 truncate">{card.label}</p>
+                      <span className="text-lg font-bold text-[#1F1F1F] dark:text-white leading-tight">
+                        {loading ? <Skeleton className="h-5 w-14 inline-block" /> : card.value}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </motion.div>
 
       {/* Charts row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1565,6 +1667,648 @@ function SettingsTab() {
           </Card>
         </motion.div>
       ))}
+    </motion.div>
+  )
+}
+
+/* ─── Business Accounts Tab ─── */
+
+function BusinessAccountsTab() {
+  const [accounts, setAccounts] = useState<BusinessAccount[]>([])
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [subFilter, setSubFilter] = useState('all')
+
+  // View details dialog
+  const [selectedAccount, setSelectedAccount] = useState<BusinessAccount | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+
+  const fetchAccounts = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('subscriptionStatus', subFilter)
+      params.set('page', String(page))
+      params.set('limit', '20')
+      const res = await fetch(`/api/admin/business-accounts?${params}`)
+      const data = await res.json()
+      setAccounts(data.accounts || [])
+      setTotalPages(data.totalPages || 1)
+    } catch {
+      toast.error('Failed to load business accounts')
+    } finally {
+      setLoading(false)
+    }
+  }, [page, subFilter])
+
+  useEffect(() => {
+    fetchAccounts()
+  }, [fetchAccounts])
+
+  const handleViewDetails = async (account: BusinessAccount) => {
+    setSelectedAccount(account)
+    setDetailsOpen(true)
+    setDetailsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/business-accounts/${account.id}`)
+      const data = await res.json()
+      if (data.success && data.data) {
+        setSelectedAccount(data.data)
+      }
+    } catch {
+      toast.error('Failed to load account details')
+    } finally {
+      setDetailsLoading(false)
+    }
+  }
+
+  const handleAction = async (accountId: string, action: string) => {
+    try {
+      const res = await fetch(`/api/admin/business-accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Account ${action}d successfully`)
+        fetchAccounts()
+      } else {
+        toast.error(data.error || `Failed to ${action} account`)
+      }
+    } catch {
+      toast.error(`Failed to ${action} account`)
+    }
+  }
+
+  const handleDelete = async (accountId: string) => {
+    if (!confirm('Are you sure you want to delete this business account?')) return
+    try {
+      const res = await fetch(`/api/admin/business-accounts/${accountId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('Business account deleted')
+        fetchAccounts()
+      } else {
+        toast.error(data.error || 'Failed to delete account')
+      }
+    } catch {
+      toast.error('Failed to delete account')
+    }
+  }
+
+  const subBadge = (status: string) => {
+    switch (status) {
+      case 'pending_verification':
+        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">{status.replace('_', ' ')}</Badge>
+      case 'trial':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">Trial</Badge>
+      case 'active':
+        return <Badge className="bg-[#E6F4EA] text-[#34A853] border-[#34A853]/20">Active</Badge>
+      case 'expired':
+        return <Badge className="bg-red-100 text-red-700 border-red-200 dark:bg-red-950/30 dark:border-red-800">Expired</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Select value={subFilter} onValueChange={(val) => { setSubFilter(val); setPage(1) }}>
+          <SelectTrigger className="w-48 h-10 rounded-xl">
+            <SelectValue placeholder="Subscription Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending_verification">Pending Verification</SelectItem>
+            <SelectItem value="trial">Trial</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0" onClick={fetchAccounts}>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-0">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 dark:bg-gray-900">
+                    <TableHead className="text-xs">Business Name</TableHead>
+                    <TableHead className="text-xs">Business Email</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Subscription</TableHead>
+                    <TableHead className="text-xs hidden md:table-cell">Team</TableHead>
+                    <TableHead className="text-xs hidden md:table-cell">Customers</TableHead>
+                    <TableHead className="text-xs hidden lg:table-cell">Campaigns</TableHead>
+                    <TableHead className="text-xs hidden md:table-cell">Created</TableHead>
+                    <TableHead className="text-xs text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-6 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-36" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-24" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : accounts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-12">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-gray-400" />
+                          </div>
+                          <p className="text-sm text-gray-500">No business accounts found</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    accounts.map((acct) => (
+                      <TableRow key={acct.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-950/30 flex items-center justify-center shrink-0">
+                              <Building2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{acct.businessName}</p>
+                              <p className="text-xs text-gray-500 truncate">{acct.firstName} {acct.lastName}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[180px]">{acct.businessEmail}</p>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={acct.status === 'active' ? 'default' : 'destructive'}
+                            className={acct.status === 'active' ? 'bg-[#E6F4EA] text-[#34A853] border-[#34A853]/20' : 'bg-[#FCE8E6] text-[#EA4335] border-[#EA4335]/20'}
+                          >
+                            {acct.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{subBadge(acct.subscriptionStatus)}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-gray-500">{acct._count.teamMembersOwned}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-gray-500">{acct._count.customers}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-gray-500">{acct._count.campaigns}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-gray-500">{new Date(acct.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => handleViewDetails(acct)}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            {acct.status !== 'active' && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-[#34A853]" title="Activate" onClick={() => handleAction(acct.id, 'activate')}>
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {acct.status === 'active' && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-[#EA4335]" title="Suspend" onClick={() => handleAction(acct.id, 'suspend')}>
+                                <Ban className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#EA4335]" title="Delete" onClick={() => handleDelete(acct.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800">
+                <p className="text-xs text-gray-500">Page {page} of {totalPages}</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 text-xs">Previous</Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-8 text-xs">Next</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Business Account Details</DialogTitle>
+          </DialogHeader>
+          {detailsLoading ? (
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-36" />
+              <div className="grid grid-cols-2 gap-3">
+                <Skeleton className="h-16" /><Skeleton className="h-16" />
+                <Skeleton className="h-16" /><Skeleton className="h-16" />
+              </div>
+            </div>
+          ) : selectedAccount && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-teal-950/30 flex items-center justify-center">
+                  <Building2 className="w-6 h-6 text-teal-600 dark:text-teal-400" />
+                </div>
+                <div>
+                  <p className="font-semibold">{selectedAccount.businessName}</p>
+                  <p className="text-sm text-gray-500">{selectedAccount.businessEmail}</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500">Account Status</p>
+                  <Badge className={selectedAccount.status === 'active' ? 'bg-[#E6F4EA] text-[#34A853]' : 'bg-[#FCE8E6] text-[#EA4335]'}>
+                    {selectedAccount.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Subscription</p>
+                  {subBadge(selectedAccount.subscriptionStatus)}
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Owner</p>
+                  <p className="font-medium">{selectedAccount.firstName} {selectedAccount.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Owner Email</p>
+                  <p className="font-medium text-xs">{selectedAccount.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Employees</p>
+                  <p className="font-medium">{selectedAccount.employeeCount || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Team Members</p>
+                  <p className="font-medium">{selectedAccount._count.teamMembersOwned}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Customers</p>
+                  <p className="font-medium">{selectedAccount._count.customers}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Campaigns</p>
+                  <p className="font-medium">{selectedAccount._count.campaigns}</p>
+                </div>
+                {selectedAccount.trialStart && (
+                  <div>
+                    <p className="text-xs text-gray-500">Trial Period</p>
+                    <p className="font-medium text-xs">{new Date(selectedAccount.trialStart).toLocaleDateString()} – {selectedAccount.trialEnd ? new Date(selectedAccount.trialEnd).toLocaleDateString() : 'N/A'}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-500">Created</p>
+                  <p className="font-medium">{new Date(selectedAccount.createdAt).toLocaleDateString()}</p>
+                </div>
+                {selectedAccount.businessVerification && (
+                  <>
+                    <div>
+                      <p className="text-xs text-gray-500">Verification Status</p>
+                      <Badge
+                        className={
+                          selectedAccount.businessVerification.status === 'approved'
+                            ? 'bg-[#E6F4EA] text-[#34A853] border-[#34A853]/20'
+                            : selectedAccount.businessVerification.status === 'rejected'
+                            ? 'bg-[#FCE8E6] text-[#EA4335] border-[#EA4335]/20'
+                            : 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'
+                        }
+                      >
+                        {selectedAccount.businessVerification.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Submitted</p>
+                      <p className="font-medium">{new Date(selectedAccount.businessVerification.submittedAt).toLocaleDateString()}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </motion.div>
+  )
+}
+
+/* ─── Business Verifications Tab ─── */
+
+function BusinessVerificationsTab() {
+  const [verifications, setVerifications] = useState<BusinessVerification[]>([])
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  // View documents dialog
+  const [selectedV, setSelectedV] = useState<BusinessVerification | null>(null)
+  const [docsOpen, setDocsOpen] = useState(false)
+
+  // Review dialog (approve/reject)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
+  const [reviewNotes, setReviewNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const fetchVerifications = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('status', statusFilter)
+      params.set('page', String(page))
+      params.set('limit', '20')
+      const res = await fetch(`/api/admin/business-verifications?${params}`)
+      const data = await res.json()
+      setVerifications(data.verifications || [])
+      setTotalPages(data.totalPages || 1)
+    } catch {
+      toast.error('Failed to load verifications')
+    } finally {
+      setLoading(false)
+    }
+  }, [page, statusFilter])
+
+  useEffect(() => {
+    fetchVerifications()
+  }, [fetchVerifications])
+
+  const openReviewDialog = (v: BusinessVerification, action: 'approve' | 'reject') => {
+    setSelectedV(v)
+    setReviewAction(action)
+    setReviewNotes('')
+    setReviewOpen(true)
+  }
+
+  const handleSubmitReview = async () => {
+    if (!selectedV) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/admin/business-verifications/${selectedV.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: reviewAction, adminNotes: reviewNotes }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Verification ${reviewAction}d successfully`)
+        setReviewOpen(false)
+        fetchVerifications()
+      } else {
+        toast.error(data.error || `Failed to ${reviewAction} verification`)
+      }
+    } catch {
+      toast.error(`Failed to ${reviewAction} verification`)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const parseDocUrls = (urlsStr: string): string[] => {
+    try {
+      const parsed = JSON.parse(urlsStr)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">Pending</Badge>
+      case 'approved':
+        return <Badge className="bg-[#E6F4EA] text-[#34A853] border-[#34A853]/20">Approved</Badge>
+      case 'rejected':
+        return <Badge className="bg-[#FCE8E6] text-[#EA4335] border-[#EA4335]/20">Rejected</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1) }}>
+          <SelectTrigger className="w-40 h-10 rounded-xl">
+            <SelectValue placeholder="Filter status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Verifications</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0" onClick={fetchVerifications}>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-0">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 dark:bg-gray-900">
+                    <TableHead className="text-xs">Business Name</TableHead>
+                    <TableHead className="text-xs">Email</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs hidden md:table-cell">Submitted</TableHead>
+                    <TableHead className="text-xs hidden md:table-cell">Reviewed By</TableHead>
+                    <TableHead className="text-xs text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-6 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-36" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-28" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : verifications.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                            <ClipboardCheck className="w-5 h-5 text-gray-400" />
+                          </div>
+                          <p className="text-sm text-gray-500">No verifications found</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    verifications.map((v) => (
+                      <TableRow key={v.id}>
+                        <TableCell>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{v.user?.businessName || `${v.user?.firstName} ${v.user?.lastName}`}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[180px]">{v.user?.email}</p>
+                        </TableCell>
+                        <TableCell>{statusBadge(v.status)}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-gray-500">
+                          {new Date(v.submittedAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-gray-500">
+                          {v.reviewedByUser
+                            ? `${v.reviewedByUser.firstName} ${v.reviewedByUser.lastName}`
+                            : '—'
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setSelectedV(v); setDocsOpen(true) }}>
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              Docs
+                            </Button>
+                            {v.status === 'pending' && (
+                              <>
+                                <Button variant="ghost" size="sm" className="h-8 text-xs text-[#34A853]" onClick={() => openReviewDialog(v, 'approve')}>
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-8 text-xs text-[#EA4335]" onClick={() => openReviewDialog(v, 'reject')}>
+                                  <Ban className="w-3.5 h-3.5 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800">
+                <p className="text-xs text-gray-500">Page {page} of {totalPages}</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 text-xs">Previous</Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-8 text-xs">Next</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* View Documents Dialog */}
+      <Dialog open={docsOpen} onOpenChange={setDocsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Verification Documents</DialogTitle>
+          </DialogHeader>
+          {selectedV && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium">{selectedV.user?.businessName}</p>
+                <p className="text-xs text-gray-500">{selectedV.user?.email}</p>
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 font-medium">Documents</p>
+                {parseDocUrls(selectedV.documentUrls).length === 0 ? (
+                  <p className="text-sm text-gray-400">No documents uploaded</p>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {parseDocUrls(selectedV.documentUrls).map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-[#4285F4] hover:underline truncate"
+                      >
+                        Document {i + 1}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedV.adminNotes && (
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
+                  <p className="text-xs text-gray-500 mb-1">Admin Notes</p>
+                  <p className="text-sm">{selectedV.adminNotes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Dialog */}
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{reviewAction === 'approve' ? 'Approve' : 'Reject'} Verification</DialogTitle>
+          </DialogHeader>
+          {selectedV && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                {reviewAction === 'approve'
+                  ? `Approve verification for ${selectedV.user?.businessName}?`
+                  : `Reject verification for ${selectedV.user?.businessName}?`
+                }
+              </p>
+              <div>
+                <Label className="text-xs mb-1.5 block">Admin Notes (optional)</Label>
+                <Textarea
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder={reviewAction === 'reject' ? 'Reason for rejection...' : 'Any notes...'}
+                  className="min-h-[80px] rounded-xl resize-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReviewOpen(false)}>Cancel</Button>
+                <Button
+                  className={reviewAction === 'approve' ? 'bg-[#34A853] hover:bg-[#34A853]/90' : 'bg-[#EA4335] hover:bg-[#EA4335]/90'}
+                  onClick={handleSubmitReview}
+                  disabled={submitting}
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  {reviewAction === 'approve' ? 'Approve' : 'Reject'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }
