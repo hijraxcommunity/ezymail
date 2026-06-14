@@ -4,9 +4,7 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/use-app-store'
 import { toast } from 'sonner'
-import { LoginForm } from '@/components/auth/login-form'
-import { RegisterForm } from '@/components/auth/register-form'
-import { BusinessRegisterForm } from '@/components/auth/business-register-form'
+import { AuthLayout } from '@/components/auth/auth-layout'
 import { MailHeader } from '@/components/mail/mail-header'
 import { MailSidebar } from '@/components/mail/mail-sidebar'
 import { EmailList } from '@/components/mail/email-list'
@@ -97,45 +95,6 @@ function UndoSnackbar() {
         </div>
       </motion.div>
     </AnimatePresence>
-  )
-}
-
-// ─── Forgot Password (inline) ──────────────────────────────────────────────
-
-function ForgotPasswordForm() {
-  const { setAuthView } = useAppStore()
-  return (
-    <div className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-white dark:bg-gray-900 sm:bg-transparent">
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial"
-      >
-        <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 text-center flex-1 flex flex-col justify-center sm:justify-start">
-          <div className="w-16 h-16 rounded-2xl bg-[#D3E3FD] flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-[#4285F4]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white mb-2">Reset your password</h2>
-          <p className="text-sm text-[#444746] dark:text-gray-400 mb-6">
-            Enter your email and we&apos;ll send you a reset link.
-          </p>
-          <div className="space-y-4 mb-6">
-            <input type="email" placeholder="you@ezy.af"
-              className="w-full h-11 rounded-xl px-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none" />
-            <button className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium text-sm transition-all duration-200">
-              Send Reset Link
-            </button>
-          </div>
-          <button onClick={() => setAuthView('login')}
-            className="text-sm text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors">
-            Back to sign in
-          </button>
-        </div>
-      </motion.div>
-    </div>
   )
 }
 
@@ -235,56 +194,7 @@ export default function HomePage() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA]">
-        <AnimatePresence mode="wait">
-          {authView === 'login' && (
-            <motion.div
-              key="login"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <LoginForm />
-            </motion.div>
-          )}
-          {authView === 'register' && (
-            <motion.div
-              key="register"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <RegisterForm />
-            </motion.div>
-          )}
-          {authView === 'business-register' && (
-            <motion.div
-              key="business-register"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <BusinessRegisterForm />
-            </motion.div>
-          )}
-          {authView === 'forgot-password' && (
-            <motion.div
-              key="forgot"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ForgotPasswordForm />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    )
+    return <AuthLayout />
   }
 
   // ─── Business users get their own dashboard ───────────────────────────

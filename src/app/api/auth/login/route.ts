@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
         avatar: user.avatar,
         role: user.role,
         status: user.status,
+        onboardingDone: user.onboardingDone,
+        accountType: user.accountType,
       },
     });
   } catch (error: unknown) {

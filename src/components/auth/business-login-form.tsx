@@ -2,14 +2,13 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, Loader2, User, Building2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Building2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
 
 const loginSchema = z.object({
@@ -19,11 +18,10 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
-export function LoginForm() {
+export function BusinessLoginForm() {
   const { setUser, setAuthView } = useAppStore()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
 
   const {
     register,
@@ -46,7 +44,6 @@ export function LoginForm() {
         body: JSON.stringify({
           email: data.email,
           password: data.password,
-          rememberMe,
         }),
       })
 
@@ -54,6 +51,12 @@ export function LoginForm() {
 
       if (!res.ok) {
         toast.error(result.error || 'Invalid email or password')
+        return
+      }
+
+      // Verify this is actually a business account
+      if (result.user?.accountType !== 'business') {
+        toast.error('This is a personal account. Please sign in on the Personal tab.')
         return
       }
 
@@ -73,28 +76,16 @@ export function LoginForm() {
       transition={{ duration: 0.4, ease: 'easeOut' }}
     >
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
-        {/* Personal / Business Tab Switcher */}
-        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
-          <button
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
-          >
-            <User className="w-3.5 h-3.5" />
-            Personal
-          </button>
-          <button
-            onClick={() => setAuthView('business-login')}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            Business
-          </button>
-        </div>
-
-        {/* Heading */}
+        {/* Header */}
         <div className="text-center mb-6">
-          <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">Welcome back</h2>
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#34A853]/10 mb-3">
+            <Building2 className="w-6 h-6 text-[#34A853]" />
+          </div>
+          <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">
+            Business Sign In
+          </h2>
           <p className="text-sm text-[#444746] dark:text-gray-400 mt-1">
-            Sign in to your personal EzyMail account
+            Sign in to your business account
           </p>
         </div>
 
@@ -103,20 +94,15 @@ export function LoginForm() {
           {/* Email */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
-              Email address
+              Business Email
             </label>
-            <div className="relative">
-              <Input
-                {...register('email')}
-                type="email"
-                placeholder="you@ezy.af"
-                className="h-11 rounded-xl pl-3 pr-16 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
-                disabled={isLoading}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
-                @ezy.af
-              </span>
-            </div>
+            <Input
+              {...register('email')}
+              type="email"
+              placeholder="info@companyname.ezy"
+              className="h-11 rounded-xl pl-3 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
+              disabled={isLoading}
+            />
             {errors.email && (
               <p className="text-xs text-[#EA4335]">{errors.email.message}</p>
             )}
@@ -132,7 +118,7 @@ export function LoginForm() {
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your password"
-                className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
                 disabled={isLoading}
               />
               <button
@@ -148,26 +134,12 @@ export function LoginForm() {
             )}
           </div>
 
-          {/* Remember me & Forgot password */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked === true)}
-                className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4]"
-              />
-              <label
-                htmlFor="remember"
-                className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer"
-              >
-                Remember me
-              </label>
-            </div>
+          {/* Forgot password */}
+          <div className="flex items-center justify-end">
             <button
               type="button"
               onClick={() => setAuthView('forgot-password')}
-              className="text-sm text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
+              className="text-sm text-[#34A853] hover:text-[#2d9249] font-medium transition-colors"
             >
               Forgot password?
             </button>
@@ -177,7 +149,7 @@ export function LoginForm() {
           <Button
             type="submit"
             disabled={isLoading}
-            className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium text-sm transition-all duration-200"
+            className="w-full h-11 rounded-xl bg-[#34A853] hover:bg-[#2d9249] text-white font-medium text-sm transition-all duration-200"
           >
             {isLoading ? (
               <>
@@ -200,15 +172,23 @@ export function LoginForm() {
           </div>
         </div>
 
-        {/* Register link */}
+        {/* Links */}
         <div className="text-center space-y-2">
           <p className="text-sm text-[#444746] dark:text-gray-400">
-            Don&apos;t have an account?{' '}
+            Don&apos;t have a business account?{' '}
             <button
-              onClick={() => setAuthView('register')}
+              onClick={() => setAuthView('business-register')}
+              className="text-[#34A853] hover:text-[#2d9249] font-medium transition-colors"
+            >
+              Create one
+            </button>
+          </p>
+          <p className="text-sm text-[#444746] dark:text-gray-400">
+            <button
+              onClick={() => setAuthView('login')}
               className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
             >
-              Create account
+              Back to Personal Sign In
             </button>
           </p>
         </div>

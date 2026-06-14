@@ -18,6 +18,8 @@ import {
   CheckCircle,
   XCircle,
   HelpCircle,
+  User,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -99,7 +101,7 @@ function SubscriptionStatusBadge({ status }: { status: string | null }) {
 function VerificationStatus({ verification }: { verification: Verification | null }) {
   if (!verification) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="flex items-center gap-2 text-[13px] text-gray-500">
         <HelpCircle className="w-4 h-4" />
         No verification submitted
       </div>
@@ -108,8 +110,8 @@ function VerificationStatus({ verification }: { verification: Verification | nul
 
   const statusConfig: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
     pending: {
-      icon: <Clock className="w-4 h-4 text-[#FBBC05]" />,
-      color: 'text-[#FBBC05]',
+      icon: <Clock className="w-4 h-4 text-[#FBBC04]" />,
+      color: 'text-[#FBBC04]',
       label: 'Pending Review',
     },
     approved: {
@@ -130,15 +132,15 @@ function VerificationStatus({ verification }: { verification: Verification | nul
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         {config.icon}
-        <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>
+        <span className={`text-[13px] font-medium ${config.color}`}>{config.label}</span>
       </div>
       {verification.submittedAt && (
-        <p className="text-xs text-gray-400">
+        <p className="text-[11px] text-gray-400">
           Submitted: {new Date(verification.submittedAt).toLocaleString()}
         </p>
       )}
       {verification.adminNotes && (
-        <div className="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+        <div className="mt-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700">
           <p className="text-xs text-gray-600 dark:text-gray-400">
             <span className="font-medium">Admin Notes:</span> {verification.adminNotes}
           </p>
@@ -148,14 +150,21 @@ function VerificationStatus({ verification }: { verification: Verification | nul
   )
 }
 
+/* ─── Profile Completion ─── */
+
+function getProfileCompletion(editBusinessName: string, editPhone: string, editEmployeeCount: string): number {
+  const filled = [editBusinessName, editPhone, editEmployeeCount].filter(Boolean).length
+  return Math.round((filled / 3) * 100)
+}
+
 /* ─── Loading Skeleton ─── */
 
 function SettingsSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded-lg w-48 animate-pulse" />
       {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="h-48 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
+        <div key={i} className="h-48 rounded-2xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
       ))}
     </div>
   )
@@ -310,28 +319,55 @@ export function BusinessSettings() {
     }
   }
 
+  const completion = getProfileCompletion(editBusinessName, editPhone, editEmployeeCount)
+
   if (loading) return <SettingsSkeleton />
 
   return (
-    <div className="space-y-6">
-      {/* ─── Page Header ─── */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Manage your business profile and account settings
+    <div className="space-y-8">
+      {/* ─── Profile Completion Indicator ─── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-5 shadow-sm"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#4285F4]/10 to-[#6366F1]/5 flex items-center justify-center">
+              <User className="w-4 h-4 text-[#4285F4]" />
+            </div>
+            <span className="text-[15px] font-semibold text-gray-900 dark:text-white">Profile Completion</span>
+          </div>
+          <span className="text-sm font-bold text-[#4285F4]">{completion}% Complete</span>
+        </div>
+        <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${completion}%` }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            className="h-full bg-gradient-to-r from-[#4285F4] to-[#6366F1] rounded-full"
+          />
+        </div>
+        <p className="text-[11px] text-gray-400 mt-2">
+          {completion === 100
+            ? 'Your profile is fully complete!'
+            : 'Complete your profile to unlock all features and improve your business presence.'}
         </p>
-      </div>
+      </motion.div>
 
       {/* ─── Business Profile ─── */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6"
+        transition={{ duration: 0.3, delay: 0.05 }}
+        className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-6 shadow-sm border-l-4 border-l-[#4285F4]"
       >
-        <div className="flex items-center gap-2 mb-5">
-          <Building2 className="w-5 h-5 text-[#4285F4]" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Business Profile</h3>
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4285F4]/10 to-[#6366F1]/5 flex items-center justify-center">
+            <Building2 className="w-5 h-5 text-[#4285F4]" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Business Profile</h3>
         </div>
 
         <div className="grid grid-cols-2 gap-5">
@@ -343,7 +379,7 @@ export function BusinessSettings() {
               value={editBusinessName}
               onChange={(e) => setEditBusinessName(e.target.value)}
               placeholder="Your Business Name"
-              className="rounded-xl"
+              className="rounded-xl dark:bg-gray-800"
             />
           </div>
           <div>
@@ -366,7 +402,7 @@ export function BusinessSettings() {
               value={editPhone}
               onChange={(e) => setEditPhone(e.target.value)}
               placeholder="+1 (555) 000-0000"
-              className="rounded-xl"
+              className="rounded-xl dark:bg-gray-800"
             />
           </div>
           <div>
@@ -378,7 +414,7 @@ export function BusinessSettings() {
               value={editEmployeeCount}
               onChange={(e) => setEditEmployeeCount(e.target.value)}
               placeholder="e.g., 50"
-              className="rounded-xl"
+              className="rounded-xl dark:bg-gray-800"
             />
           </div>
         </div>
@@ -403,34 +439,92 @@ export function BusinessSettings() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.05 }}
-        className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6"
+        transition={{ duration: 0.3, delay: 0.1 }}
+        className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-6 shadow-sm"
       >
-        <div className="flex items-center gap-2 mb-5">
-          <ShieldCheck className="w-5 h-5 text-[#34A853]" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Verification Status</h3>
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#34A853]/10 to-[#34A853]/5 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-[#34A853]" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Verification Status</h3>
         </div>
 
-        <div className="mb-4">
+        {/* Visual Step Indicator */}
+        <div className="flex items-center gap-0 mb-6">
+          {[
+            { label: 'Upload', icon: <Upload className="w-4 h-4" />, step: 0 },
+            { label: 'Review', icon: <Clock className="w-4 h-4" />, step: 1 },
+            { label: 'Approved', icon: <CheckCircle className="w-4 h-4" />, step: 2 },
+          ].map((s, i) => {
+            const isCompleted = verification && (
+              (verification.status === 'approved' && i < 2) ||
+              ((verification.status === 'approved' || verification.status === 'pending') && i === 0)
+            )
+            const isCurrent = (
+              (!verification && i === 0) ||
+              (verification?.status === 'pending' && i === 1) ||
+              (verification?.status === 'approved' && i === 2)
+            )
+            const isRejected = verification?.status === 'rejected'
+            return (
+              <div key={s.label} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                    isCompleted
+                      ? 'bg-[#34A853]/10 ring-1 ring-[#34A853]/30'
+                      : isCurrent
+                      ? 'ring-2 shadow-lg'
+                      : 'bg-gray-100 dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700'
+                  }`} style={isCurrent && !isRejected ? { boxShadow: `0 0 0 2px ${i === 0 ? '#4285F440' : i === 1 ? '#FBBC0440' : '#34A85340'}` } : {}}>
+                    <span className={isCompleted ? 'text-[#34A853]' : isCurrent ? (i === 0 ? 'text-[#4285F4]' : i === 1 ? 'text-[#FBBC04]' : 'text-[#34A853]') : 'text-gray-400'}>
+                      {isCompleted ? <CheckCircle className="w-5 h-5" /> : s.icon}
+                    </span>
+                  </div>
+                  <span className={`text-[11px] font-medium mt-1.5 ${isCurrent ? 'text-gray-900 dark:text-white' : isCompleted ? 'text-[#34A853]' : 'text-gray-400'}`}>{s.label}</span>
+                </div>
+                {i < 2 && (
+                  <div className={`mx-3 mb-5 h-px w-10 ${isCompleted || isCurrent ? 'bg-[#34A853]' : 'bg-gray-200 dark:bg-gray-700'}`} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mb-5">
           <VerificationStatus verification={verification} />
         </div>
 
-        <Separator className="my-4" />
+        <Separator className="my-5" />
 
         <div>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-            {verification ? 'Re-upload Documents' : 'Upload Verification Documents'}
-          </p>
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="w-4 h-4 text-gray-400" />
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {verification ? 'Re-upload Documents' : 'Upload Verification Documents'}
+            </p>
+          </div>
           <p className="text-xs text-gray-400 mb-3">
             Enter document URLs (one per line). These will be reviewed by our team.
           </p>
-          <textarea
-            value={docUrls}
-            onChange={(e) => setDocUrls(e.target.value)}
-            placeholder={"https://example.com/document1.pdf\nhttps://example.com/document2.jpg"}
-            rows={3}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4285F4]/30 focus:border-[#4285F4] resize-none"
-          />
+          
+          {/* Dropzone-style upload area */}
+          <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-8 text-center bg-gray-50/30 dark:bg-gray-800/20 transition-colors hover:border-[#4285F4]/40">
+            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+              {verification ? 'Re-upload Verification Documents' : 'Upload Verification Documents'}
+            </p>
+            <p className="text-[11px] text-gray-400 mb-3">
+              Enter document URLs (one per line). These will be reviewed by our team.
+            </p>
+            <textarea
+              value={docUrls}
+              onChange={(e) => setDocUrls(e.target.value)}
+              placeholder={"https://example.com/document1.pdf\nhttps://example.com/document2.jpg"}
+              rows={3}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4285F4]/30 focus:border-[#4285F4] resize-none"
+            />
+          </div>
+          
           <div className="mt-3">
             <Button
               onClick={handleUploadDocuments}
@@ -452,36 +546,60 @@ export function BusinessSettings() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.1 }}
-        className="rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6"
+        transition={{ duration: 0.3, delay: 0.15 }}
+        className={`rounded-2xl ring-1 bg-white dark:bg-gray-900 p-6 shadow-sm overflow-hidden relative ${
+          profile?.subscriptionStatus === 'active'
+            ? 'ring-[#34A853]/30 bg-gradient-to-br from-[#34A853]/5 to-transparent'
+            : profile?.subscriptionStatus === 'trial'
+            ? 'ring-[#FBBC04]/30 bg-gradient-to-br from-[#FBBC04]/5 to-transparent'
+            : profile?.subscriptionStatus === 'expired'
+            ? 'ring-[#EA4335]/30 bg-gradient-to-br from-[#EA4335]/5 to-transparent'
+            : 'ring-gray-200/80 dark:ring-gray-800/80'
+        }`}
       >
-        <div className="flex items-center gap-2 mb-5">
-          <CreditCard className="w-5 h-5 text-[#FBBC05]" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Subscription</h3>
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+            profile?.subscriptionStatus === 'active'
+              ? 'bg-gradient-to-br from-[#34A853]/10 to-[#34A853]/5'
+              : profile?.subscriptionStatus === 'trial'
+              ? 'bg-gradient-to-br from-[#FBBC04]/10 to-[#FBBC04]/5'
+              : 'bg-gradient-to-br from-[#FBBC04]/10 to-[#FBBC04]/5'
+          }`}>
+            <CreditCard className={`w-5 h-5 ${
+              profile?.subscriptionStatus === 'active'
+                ? 'text-[#34A853]'
+                : profile?.subscriptionStatus === 'trial'
+                ? 'text-[#FBBC04]'
+                : profile?.subscriptionStatus === 'expired'
+                ? 'text-[#EA4335]'
+                : 'text-[#FBBC04]'
+            }`} />
+          </div>
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Subscription</h3>
         </div>
 
         <div className="flex items-center gap-4 mb-4">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Status:</span>
+          <span className="text-[13px] text-gray-500 dark:text-gray-400">Status:</span>
           <SubscriptionStatusBadge status={profile?.subscriptionStatus || null} />
         </div>
 
         {profile?.trialStart && profile?.trialEnd && (
-          <div className="space-y-2 mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-            <div className="flex items-center justify-between text-sm">
+          <div className="space-y-3 mt-4 p-4 rounded-xl bg-gray-50/50 dark:bg-gray-800/50 ring-1 ring-gray-200 dark:ring-gray-700">
+            <div className="flex items-center justify-between text-[13px]">
               <span className="text-gray-500 dark:text-gray-400">Trial Start:</span>
-              <span className="text-gray-900 dark:text-white">
+              <span className="text-gray-900 dark:text-white font-medium">
                 {new Date(profile.trialStart).toLocaleDateString()}
               </span>
             </div>
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-[13px]">
               <span className="text-gray-500 dark:text-gray-400">Trial End:</span>
-              <span className="text-gray-900 dark:text-white">
+              <span className="text-gray-900 dark:text-white font-medium">
                 {new Date(profile.trialEnd).toLocaleDateString()}
               </span>
             </div>
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-[13px]">
               <span className="text-gray-500 dark:text-gray-400">Account Created:</span>
-              <span className="text-gray-900 dark:text-white">
+              <span className="text-gray-900 dark:text-white font-medium">
                 {new Date(profile.createdAt).toLocaleDateString()}
               </span>
             </div>
@@ -489,7 +607,7 @@ export function BusinessSettings() {
         )}
 
         {profile?.subscriptionStatus === 'expired' && (
-          <div className="mt-4 p-3 rounded-lg bg-[#EA4335]/5 border border-[#EA4335]/20">
+          <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-[#EA4335]/5 to-transparent border border-[#EA4335]/20">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-[#EA4335]" />
               <p className="text-sm text-[#EA4335]">
@@ -504,14 +622,19 @@ export function BusinessSettings() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.15 }}
-        className="rounded-xl shadow-sm border border-[#EA4335]/20 bg-white dark:bg-gray-900 p-6"
+        transition={{ duration: 0.3, delay: 0.2 }}
+        className="rounded-2xl ring-1 ring-[#EA4335]/20 bg-gradient-to-br from-[#EA4335]/[0.06] to-[#EA4335]/[0.02] dark:from-[#EA4335]/[0.08] dark:to-[#EA4335]/[0.03] p-6 relative overflow-hidden border border-[#EA4335]/20"
       >
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className="w-5 h-5 text-[#EA4335]" />
-          <h3 className="text-lg font-semibold text-[#EA4335]">Danger Zone</h3>
+        {/* Warning stripe */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#EA4335] via-[#EA4335]/60 to-[#EA4335]" />
+        
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EA4335]/10 to-[#EA4335]/5 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-[#EA4335]" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-[#EA4335]">Danger Zone</h3>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
           Permanently delete your business account and all associated data. This action cannot be undone.
         </p>
         <Button
@@ -526,12 +649,12 @@ export function BusinessSettings() {
 
       {/* ─── Delete Confirmation Dialog ─── */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="rounded-xl max-w-md">
+        <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white">
               Delete Business Account
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
+            <DialogDescription className="text-[13px] text-gray-500 dark:text-gray-400">
               This will permanently delete your business account, team members, customers, 
               campaigns, and all associated data. This action cannot be undone.
             </DialogDescription>

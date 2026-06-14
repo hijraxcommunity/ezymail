@@ -13,7 +13,7 @@ import {
   Check,
   X,
   Briefcase,
-  ArrowLeft,
+  User,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -184,35 +184,41 @@ export function BusinessRegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-white dark:bg-gray-900 sm:bg-transparent">
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial"
-      >
-        <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
-          {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
-            <h1 className="text-2xl font-bold">
-              <span className="text-[#4285F4]">Ezy</span>
-              <span className="text-[#34A853]">Mail</span>
-            </h1>
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+    >
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8 overflow-y-auto">
+        {/* Personal / Business Tab Switcher */}
+        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+          <button
+            onClick={() => setAuthView('register')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
+          >
+            <User className="w-3.5 h-3.5" />
+            Personal
+          </button>
+          <button
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-[#34A853] text-white shadow-sm transition-all"
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Business
+          </button>
+        </div>
 
-          {/* Header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#4285F4]/10 mb-3">
-              <Building2 className="w-6 h-6 text-[#4285F4]" />
-            </div>
-            <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">
-              Create your business account
-            </h2>
-            <p className="text-sm text-[#444746] dark:text-gray-400 mt-1">
-              Get a professional email for your business
-            </p>
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#4285F4]/10 mb-3">
+            <Building2 className="w-6 h-6 text-[#4285F4]" />
           </div>
+          <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">
+            Create your business account
+          </h2>
+          <p className="text-sm text-[#444746] dark:text-gray-400 mt-1">
+            Get a professional email for your business
+          </p>
+        </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -487,28 +493,22 @@ export function BusinessRegisterForm() {
             </div>
           </div>
 
-          {/* Back to personal sign up */}
-          <div className="text-center">
+          {/* Back links */}
+          <div className="text-center space-y-2">
             <button
-              onClick={() => setAuthView('register')}
-              className="inline-flex items-center gap-1.5 text-sm text-[#444746] dark:text-gray-400 hover:text-[#4285F4] transition-colors"
+              onClick={() => setAuthView('business-login')}
+              className="text-sm text-[#444746] dark:text-gray-400 hover:text-[#34A853] transition-colors"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>
-                Back to{' '}
-                <span className="font-medium text-[#4285F4]">
-                  Personal Sign Up
-                </span>
-              </span>
+              Already have a business account?{' '}
+              <span className="font-medium text-[#34A853]">Sign in</span>
             </button>
           </div>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-4 pb-2 sm:pb-0">
+        <p className="text-center text-xs text-gray-400 mt-6">
           © 2025 EzyMail. All rights reserved.
         </p>
-      </motion.div>
-    </div>
+    </motion.div>
   )
 }
