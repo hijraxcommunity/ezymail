@@ -152,6 +152,7 @@ export default function HomePage() {
     composeOpen,
     currentFolder,
     emails,
+    user,
     setSelectedEmailId,
     setComposeOpen,
     setReplyToEmail,
@@ -287,7 +288,6 @@ export default function HomePage() {
   }
 
   // ─── Business users get their own dashboard ───────────────────────────
-  const user = useAppStore((s) => s.user)
   if (user?.accountType === 'business') {
     return <BusinessApp />
   }
