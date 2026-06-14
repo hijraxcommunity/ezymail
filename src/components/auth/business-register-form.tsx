@@ -102,12 +102,18 @@ export function BusinessRegisterForm() {
   })
 
   const businessEmailPrefix = watch('businessEmailPrefix')
+  const businessNameValue = watch('businessName')
   const passwordValue = watch('password')
   const passwordStrength = getPasswordStrength(passwordValue || '')
 
+  // Build the email domain from business name (lowercase, no spaces)
+  const emailDomain = businessNameValue?.trim()
+    ? businessNameValue.trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20)
+    : 'companyname'
+
   // Build the full business email
   const fullBusinessEmail = businessEmailPrefix?.trim()
-    ? `${businessEmailPrefix.trim().toLowerCase()}@companyname.ezy`
+    ? `${businessEmailPrefix.trim().toLowerCase()}@${emailDomain}.ezy`
     : ''
 
   // Debounced email availability check
@@ -270,18 +276,31 @@ export function BusinessRegisterForm() {
                 <Input
                   {...register('businessEmailPrefix', {
                     onChange: (e) => {
-                      // Strip invalid characters as user types
+                      // Strip invalid characters and update without cursor jump
                       const cleaned = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')
-                      setValue('businessEmailPrefix', cleaned, { shouldValidate: true })
+                      if (cleaned !== e.target.value) {
+                        const input = e.target
+                        const pos = input.selectionStart ? Math.min(input.selectionStart, cleaned.length) : cleaned.length
+                        // Use native input value set to avoid cursor reset
+                        requestAnimationFrame(() => {
+                          const nativeInput = window.document.querySelector<HTMLInputElement>('[data-email-prefix]')
+                          if (nativeInput) {
+                            nativeInput.value = cleaned
+                            nativeInput.setSelectionRange(pos, pos)
+                          }
+                        })
+                        setValue('businessEmailPrefix', cleaned, { shouldValidate: true })
+                      }
                       setEmailStatus('idle')
                     },
                   })}
+                  data-email-prefix
                   placeholder="info"
                   className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-[9.5rem]"
                   disabled={isLoading}
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
-                  @companyname.ezy
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none whitespace-nowrap">
+                  @{emailDomain}.ezy
                 </span>
               </div>
               {errors.businessEmailPrefix && (
