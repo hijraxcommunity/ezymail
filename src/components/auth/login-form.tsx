@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Mail, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Mail, Eye, EyeOff, Loader2, Building2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -195,7 +195,7 @@ export function LoginForm() {
           </div>
 
           {/* Register link */}
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <p className="text-sm text-[#444746] dark:text-gray-400">
               Don&apos;t have an account?{' '}
               <button
@@ -203,6 +203,15 @@ export function LoginForm() {
                 className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
               >
                 Create account
+              </button>
+            </p>
+            <p className="text-sm text-[#444746] dark:text-gray-400">
+              <button
+                onClick={() => setAuthView('business-register')}
+                className="inline-flex items-center gap-1.5 text-[#34A853] hover:text-[#2d9249] font-medium transition-colors"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Sign up for Business
               </button>
             </p>
           </div>

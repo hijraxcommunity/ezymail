@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X } from 'lucide-react'
+import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Building2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -222,6 +222,23 @@ export function RegisterForm() {
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>
             </h1>
+          </div>
+
+          {/* Personal / Business Tab Switcher */}
+          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+            <button
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
+            >
+              <User className="w-3.5 h-3.5" />
+              Personal
+            </button>
+            <button
+              onClick={() => setAuthView('business-register')}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Business
+            </button>
           </div>
 
           {/* Progress Steps */}

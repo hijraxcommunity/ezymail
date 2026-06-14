@@ -13,6 +13,7 @@ import {
   CheckCircle,
   X,
   AlertTriangle,
+  Pencil,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -119,6 +120,9 @@ export function BusinessTeam() {
   const [inviting, setInviting] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null)
+  const [editRole, setEditRole] = useState('')
+  const [updatingRole, setUpdatingRole] = useState(false)
 
   const fetchTeam = useCallback(async () => {
     try {
@@ -176,6 +180,36 @@ export function BusinessTeam() {
       toast.error('Failed to send invitation')
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function handleChangeRole(id: string) {
+    if (!editRole) return
+
+    setUpdatingRole(true)
+    try {
+      const res = await fetch(`/api/business/team/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: editRole }),
+      })
+
+      if (res.ok) {
+        toast.success('Role updated successfully')
+        setTeamMembers((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, role: editRole } : m))
+        )
+        setEditingRoleId(null)
+        setEditRole('')
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to update role')
+      }
+    } catch (err) {
+      console.error('Failed to update role:', err)
+      toast.error('Failed to update role')
+    } finally {
+      setUpdatingRole(false)
     }
   }
 
@@ -326,7 +360,41 @@ export function BusinessTeam() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <RoleBadge role={member.role} />
+                    {editingRoleId === member.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <Select value={editRole} onValueChange={setEditRole}>
+                          <SelectTrigger className="h-7 w-28 rounded-lg text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="member">Member</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          onClick={() => handleChangeRole(member.id)}
+                          disabled={updatingRole}
+                          className="h-7 w-7 p-0 rounded-lg bg-[#4285F4] hover:bg-[#4285F4]/90 text-white"
+                        >
+                          {updatingRole ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-3 h-3" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingRoleId(null)}
+                          className="h-7 w-7 p-0 rounded-lg"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <RoleBadge role={member.role} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <StatusBadge acceptedAt={member.acceptedAt} />
@@ -335,7 +403,7 @@ export function BusinessTeam() {
                     {new Date(member.invitedAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    {confirmRemoveId === member.id ? (
+                    {editingRoleId === member.id ? null : confirmRemoveId === member.id ? (
                       <div className="flex items-center justify-end gap-2">
                         <span className="text-[11px] text-[#EA4335]">Remove?</span>
                         <Button
@@ -362,15 +430,30 @@ export function BusinessTeam() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setConfirmRemoveId(member.id)}
-                        className="h-7 text-[11px] text-[#EA4335] hover:text-[#EA4335] hover:bg-[#EA4335]/10 rounded-lg"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Remove
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingRoleId(member.id)
+                            setEditRole(member.role === 'admin' ? 'member' : 'admin')
+                          }}
+                          className="h-7 text-[11px] rounded-lg"
+                          title="Change Role"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          Role
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setConfirmRemoveId(member.id)}
+                          className="h-7 text-[11px] text-[#EA4335] hover:text-[#EA4335] hover:bg-[#EA4335]/10 rounded-lg"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Remove
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </motion.tr>
