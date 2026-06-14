@@ -207,39 +207,28 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-white dark:bg-gray-900 sm:bg-transparent">
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial"
-      >
-        <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
-          {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
-            <h1 className="text-2xl font-bold">
-              <span className="text-[#4285F4]">Ezy</span>
-              <span className="text-[#34A853]">Mail</span>
-            </h1>
-          </div>
-
-          {/* Personal / Business Tab Switcher */}
-          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
-            >
-              <User className="w-3.5 h-3.5" />
-              Personal
-            </button>
-            <button
-              onClick={() => setAuthView('business-register')}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              Business
-            </button>
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+    >
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8 overflow-y-auto">
+        {/* Personal / Business Tab Switcher */}
+        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+          <button
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
+          >
+            <User className="w-3.5 h-3.5" />
+            Personal
+          </button>
+          <button
+            onClick={() => setAuthView('business-register')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Business
+          </button>
+        </div>
 
           {/* Progress Steps */}
           <div className="flex items-center justify-between mb-8 px-2 sm:px-4">
@@ -585,10 +574,9 @@ export function RegisterForm() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
+        <p className="text-center text-xs text-gray-400 mt-6">
           &copy; 2025 EzyMail. All rights reserved.
         </p>
-      </motion.div>
-    </div>
+    </motion.div>
   )
 }
