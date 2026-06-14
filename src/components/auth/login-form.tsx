@@ -68,13 +68,13 @@ export function LoginForm() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
-        {/* Personal / Business Tab Switcher */}
-        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
+        {/* Personal / Business Tab Switcher — Business tab hidden on mobile */}
+        <div className="hidden lg:flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
           >
@@ -94,7 +94,7 @@ export function LoginForm() {
         <div className="text-center mb-6">
           <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">Welcome back</h2>
           <p className="text-sm text-[#444746] dark:text-gray-400 mt-1">
-            Sign in to your personal EzyMail account
+            Sign in to your EzyMail account
           </p>
         </div>
 
@@ -196,7 +196,7 @@ export function LoginForm() {
             <div className="w-full border-t border-gray-200 dark:border-gray-700" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="px-3 bg-white dark:bg-gray-900 text-gray-400">OR</span>
+            <span className="px-3 bg-inherit dark:bg-inherit text-gray-400">OR</span>
           </div>
         </div>
 

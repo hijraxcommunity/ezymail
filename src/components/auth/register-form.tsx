@@ -208,13 +208,13 @@ export function RegisterForm() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8 overflow-y-auto">
-        {/* Personal / Business Tab Switcher */}
-        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
+        {/* Personal / Business Tab Switcher — Business tab hidden on mobile */}
+        <div className="hidden lg:flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
           >
