@@ -81,7 +81,7 @@ export function LoginForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="p-6 sm:p-8 lg:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
+      <div className="p-6 sm:p-8 lg:p-8 flex flex-col">
         {/* Personal / Business Tab Switcher — Business tab hidden on mobile */}
         <div className="hidden lg:flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
@@ -222,13 +222,12 @@ export function LoginForm() {
               Create account
             </button>
           </p>
-        </div>
-      </div>
 
-      {/* Footer */}
-      <p className="text-center text-xs text-gray-400 mt-6">
-        © 2025 EzyMail. All rights reserved.
-      </p>
+          {/* Footer */}
+          <p className="text-center text-xs text-gray-400 mt-4">
+            © 2025 EzyMail. All rights reserved.
+          </p>
+        </div>
     </motion.div>
   )
 }

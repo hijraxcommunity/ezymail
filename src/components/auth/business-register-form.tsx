@@ -207,7 +207,7 @@ export function BusinessRegisterForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
+      <div className="p-6 sm:p-8 flex flex-col overflow-y-auto">
         {/* Personal / Business Tab Switcher (desktop only) */}
         <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
@@ -620,12 +620,12 @@ export function BusinessRegisterForm() {
             Already have an account? <span className="font-medium text-[#34A853]">Sign in</span>
           </button>
         </div>
-      </div>
 
-      {/* Footer */}
-      <p className="text-center text-xs text-gray-400 mt-6">
-        © 2025 EzyMail. All rights reserved.
-      </p>
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-400 mt-4">
+          © 2025 EzyMail. All rights reserved.
+        </p>
+      </div>
     </motion.div>
   )
 }
