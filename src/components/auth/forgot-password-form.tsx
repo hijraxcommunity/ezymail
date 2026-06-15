@@ -104,7 +104,7 @@ export function ForgotPasswordForm() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-4">
+        <p className="text-center text-xs text-gray-400 mt-2">
           © 2025 EzyMail. All rights reserved.
         </p>
       </div>
