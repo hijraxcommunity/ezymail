@@ -39,7 +39,7 @@ export function ForgotPasswordForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="p-6 sm:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
+      <div className="p-6 sm:p-8 flex flex-col">
         <div className="w-16 h-16 rounded-2xl bg-[#D3E3FD] flex items-center justify-center mx-auto mb-6">
           <KeyRound className="w-8 h-8 text-[#4285F4]" />
         </div>
@@ -102,11 +102,12 @@ export function ForgotPasswordForm() {
             {sent ? 'Resend link' : 'Back to sign in'}
           </button>
         </div>
-      </div>
 
-      <p className="text-center text-xs text-gray-400 mt-6">
-        © 2025 EzyMail. All rights reserved.
-      </p>
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-400 mt-4">
+          © 2025 EzyMail. All rights reserved.
+        </p>
+      </div>
     </motion.div>
   )
 }
