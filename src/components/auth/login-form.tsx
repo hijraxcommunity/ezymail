@@ -38,6 +38,15 @@ export function LoginForm() {
   })
 
   const onSubmit = async (data: LoginFormValues) => {
+    // Block business emails (.ezy domain) on personal login
+    const emailDomain = data.email.trim().toLowerCase().split('@')[1]
+    if (emailDomain && emailDomain.endsWith('.ezy')) {
+      toast.error('This is a business email. Please use the Business tab to login.', {
+        duration: 4000,
+      })
+      return
+    }
+
     setIsLoading(true)
     try {
       const res = await fetch('/api/auth/login', {
