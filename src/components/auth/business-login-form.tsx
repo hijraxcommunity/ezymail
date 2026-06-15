@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, Loader2, Building2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Building2, Mail, Lock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -75,7 +75,7 @@ export function BusinessLoginForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start">
+      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start">
         {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#34A853]/10 mb-3">
@@ -96,13 +96,16 @@ export function BusinessLoginForm() {
             <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
               Business Email
             </label>
-            <Input
-              {...register('email')}
-              type="email"
-              placeholder="info@companyname.ezy"
-              className="h-11 rounded-xl pl-3 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <Input
+                {...register('email')}
+                type="email"
+                placeholder="info@companyname.ezy"
+                className="h-11 rounded-xl pl-10 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
+                disabled={isLoading}
+              />
+            </div>
             {errors.email && (
               <p className="text-xs text-[#EA4335]">{errors.email.message}</p>
             )}
@@ -114,11 +117,12 @@ export function BusinessLoginForm() {
               Password
             </label>
             <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your password"
-                className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
+                className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
                 disabled={isLoading}
               />
               <button

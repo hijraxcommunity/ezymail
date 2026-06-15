@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, KeyRound } from 'lucide-react'
+import { Loader2, KeyRound, Mail } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 
 export function ForgotPasswordForm() {
@@ -39,7 +39,7 @@ export function ForgotPasswordForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
+      <div className="p-6 sm:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
         <div className="w-16 h-16 rounded-2xl bg-[#D3E3FD] flex items-center justify-center mx-auto mb-6">
           <KeyRound className="w-8 h-8 text-[#4285F4]" />
         </div>
@@ -58,14 +58,17 @@ export function ForgotPasswordForm() {
               <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
                 Email address
               </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@ezy.af"
-                className="h-11 rounded-xl px-3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                className="h-11 rounded-xl pl-10 pr-3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
                 disabled={isLoading}
               />
+            </div>
             </div>
             <Button
               type="submit"

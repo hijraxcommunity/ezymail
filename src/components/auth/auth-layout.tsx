@@ -20,7 +20,7 @@ export function AuthLayout() {
   // We still render business views but they'll only show on lg+
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA]">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA] lg:bg-gradient-to-br">
 
       {/* ─── Left panel: illustration (DESKTOP ONLY) ─── */}
       <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-gradient-to-br from-[#4285F4] via-[#5B9BF7] to-[#34A853]">
@@ -92,8 +92,8 @@ export function AuthLayout() {
       </div>
 
       {/* ─── Right panel: auth forms ─── */}
-      <div className="flex-1 flex items-center justify-center p-0 sm:p-4 lg:p-8">
-        <div className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial">
+      <div className="flex-1 flex items-center justify-center lg:p-8">
+        <div className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 overflow-y-auto">
 
           {/* Mobile-only logo (hidden on desktop — left panel has it) */}
           <div className="flex lg:hidden items-center justify-center gap-2 mb-6 pt-6 sm:pt-0">
