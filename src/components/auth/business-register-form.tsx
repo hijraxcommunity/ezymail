@@ -286,7 +286,7 @@ export function BusinessRegisterForm() {
                   <Input
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="Acme Inc."
+                    placeholder="AFGOS"
                     className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
                     autoFocus
                   />
@@ -299,7 +299,7 @@ export function BusinessRegisterForm() {
                     <Input
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="John"
+                      placeholder="Ahmad"
                       className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
                     />
                   </div>
@@ -310,7 +310,7 @@ export function BusinessRegisterForm() {
                     <Input
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Doe"
+                      placeholder="Amiri"
                       className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
                     />
                   </div>
@@ -622,7 +622,7 @@ export function BusinessRegisterForm() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-4">
+        <p className="text-center text-xs text-gray-400 mt-2">
           © 2025 EzyMail. All rights reserved.
         </p>
       </div>
