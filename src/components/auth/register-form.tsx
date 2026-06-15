@@ -212,7 +212,7 @@ export function RegisterForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
+      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
         {/* Personal / Business Tab Switcher — Business tab hidden on mobile */}
         <div className="hidden lg:flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
@@ -286,23 +286,29 @@ export function RegisterForm() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
-                    <Input
-                      {...nameForm.register('firstName')}
-                      placeholder="John"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
-                      autoFocus
-                    />
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <Input
+                        {...nameForm.register('firstName')}
+                        placeholder="John"
+                        className="h-11 rounded-xl pl-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                        autoFocus
+                      />
+                    </div>
                     {nameForm.formState.errors.firstName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
-                    <Input
-                      {...nameForm.register('lastName')}
-                      placeholder="Doe"
-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
-                    />
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <Input
+                        {...nameForm.register('lastName')}
+                        placeholder="Doe"
+                        className="h-11 rounded-xl pl-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                      />
+                    </div>
                     {nameForm.formState.errors.lastName && (
                       <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
                     )}
@@ -311,15 +317,15 @@ export function RegisterForm() {
                   {/* EMAIL CHOOSER */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
-                      <Mail className="w-3.5 h-3.5 inline mr-1" />
                       Email address
                     </label>
                     <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       <Input
                         value={emailUsername}
                         onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
-                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
+                        className="h-11 rounded-xl pl-10 pr-20 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
                         @ezy.af
@@ -430,11 +436,12 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
                     <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       <Input
                         {...passwordForm.register('password')}
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Create a strong password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                         autoFocus
                       />
                       <button
@@ -467,11 +474,12 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
                     <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       <Input
                         {...passwordForm.register('confirmPassword')}
                         type={showConfirmPassword ? 'text' : 'password'}
                         placeholder="Confirm your password"
-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                        className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                       />
                       <button
                         type="button"

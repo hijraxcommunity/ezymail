@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, Loader2, User, Building2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, User, Building2, Mail, Lock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -81,7 +81,7 @@ export function LoginForm() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
-      <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
+      <div className="p-6 sm:p-8 lg:p-8 flex flex-col justify-center flex-1 sm:flex-initial">
         {/* Personal / Business Tab Switcher — Business tab hidden on mobile */}
         <div className="hidden lg:flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
           <button
@@ -115,11 +115,12 @@ export function LoginForm() {
               Email address
             </label>
             <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 {...register('email')}
                 type="email"
                 placeholder="you@ezy.af"
-                className="h-11 rounded-xl pl-3 pr-16 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                className="h-11 rounded-xl pl-10 pr-16 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                 disabled={isLoading}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
@@ -137,11 +138,12 @@ export function LoginForm() {
               Password
             </label>
             <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your password"
-                className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                className="h-11 rounded-xl pl-10 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                 disabled={isLoading}
               />
               <button
