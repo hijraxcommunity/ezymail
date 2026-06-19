@@ -69,7 +69,7 @@ export function MobileNav() {
   return (
     <nav
       ref={navRef}
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 elevation-2"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)', WebkitTapHighlightColor: 'transparent' } as React.CSSProperties}
     >
       <div className="relative flex items-center justify-around px-1 pt-1.5 pb-1">
@@ -84,9 +84,8 @@ export function MobileNav() {
                 onClick={() => handleClick(item.id)}
                 className="flex flex-col items-center justify-center w-[56px] -mt-5 relative z-10 appearance-none [-webkit-appearance:none] outline-none focus:outline-none focus-visible:outline-none border-0 bg-transparent p-0"
                 aria-label={item.label}
-                style={{ boxShadow: 'none' }}
               >
-                <div className="w-12 h-12 rounded-full bg-[#4285F4] flex items-center justify-center active:scale-95 transition-transform duration-150" style={{ boxShadow: 'none' }}>
+                <div className="w-12 h-12 rounded-full bg-[#4285F4] flex items-center justify-center active:scale-95 transition-transform duration-150 elevation-8">
                   <Icon className="w-6 h-6 text-white" />
                 </div>
                 <span className="text-[10px] mt-0.5 font-medium text-gray-400">
@@ -106,8 +105,8 @@ export function MobileNav() {
             >
               <div className="relative flex items-center justify-center w-11 h-7">
                 <Icon
-                  className={`w-5 h-5 transition-colors duration-200 ${
-                    active ? 'text-[#4285F4]' : 'text-gray-400 dark:text-gray-500'
+                  className={`w-5 h-5 transition-all duration-200 ${
+                    active ? 'text-[#4285F4] scale-110' : 'text-gray-400 dark:text-gray-500 scale-100'
                   }`}
                 />
                 {item.id === 'inbox' && <Badge count={inboxCount} />}

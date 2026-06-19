@@ -122,6 +122,12 @@
   }
 }
 
+/* Native scrolling — suppress iOS rubber-band, inertial scroll */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Remove all blue focus rings globally */
 *, *::before, *::after {
   -webkit-tap-highlight-color: transparent !important;
@@ -135,18 +141,47 @@
   outline-offset: 2px !important;
 }
 
-/* Remove all blue shadows and focus rings on touch devices */
+/* Touch devices: keep intentional elevation shadows, only remove focus rings */
 @media (pointer: coarse) {
   *, *::before, *::after {
     -webkit-tap-highlight-color: transparent !important;
-    -webkit-box-shadow: none !important;
-    box-shadow: none !important;
   }
   *:focus, *:focus-visible {
     outline: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
   }
+}
+
+/* ─── Elevation system ─── */
+.elevation-1 {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+}
+.dark .elevation-1 {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+}
+.elevation-2 {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+}
+.dark .elevation-2 {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.25);
+}
+.elevation-4 {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+}
+.dark .elevation-4 {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+}
+.elevation-8 {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1);
+}
+.dark .elevation-8 {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 4px 10px rgba(0,0,0,0.4);
+}
+
+/* GPU acceleration for scroll containers */
+.gpu-scroll {
+  will-change: transform;
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
 }
 
 /* Custom scrollbar */
