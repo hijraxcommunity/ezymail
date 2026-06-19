@@ -69,11 +69,13 @@ export function BusinessLoginForm() {
     }
   }
 
+  const motionProps = {
+      initial: { opacity: 0, y: 20, scale: 0.95 },
+      animate: { opacity: 1, y: 0, scale: 1 },
+      transition: { duration: 0.5, ease: 'easeOut' },
+    }
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+    <motion.div {...motionProps}
     >
       <div className="p-6 sm:p-8 flex flex-col">
         {/* Header */}
