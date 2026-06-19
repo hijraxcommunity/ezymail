@@ -9,8 +9,20 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
-const SWIPE_THRESHOLD = 60
 const SNAP_OPEN_PX = 100
+const ELASTIC_FACTOR = 0.35 // Resistance beyond snap point — feels like rubber band
+
+function elasticDrag(dx: number, maxPx: number): number {
+  if (Math.abs(dx) <= maxPx) return dx
+  const overshoot = Math.abs(dx) - maxPx
+  return Math.sign(dx) * (maxPx + overshoot * ELASTIC_FACTOR)
+}
+
+function triggerHaptic() {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate(10)
+  }
+}
 
 interface EmailCardProps {
   email: EmailWithSender
@@ -113,17 +125,19 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     if (swipeOpenDir === 'right' && dx > 0) return
 
     e.preventDefault()
-    swipeX.set(dx)
+    swipeX.set(elasticDrag(dx, SNAP_OPEN_PX))
   }, [swipeX, swipeOpenDir])
 
   const onTouchEnd = useCallback(() => {
     if (!isSwiping.current) return
     const currentX = swipeX.get()
     if (currentX > SNAP_OPEN_PX) {
-      animate(swipeX, 100, { type: 'spring', stiffness: 500, damping: 35 })
+      triggerHaptic()
+      animate(swipeX, SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35 })
       setSwipeOpenDir('right')
     } else if (currentX < -SNAP_OPEN_PX) {
-      animate(swipeX, -100, { type: 'spring', stiffness: 500, damping: 35 })
+      triggerHaptic()
+      animate(swipeX, -SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35 })
       setSwipeOpenDir('left')
     } else {
       resetSwipe()
@@ -237,7 +251,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 handleCardClick()
               }
             }}
-            className={`group w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
+            className={`group w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
               isSelected
                 ? 'bg-blue-50 dark:bg-blue-950/30'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-900'
@@ -303,7 +317,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-0.5">
                 <span
-                  className={`text-sm truncate ${
+                  className={`text-[15px] truncate ${
                     !email.isRead
                       ? 'font-bold text-[#1F1F1F] dark:text-white'
                       : 'text-[#444746] dark:text-gray-300'
@@ -317,7 +331,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </div>
               <div className="flex items-center gap-1.5 mb-0.5">
                 <p
-                  className={`text-sm truncate flex-1 ${
+                  className={`text-[13px] truncate flex-1 ${
                     !email.isRead
                       ? 'font-semibold text-[#1F1F1F] dark:text-white'
                       : 'text-[#444746] dark:text-gray-300'
@@ -370,7 +384,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+                <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
                   {snippet}
                 </p>
                 {email.attachments && (
@@ -417,7 +431,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             onSelect()
           }
         }}
-        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
+        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
           isSelected
             ? 'bg-blue-50 dark:bg-blue-950/30'
             : 'hover:bg-gray-50 dark:hover:bg-gray-900'
@@ -481,7 +495,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
             <span
-              className={`text-sm truncate ${
+              className={`text-[15px] truncate ${
                 !email.isRead
                   ? 'font-bold text-[#1F1F1F] dark:text-white'
                   : 'text-[#444746] dark:text-gray-300'
@@ -495,7 +509,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
           </div>
           <div className="flex items-center gap-1.5 mb-0.5">
             <p
-              className={`text-sm truncate flex-1 ${
+              className={`text-[13px] truncate flex-1 ${
                 !email.isRead
                   ? 'font-semibold text-[#1F1F1F] dark:text-white'
                   : 'text-[#444746] dark:text-gray-300'
@@ -547,7 +561,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             </div>
           )}
           <div className="flex items-center gap-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
               {snippet}
             </p>
             {email.attachments && (

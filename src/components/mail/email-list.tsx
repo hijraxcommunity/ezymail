@@ -450,7 +450,7 @@ export function EmailList() {
       {/* Scrollable list */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto overscroll-contain pb-16 md:pb-0"
+        className="flex-1 overflow-y-auto overscroll-contain pb-16 md:pb-0 gpu-scroll"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

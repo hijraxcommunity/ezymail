@@ -378,7 +378,7 @@ export function MailHeader() {
 
   return (
     <>
-      <header className="h-12 sm:h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 shrink-0 z-30">
+      <header className="h-12 sm:h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 shrink-0 z-30 pt-[env(safe-area-inset-top)] elevation-2 transition-shadow duration-200">
         {/* ─── Left: Hamburger + Logo ─── */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Button
