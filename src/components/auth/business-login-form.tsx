@@ -179,7 +179,7 @@ export function BusinessLoginForm() {
         {/* Links */}
         <div className="text-center space-y-2">
           <p className="text-sm text-[#444746] dark:text-gray-400">
-            Don&apos;t have a business account?{' '}
+            Don't have a business account?{' '}
             <button
               onClick={() => setAuthView('business-register')}
               className="text-[#34A853] hover:text-[#2d9249] font-medium transition-colors"

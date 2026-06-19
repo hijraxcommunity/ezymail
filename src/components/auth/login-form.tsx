@@ -214,7 +214,7 @@ export function LoginForm() {
         {/* Register link */}
         <div className="text-center space-y-2">
           <p className="text-sm text-[#444746] dark:text-gray-400">
-            Don&apos;t have an account?{' '}
+            Don't have an account?{' '}
             <button
               onClick={() => setAuthView('register')}
               className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
