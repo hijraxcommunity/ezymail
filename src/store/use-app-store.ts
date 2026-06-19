@@ -110,6 +110,7 @@ interface AppState {
   composeOpen: boolean;
   replyToEmail: EmailWithSender | null;
   replyMode: 'reply' | 'replyAll' | 'forward' | null;
+  editDraftEmail: EmailWithSender | null;
   searchQuery: string;
   searchResults: EmailWithSender[];
   totalEmails: number;
@@ -176,6 +177,7 @@ interface AppState {
   setSelectedEmailId: (id: string | null) => void;
   setComposeOpen: (open: boolean) => void;
   setReplyToEmail: (email: EmailWithSender | null, mode?: 'reply' | 'replyAll' | 'forward') => void;
+  setEditDraftEmail: (email: EmailWithSender | null) => void;
   setSearchQuery: (query: string) => void;
   setSearchResults: (results: EmailWithSender[]) => void;
   setTotalEmails: (total: number) => void;
@@ -262,6 +264,7 @@ export const useAppStore = create<AppState>()(
       composeOpen: false,
       replyToEmail: null,
       replyMode: null,
+      editDraftEmail: null,
       searchQuery: '',
       searchResults: [],
       totalEmails: 0,
@@ -339,8 +342,9 @@ export const useAppStore = create<AppState>()(
       }),
       setEmails: (emails) => set({ emails }),
       setSelectedEmailId: (id) => set({ selectedEmailId: id, emailDetailOpen: !!id }),
-      setComposeOpen: (open) => set({ composeOpen: open, replyToEmail: null, replyMode: null }),
+      setComposeOpen: (open) => set({ composeOpen: open, replyToEmail: null, replyMode: null, editDraftEmail: null }),
       setReplyToEmail: (email, mode) => set({ replyToEmail: email, composeOpen: true, replyMode: mode || null }),
+      setEditDraftEmail: (email) => set({ editDraftEmail: email, composeOpen: true }),
       setSearchQuery: (query) => set({ searchQuery: query }),
       setSearchResults: (results) => set({ searchResults: results }),
       setTotalEmails: (total) => set({ totalEmails: total }),

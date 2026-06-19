@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Send, Paperclip, X, Bold, Italic, Strikethrough,
   Link, List, ListOrdered, Image as ImageIcon,
-  Clock, Flag, FileText, MoreVertical, Check, CalendarDays,
+  Clock, Flag, FileText, MoreVertical, Check, CalendarDays, Trash2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -99,7 +99,7 @@ function ToolbarButton({
 }
 
 export function ComposeModal() {
-  const { composeOpen, setComposeOpen, replyToEmail, replyMode, templates, setTemplates } = useAppStore()
+  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, templates, setTemplates } = useAppStore()
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof globalThis === 'undefined') return false
@@ -205,6 +205,15 @@ export function ComposeModal() {
       editor.commands.setContent(data.html)
       setAttachments(data.attachments || [])
       setPriority((data.priority as 'normal' | 'high') || 'normal')
+      setErrors({})
+      return
+    }
+
+    // Load draft content when editing a draft
+    if (editDraftEmail) {
+      setTo(editDraftEmail.recipient?.email || '')
+      setSubject(editDraftEmail.subject || '')
+      editor.commands.setContent(editDraftEmail.bodyHtml || editDraftEmail.body?.replace(/\n/g, '<br>') || '')
       setErrors({})
       return
     }
@@ -487,11 +496,19 @@ export function ComposeModal() {
         // Schedule send — send immediately to API (no undo)
         toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
         actuallySendEmail(data)
+        // Delete draft if editing one
+        if (editDraftEmail) {
+          fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+        }
       } else {
         // Normal send with undo
         const sendResult = await actuallySendEmailWithResponse(data)
         if (sendResult?.emailId) {
           pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
+          // Delete draft if editing one
+          if (editDraftEmail) {
+            fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+          }
         }
 
         toast('Message sent.', {
@@ -755,7 +772,7 @@ export function ComposeModal() {
                   </Badge>
                 )}
                 <h2 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">
-                  {replyMode === 'forward' ? 'Forward' : replyMode === 'replyAll' ? 'Reply All' : replyToEmail ? 'Reply' : 'New Message'}
+                  {editDraftEmail ? 'Edit Draft' : replyMode === 'forward' ? 'Forward' : replyMode === 'replyAll' ? 'Reply All' : replyToEmail ? 'Reply' : 'New Message'}
                 </h2>
               </div>
               <div className="flex items-center gap-1">
@@ -774,6 +791,11 @@ export function ComposeModal() {
                     <DropdownMenuItem onClick={handleSaveAsTemplate} className="cursor-pointer gap-2">
                       <FileText className="w-4 h-4" />
                       Save as Template
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleClose} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
+                      <Trash2 className="w-4 h-4" />
+                      Discard
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
