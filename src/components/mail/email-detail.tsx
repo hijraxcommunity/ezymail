@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
-  Paperclip, Forward, FileText, Download, Tag, Check,
+  Paperclip, Forward, FileText, Download, Tag, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
   ChevronDown, Lock, Copy, Mail, MoreVertical, Flag
 } from 'lucide-react'
@@ -396,6 +396,7 @@ export function EmailDetail() {
     emailLabelsMap,
     setEmailLabels,
     currentFolder,
+    setEditDraftEmail,
   } = useAppStore()
 
   const [email, setEmail] = useState<EmailWithSender | null>(null)
@@ -591,6 +592,14 @@ export function EmailDetail() {
       toast.error('Failed to restore')
     }
   }
+
+  /* ─── Edit Draft ─── */
+  const handleEditDraft = useCallback(() => {
+    if (!email) return
+    setEditDraftEmail(email)
+    setEmailDetailOpen(false)
+    setSelectedEmailId(null)
+  }, [email, setEditDraftEmail, setEmailDetailOpen, setSelectedEmailId])
 
   /* ─── Snooze ─── */
   const [showSnoozePopover, setShowSnoozePopover] = useState(false)
@@ -894,6 +903,25 @@ export function EmailDetail() {
                     </div>
                   </PopoverContent>
                 </Popover>
+              </>
+            ) : currentFolder === 'drafts' ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleEditDraft}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Edit Draft</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Delete (#)</TooltipContent>
+                </Tooltip>
               </>
             ) : (
               <>
@@ -1330,6 +1358,27 @@ export function EmailDetail() {
                   variant="outline"
                   size="sm"
                   className="h-9 gap-1.5 text-sm font-medium text-red-500 border-red-200 hover:bg-red-50"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </Button>
+              </div>
+            ) : currentFolder === 'drafts' ? (
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px] text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+                  onClick={handleEditDraft}
+                >
+                  <Pencil className="w-4 h-4" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px] text-red-500 border-red-200 hover:bg-red-50"
                   onClick={handleDelete}
                 >
                   <Trash2 className="w-4 h-4" />
