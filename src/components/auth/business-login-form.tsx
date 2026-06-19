@@ -203,6 +203,7 @@ export function BusinessLoginForm() {
             © 2025 EzyMail. All rights reserved.
           </p>
         </div>
+      </div>
     </motion.div>
   );
 }
