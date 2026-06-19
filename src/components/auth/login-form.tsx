@@ -231,5 +231,5 @@ export function LoginForm() {
           </p>
         </div>
     </motion.div>
-  )
+  );
 }

@@ -204,5 +204,5 @@ export function BusinessLoginForm() {
           </p>
         </div>
     </motion.div>
-  )
+  );
 }
