@@ -824,60 +824,95 @@ export function ComposeModal() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {/* Contacts Picker Popover */}
-                <Popover open={showContactsPicker} onOpenChange={setShowContactsPicker}>
-                  <PopoverTrigger asChild>
-                    <button className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1} />
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-0 max-h-80 flex flex-col z-[200]" align="end" side="bottom">
-                    <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-                      <Input
-                        placeholder="Search contacts..."
-                        value={contactSearch}
-                        onChange={(e) => setContactSearch(e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                      {contacts.filter(c =>
-                        !contactSearch ||
-                        c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
-                        c.email.toLowerCase().includes(contactSearch.toLowerCase())
-                      ).length === 0 ? (
-                        <p className="text-xs text-gray-400 text-center py-4">No contacts found</p>
-                      ) : (
-                        contacts
-                          .filter(c =>
+                {/* Contacts Picker - centered overlay */}
+                <AnimatePresence>
+                  {showContactsPicker && (
+                    <motion.div
+                      key="contacts-overlay"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40"
+                      onClick={(e) => { if (e.target === e.currentTarget) { setShowContactsPicker(false); setContactSearch('') } }}
+                    >
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' as const }}
+                        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden w-[calc(100%-2rem)] max-w-sm max-h-[70vh]"
+                      >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                          <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Add from Contacts</h3>
+                          <button
+                            type="button"
+                            onClick={() => { setShowContactsPicker(false); setContactSearch('') }}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                            aria-label="Close contacts"
+                          >
+                            <X className="w-4 h-4 text-gray-400" />
+                          </button>
+                        </div>
+                        {/* Search */}
+                        <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                          <Input
+                            placeholder="Search contacts..."
+                            value={contactSearch}
+                            onChange={(e) => setContactSearch(e.target.value)}
+                            className="h-9 text-sm"
+                            autoFocus
+                          />
+                        </div>
+                        {/* Contact list */}
+                        <div className="flex-1 overflow-y-auto">
+                          {contacts.filter(c =>
                             !contactSearch ||
                             c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
                             c.email.toLowerCase().includes(contactSearch.toLowerCase())
-                          )
-                          .map(c => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => {
-                                const currentTo = to.trim()
-                                setTo(currentTo ? `${currentTo}, ${c.email}` : c.email)
-                                setShowContactsPicker(false)
-                                setContactSearch('')
-                                toast.success(`Added ${c.name}`)
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
-                                {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{c.name}</p>
-                                <p className="text-xs text-gray-400 truncate">{c.email}</p>
-                              </div>
-                            </button>
-                          ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                          ).length === 0 ? (
+                            <p className="text-xs text-gray-400 text-center py-6">No contacts found</p>
+                          ) : (
+                            contacts
+                              .filter(c =>
+                                !contactSearch ||
+                                c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                                c.email.toLowerCase().includes(contactSearch.toLowerCase())
+                              )
+                              .map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const currentTo = to.trim()
+                                    setTo(currentTo ? `${currentTo}, ${c.email}` : c.email)
+                                    setShowContactsPicker(false)
+                                    setContactSearch('')
+                                    toast.success(`Added ${c.name}`)
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
+                                >
+                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                                    {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{c.name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{c.email}</p>
+                                  </div>
+                                  <div className="shrink-0">
+                                    <div className="w-6 h-6 rounded-full bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center">
+                                      <span className="text-[#4285F4] text-xs font-bold">+</span>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 <button
                   type="button"
                   onClick={handleClose}
