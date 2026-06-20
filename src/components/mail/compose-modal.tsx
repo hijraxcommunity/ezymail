@@ -99,7 +99,7 @@ function ToolbarButton({
 }
 
 export function ComposeModal() {
-  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, templates, setTemplates } = useAppStore()
+  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates } = useAppStore()
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof globalThis === 'undefined') return false
@@ -132,7 +132,7 @@ export function ComposeModal() {
     if (!showContactsPicker) return
     fetch('/api/contacts')
       .then(res => res.json())
-      .then(data => setContacts(data.contacts || []))
+      .then(data => setContacts(data.data || []))
       .catch(() => setContacts([]))
   }, [showContactsPicker])
 
@@ -303,6 +303,15 @@ export function ComposeModal() {
   const handleClose = useCallback(() => {
     setComposeOpen(false)
   }, [setComposeOpen])
+
+  const handleDiscard = useCallback(() => {
+    if (editDraftEmail) {
+      removeEmail(editDraftEmail.id)
+      fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+      toast.success('Draft discarded')
+    }
+    setComposeOpen(false)
+  }, [editDraftEmail, removeEmail, setComposeOpen])
 
   const processRecipients = (value: string): string => {
     return value
@@ -799,7 +808,7 @@ export function ComposeModal() {
                       <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuContent align="end" className="w-52 z-[200]">
                     <DropdownMenuItem onClick={() => { setShowSchedulePopover(true) }} className="cursor-pointer gap-2">
                       <Clock className="w-4 h-4" />
                       Schedule
@@ -809,7 +818,7 @@ export function ComposeModal() {
                       Add from Contacts
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleClose} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
+                    <DropdownMenuItem onClick={handleDiscard} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
                       <Trash2 className="w-4 h-4" />
                       Discard
                     </DropdownMenuItem>
@@ -820,7 +829,7 @@ export function ComposeModal() {
                   <PopoverTrigger asChild>
                     <button className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1} />
                   </PopoverTrigger>
-                  <PopoverContent className="w-72 p-0 max-h-80 flex flex-col" align="end" side="bottom">
+                  <PopoverContent className="w-72 p-0 max-h-80 flex flex-col z-[200]" align="end" side="bottom">
                     <div className="p-2 border-b border-gray-100 dark:border-gray-800">
                       <Input
                         placeholder="Search contacts..."
@@ -1203,7 +1212,7 @@ export function ComposeModal() {
                     <span className="hidden sm:inline">Schedule</span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-0" align="end" side="top">
+                <PopoverContent className="w-64 p-0 z-[200]" align="end" side="top">
                   <div className="px-3 py-2">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Schedule Send</p>
                   </div>
