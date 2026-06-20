@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ezymail-v1';
+const CACHE_NAME = 'ezymail-v2';
 const STATIC_ASSETS = [
   '/',
   '/offline.html',
