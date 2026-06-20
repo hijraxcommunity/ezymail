@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Send, Paperclip, X, Bold, Italic, Strikethrough,
   Link, List, ListOrdered, Image as ImageIcon,
-  Clock, Flag, FileText, MoreVertical, Check, CalendarDays, Trash2,
+  Clock, Flag, FileText, MoreVertical, Check, CalendarDays, Trash2, Users,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -123,6 +123,18 @@ export function ComposeModal() {
   const [scheduleTime, setScheduleTime] = useState('09:00')
   const [showCustomSchedule, setShowCustomSchedule] = useState(false)
   const [undoCountdown, setUndoCountdown] = useState(0)
+  const [showContactsPicker, setShowContactsPicker] = useState(false)
+  const [contacts, setContacts] = useState<Array<{ id: string; name: string; email: string }>>([])
+  const [contactSearch, setContactSearch] = useState('')
+
+  // Fetch contacts when picker opens
+  useEffect(() => {
+    if (!showContactsPicker) return
+    fetch('/api/contacts')
+      .then(res => res.json())
+      .then(data => setContacts(data.contacts || []))
+      .catch(() => setContacts([]))
+  }, [showContactsPicker])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -787,10 +799,14 @@ export function ComposeModal() {
                       <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={handleSaveAsTemplate} className="cursor-pointer gap-2">
-                      <FileText className="w-4 h-4" />
-                      Save as Template
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onClick={() => { setShowSchedulePopover(true) }} className="cursor-pointer gap-2">
+                      <Clock className="w-4 h-4" />
+                      Schedule
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setShowContactsPicker(true) }} className="cursor-pointer gap-2">
+                      <Users className="w-4 h-4" />
+                      Add from Contacts
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleClose} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
@@ -799,6 +815,60 @@ export function ComposeModal() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {/* Contacts Picker Popover */}
+                <Popover open={showContactsPicker} onOpenChange={setShowContactsPicker}>
+                  <PopoverTrigger asChild>
+                    <button className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1} />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-0 max-h-80 flex flex-col" align="end" side="bottom">
+                    <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                      <Input
+                        placeholder="Search contacts..."
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      {contacts.filter(c =>
+                        !contactSearch ||
+                        c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                        c.email.toLowerCase().includes(contactSearch.toLowerCase())
+                      ).length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-4">No contacts found</p>
+                      ) : (
+                        contacts
+                          .filter(c =>
+                            !contactSearch ||
+                            c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                            c.email.toLowerCase().includes(contactSearch.toLowerCase())
+                          )
+                          .map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                const currentTo = to.trim()
+                                setTo(currentTo ? `${currentTo}, ${c.email}` : c.email)
+                                setShowContactsPicker(false)
+                                setContactSearch('')
+                                toast.success(`Added ${c.name}`)
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                                {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{c.name}</p>
+                                <p className="text-xs text-gray-400 truncate">{c.email}</p>
+                              </div>
+                            </button>
+                          ))
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={handleClose}

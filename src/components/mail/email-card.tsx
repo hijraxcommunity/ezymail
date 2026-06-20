@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare } from 'lucide-react'
+import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare, Pencil } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
@@ -33,8 +33,9 @@ interface EmailCardProps {
 }
 
 export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
-  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction } = useAppStore()
+  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction, setEditDraftEmail, setSelectedEmailId, setEmailDetailOpen } = useAppStore()
   const isArchive = currentFolder === 'archive'
+  const isDrafts = currentFolder === 'drafts'
 
   /* ─── Swipe state ─── */
   const swipeX = useMotionValue(0)
@@ -94,6 +95,12 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     animateOffScreen('right')
     fetch(`/api/emails/${email.id}`, { method: 'DELETE' }).catch(() => {})
   }, [email, removeEmail, animateOffScreen, setUndoAction])
+
+  const doEditDraft = useCallback(() => {
+    if (!email) return
+    resetSwipe()
+    setEditDraftEmail(email)
+  }, [email, setEditDraftEmail, resetSwipe])
 
   /* Touch handlers for swipe */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -202,33 +209,33 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     >
       {/* Mobile swipe wrapper */}
       <div className="relative overflow-hidden md:hidden">
-        {/* Left swipe background: Unarchive (archive folder) or Delete (other folders) */}
+        {/* Left swipe background: Edit (drafts), Unarchive (archive), or Delete (other) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
-          className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#4285F4]"
+          className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#EA4335]"
           onClick={(e) => {
             e.stopPropagation()
-            isArchive ? doUnarchive() : doDelete()
+            isDrafts ? doDelete() : isArchive ? doUnarchive() : doDelete()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            {isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
-            <span className="text-sm font-semibold">{isArchive ? 'Unarchive' : 'Delete'}</span>
+            {isDrafts ? <Trash2 className="w-5 h-5" /> : isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Delete' : isArchive ? 'Unarchive' : 'Delete'}</span>
           </div>
         </motion.div>
 
-        {/* Right swipe background: Delete (archive folder) or Archive (other folders) */}
+        {/* Right swipe background: Edit (drafts), Delete (archive), or Archive (other) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
-          className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
+          className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#4285F4]"
           onClick={(e) => {
             e.stopPropagation()
-            isArchive ? doDelete() : doArchive()
+            isDrafts ? doEditDraft() : isArchive ? doDelete() : doArchive()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            <span className="text-sm font-semibold">{isArchive ? 'Delete' : 'Archive'}</span>
-            {isArchive ? <Trash2 className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Edit' : isArchive ? 'Delete' : 'Archive'}</span>
+            {isDrafts ? <Pencil className="w-5 h-5" /> : isArchive ? <Trash2 className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
           </div>
         </motion.div>
 
