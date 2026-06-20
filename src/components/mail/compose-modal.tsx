@@ -99,7 +99,7 @@ function ToolbarButton({
 }
 
 export function ComposeModal() {
-  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates } = useAppStore()
+  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, setCurrentFolder } = useAppStore()
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof globalThis === 'undefined') return false
@@ -301,8 +301,11 @@ export function ComposeModal() {
   }, [])
 
   const handleClose = useCallback(() => {
+    if (editDraftEmail) {
+      setCurrentFolder('drafts')
+    }
     setComposeOpen(false)
-  }, [setComposeOpen])
+  }, [editDraftEmail, setCurrentFolder, setComposeOpen])
 
   const handleDiscard = useCallback(() => {
     if (editDraftEmail) {
