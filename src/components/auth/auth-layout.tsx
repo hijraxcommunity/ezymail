@@ -32,7 +32,7 @@ export function AuthLayout() {
         <div className="relative z-10 flex flex-col justify-center items-center w-full px-12 text-white">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mb-10">
-            <img src="/favicon-32.png" alt="EzyMail" className="w-12 h-12 rounded-2xl shadow-lg" />
+            <img src="/logo.png" alt="EzyMail" className="w-12 h-12 rounded-2xl shadow-lg" />
             <h1 className="text-3xl font-bold tracking-tight">
               <span className="text-white">Ezy</span>
               <span className="text-[#B8E6B8]">Mail</span>
@@ -97,7 +97,7 @@ export function AuthLayout() {
 
           {/* Mobile-only logo (hidden on desktop — left panel has it) */}
           <div className="flex lg:hidden items-center justify-center gap-2 mb-6 pt-6 sm:pt-0">
-            <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
+            <img src="/logo.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
             <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#34A853]">Mail</span>
