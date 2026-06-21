@@ -215,12 +215,12 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
           className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#4285F4]"
           onClick={(e) => {
             e.stopPropagation()
-            isDrafts ? doDelete() : isArchive ? doUnarchive() : doArchive()
+            isDrafts ? doEditDraft() : isArchive ? doUnarchive() : doArchive()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            {isDrafts ? <Trash2 className="w-5 h-5" /> : isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
-            <span className="text-sm font-semibold">{isDrafts ? 'Delete' : isArchive ? 'Unarchive' : 'Archive'}</span>
+            {isDrafts ? <Pencil className="w-5 h-5" /> : isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Edit' : isArchive ? 'Unarchive' : 'Archive'}</span>
           </div>
         </motion.div>
 
