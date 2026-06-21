@@ -209,33 +209,33 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     >
       {/* Mobile swipe wrapper */}
       <div className="relative overflow-hidden md:hidden">
-        {/* Left swipe background: Edit (drafts), Unarchive (archive), or Delete (other) */}
+        {/* Left swipe background: Edit (drafts), Unarchive (archive), or Archive (other/inbox) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
-          className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#EA4335]"
+          className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#4285F4]"
           onClick={(e) => {
             e.stopPropagation()
-            isDrafts ? doDelete() : isArchive ? doUnarchive() : doDelete()
+            isDrafts ? doDelete() : isArchive ? doUnarchive() : doArchive()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            {isDrafts ? <Trash2 className="w-5 h-5" /> : isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
-            <span className="text-sm font-semibold">{isDrafts ? 'Delete' : isArchive ? 'Unarchive' : 'Delete'}</span>
+            {isDrafts ? <Trash2 className="w-5 h-5" /> : isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Delete' : isArchive ? 'Unarchive' : 'Archive'}</span>
           </div>
         </motion.div>
 
-        {/* Right swipe background: Edit (drafts), Delete (archive), or Archive (other) */}
+        {/* Right swipe background: Edit (drafts), Delete (archive), or Delete (other/inbox) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
-          className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#4285F4]"
+          className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
           onClick={(e) => {
             e.stopPropagation()
-            isDrafts ? doEditDraft() : isArchive ? doDelete() : doArchive()
+            isDrafts ? doEditDraft() : isArchive ? doDelete() : doDelete()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            <span className="text-sm font-semibold">{isDrafts ? 'Edit' : isArchive ? 'Delete' : 'Archive'}</span>
-            {isDrafts ? <Pencil className="w-5 h-5" /> : isArchive ? <Trash2 className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Edit' : isArchive ? 'Delete' : 'Delete'}</span>
+            {isDrafts ? <Pencil className="w-5 h-5" /> : isArchive ? <Trash2 className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
           </div>
         </motion.div>
 
