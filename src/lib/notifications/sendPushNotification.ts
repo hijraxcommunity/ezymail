@@ -44,8 +44,8 @@ export async function sendPushNotification({
             notification: {
               title: `New email from ${senderName}`,
               body: subject || '(No subject)',
-              icon: '/logo.svg',
-              badge: '/logo.svg',
+              icon: '/logo.png',
+              badge: '/logo.png',
               sound: 'default',
             },
             data: {
@@ -72,8 +72,8 @@ export async function sendPushNotification({
             },
             webpush: {
               notification: {
-                icon: '/logo.svg',
-                badge: '/logo.svg',
+                icon: '/logo.png',
+                badge: '/logo.png',
                 vibrate: [200, 100, 200],
               },
             },

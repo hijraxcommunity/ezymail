@@ -21,8 +21,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'New Email'
   const notificationOptions = {
     body: payload.notification?.body || '',
-    icon: '/logo.svg',
-    badge: '/logo.svg',
+    icon: '/logo.png',
+    badge: '/logo.png',
     data: payload.data || {},
     tag: payload.data?.tag || 'ezy-email',
     renotify: true,
