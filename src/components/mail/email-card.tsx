@@ -224,18 +224,18 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
           </div>
         </motion.div>
 
-        {/* Right swipe background: Edit (drafts), Delete (archive), or Delete (other/inbox) */}
+        {/* Right swipe background: Delete (drafts), Delete (archive), or Delete (other/inbox) */}
         <motion.div
           style={{ opacity: backgroundOpacity }}
           className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
           onClick={(e) => {
             e.stopPropagation()
-            isDrafts ? doEditDraft() : isArchive ? doDelete() : doDelete()
+            isDrafts ? doDelete() : isArchive ? doDelete() : doDelete()
           }}
         >
           <div className="flex items-center gap-2 text-white">
-            <span className="text-sm font-semibold">{isDrafts ? 'Edit' : isArchive ? 'Delete' : 'Delete'}</span>
-            {isDrafts ? <Pencil className="w-5 h-5" /> : isArchive ? <Trash2 className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+            <span className="text-sm font-semibold">{isDrafts ? 'Delete' : isArchive ? 'Delete' : 'Delete'}</span>
+            <Trash2 className="w-5 h-5" />
           </div>
         </motion.div>
 
