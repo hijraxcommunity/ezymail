@@ -59,8 +59,8 @@ export function showBrowserNotification(title: string, options?: NotificationOpt
 
   try {
     const notification = new Notification(title, {
-      icon: '/android-chrome-192.png',
-      badge: '/android-chrome-192.png',
+      icon: '/logo.png',
+      badge: '/logo.png',
       ...options,
     })
 

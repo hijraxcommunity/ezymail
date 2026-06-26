@@ -1,4 +1,51 @@
-const CACHE_NAME = 'ezymail-v2';
+// ─── Firebase Cloud Messaging (must be at top) ────────────────────────────
+importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-messaging-compat.js')
+
+firebase.initializeApp({
+  apiKey: "AIzaSyDgnA1cUv6JuRZDAfaSz9R4ev_pY1xC_vM",
+  authDomain: "customer-database-88e9f.firebaseapp.com",
+  projectId: "customer-database-88e9f",
+  storageBucket: "customer-database-88e9f.firebasestorage.app",
+  messagingSenderId: "961040699391",
+  appId: "1:961040699391:web:9b47f3bbcfe82186ae21ca"
+})
+
+// Handle FCM background messages
+firebase.messaging().onBackgroundMessage((payload) => {
+  const notificationTitle = payload.notification?.title || 'New Email'
+  const notificationOptions = {
+    body: payload.notification?.body || '',
+    icon: '/logo.png',
+    badge: '/logo.png',
+    data: payload.data || {},
+    tag: payload.data?.tag || 'ezy-email',
+    renotify: true,
+  }
+  self.registration.showNotification(notificationTitle, notificationOptions)
+})
+
+// ─── Notification click — open/focus the app ─────────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+
+  const urlToOpen = event.notification.data?.url || '/'
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(urlToOpen)
+          return client.focus()
+        }
+      }
+      return self.clients.openWindow(urlToOpen)
+    })
+  )
+})
+
+// ─── Cache ──────────────────────────────────────────────────────────────
+const CACHE_NAME = 'ezymail-v3';
 const STATIC_ASSETS = [
   '/',
   '/offline.html',
@@ -7,15 +54,12 @@ const STATIC_ASSETS = [
   '/logo.png',
 ];
 
-// Install: cache static shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
 });
 
-// Activate: clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -25,18 +69,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for pages, cache-first for static
+// ─── Fetch: network-first for pages, cache-first for static ─────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle same-origin and GET
   if (url.origin !== self.location.origin || request.method !== 'GET') return;
-
-  // API calls: network only
   if (url.pathname.startsWith('/api/')) return;
 
-  // Static assets: cache-first
   if (
     url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|ico|woff2?)$/) ||
     url.pathname === '/manifest.json'
@@ -56,7 +96,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Pages: network-first with offline fallback
   event.respondWith(
     fetch(request)
       .then((response) => {
