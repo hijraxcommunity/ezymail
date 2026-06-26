@@ -142,29 +142,6 @@ export function PushNotificationSetup() {
     return null
   }
 
-  const status = statusRef.current
-
-  // Don't show button if already subscribed or loading or denied
-  if (status === 'subscribed' || status === 'loading' || status === 'unsupported' || status === 'unknown') {
-    return null
-  }
-
-  // Show enable button if permission is "prompt" or previously denied
-  if (status === 'prompt' || status === 'denied' || status === 'error') {
-    return (
-      <button
-        type="button"
-        onClick={requestPermissionAndSubscribe}
-        className="fixed bottom-20 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer group"
-        title="Enable push notifications"
-      >
-        <Bell className="w-4 h-4 text-[#4285F4] group-hover:scale-110 transition-transform" />
-        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-          Enable Notifications
-        </span>
-      </button>
-    )
-  }
-
+// Don't render any UI — notification toggle lives in Settings.
   return null
 }
