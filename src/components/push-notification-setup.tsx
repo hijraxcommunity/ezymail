@@ -74,14 +74,13 @@ export function PushNotificationSetup() {
         return
       }
 
-      // Register service worker and get token
-      if ('serviceWorker' in navigator) {
-        await navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {})
-      }
+      // The app's main sw.js (registered by Providers) already includes
+      // Firebase Messaging — just use its existing registration.
+      const swRegistration = await navigator.serviceWorker.ready;
 
       const token = await getToken(messaging, {
         vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-        serviceWorkerRegistration: await navigator.serviceWorker.ready,
+        serviceWorkerRegistration: swRegistration,
       })
 
       if (token) {
