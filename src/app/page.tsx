@@ -16,6 +16,7 @@ import { AdminPanel } from '@/components/admin/admin-panel'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
 import { BusinessApp } from '@/components/business/business-app'
 import { useNotifications } from '@/hooks/use-notifications'
+import { PushNotificationSetup } from '@/components/push-notification-setup'
 
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
 
@@ -281,6 +282,9 @@ export default function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Push notification setup (FCM) */}
+      <PushNotificationSetup />
 
       {/* Undo snackbar */}
       <UndoSnackbar />
