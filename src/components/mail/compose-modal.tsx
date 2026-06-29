@@ -1284,7 +1284,7 @@ export function ComposeModal() {
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getTomorrowMorning())}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <Sun className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
@@ -1296,7 +1296,7 @@ export function ComposeModal() {
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getTomorrowAfternoon())}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <Sunset className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
@@ -1308,7 +1308,7 @@ export function ComposeModal() {
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getNextMonday())}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <Briefcase className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
@@ -1320,12 +1320,10 @@ export function ComposeModal() {
                         <button
                           type="button"
                           onClick={() => setShowCustomSchedule(true)}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
-                          <div className="text-center">
-                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
-                          </div>
+                          <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
                         </button>
                       </div>
                       <p className="text-center text-[11px] text-gray-400 mt-3">
