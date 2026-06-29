@@ -11,6 +11,7 @@ import {
   Send, Paperclip, X, Bold, Italic, Strikethrough,
   Link, List, ListOrdered, Image as ImageIcon,
   Clock, Flag, FileText, MoreVertical, Check, CalendarDays, Trash2, Users,
+  Sun, Sunset, Briefcase,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -631,12 +632,19 @@ export function ComposeModal() {
     return d
   }
 
+  const getTomorrowAfternoon = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setHours(13, 0, 0, 0)
+    return d
+  }
+
   const getNextMonday = () => {
     const d = new Date()
     const day = d.getDay()
     const daysUntilMon = day === 0 ? 1 : (8 - day)
     d.setDate(d.getDate() + daysUntilMon)
-    d.setHours(9, 0, 0, 0)
+    d.setHours(8, 0, 0, 0)
     return d
   }
 
@@ -1239,124 +1247,155 @@ export function ComposeModal() {
               </button>
 
               {/* Schedule Send button */}
-              <Popover open={showSchedulePopover} onOpenChange={setShowSchedulePopover}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={!editor || isUploading}
-                    className="inline-flex items-center justify-center h-9 gap-1.5 text-sm font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 rounded-xl px-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Clock className="w-4 h-4" />
-                    <span className="hidden sm:inline">Schedule</span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-0 z-[200]" align="end" side="top">
-                  <div className="px-3 py-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Schedule Send</p>
-                  </div>
-                  <Separator />
-                  <div className="p-1">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedule(getLaterToday())}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Later Today</p>
-                        <p className="text-xs text-gray-400">5:00 PM</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedule(getTomorrowMorning())}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Tomorrow Morning</p>
-                        <p className="text-xs text-gray-400">9:00 AM</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedule(getNextMonday())}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#1F1F1F] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Next Monday</p>
-                        <p className="text-xs text-gray-400">9:00 AM</p>
-                      </div>
-                    </button>
-                    <Separator className="my-1" />
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomSchedule(true)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <CalendarDays className="w-4 h-4" />
-                      <span className="text-sm font-medium">Pick date & time</span>
-                    </button>
-                  </div>
+              <button
+                type="button"
+                disabled={!editor || isUploading}
+                onClick={() => setShowSchedulePopover(true)}
+                className="inline-flex items-center justify-center h-9 gap-1.5 text-sm font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 rounded-xl px-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Clock className="w-4 h-4" />
+                <span className="hidden sm:inline">Schedule</span>
+              </button>
 
-                  {/* Custom date/time picker */}
-                  <AnimatePresence>
-                    {showCustomSchedule && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="overflow-hidden"
-                      >
-                        <Separator />
-                        <div className="p-3 space-y-3">
-                          <Calendar
-                            mode="single"
-                            selected={scheduleDate}
-                            onSelect={setScheduleDate}
-                            disabled={{ before: new Date() }}
-                            className="rounded-md border p-1"
-                            modifiersClassNames={{
-                              selected: 'bg-[#4285F4] text-white rounded-md',
-                              today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
-                            }}
-                          />
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs text-gray-500 shrink-0">Time:</label>
-                            <Input
-                              type="time"
-                              value={scheduleTime}
-                              onChange={(e) => setScheduleTime(e.target.value)}
-                              className="h-8 text-sm"
-                            />
+              {/* Schedule Send Modal */}
+              <AnimatePresence>
+                {showSchedulePopover && !showCustomSchedule && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+                    onClick={() => setShowSchedulePopover(false)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="bg-[#2D2D2D] rounded-xl p-4 w-full max-w-xs sm:max-w-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Tomorrow Morning */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getTomorrowMorning())}
+                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Sun className="w-6 h-6 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-white">Tomorrow morning</p>
+                            <p className="text-xs text-gray-400">{format(getTomorrowMorning(), 'd MMM, h:mm a')}</p>
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
-                              onClick={handleCustomSchedule}
-                              disabled={!scheduleDate}
-                            >
-                              <Check className="w-3 h-3 mr-1" />
-                              Schedule
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 text-xs"
-                              onClick={() => setShowCustomSchedule(false)}
-                            >
-                              Cancel
-                            </Button>
+                        </button>
+                        {/* Tomorrow Afternoon */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getTomorrowAfternoon())}
+                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Sunset className="w-6 h-6 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-white">Tomorrow afternoon</p>
+                            <p className="text-xs text-gray-400">{format(getTomorrowAfternoon(), 'd MMM, h:mm a')}</p>
                           </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </PopoverContent>
-              </Popover>
+                        </button>
+                        {/* Monday Morning */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getNextMonday())}
+                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Briefcase className="w-6 h-6 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-white">Monday morning</p>
+                            <p className="text-xs text-gray-400">{format(getNextMonday(), 'd MMM, h:mm a')}</p>
+                          </div>
+                        </button>
+                        {/* Pick date & time */}
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomSchedule(true)}
+                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <CalendarDays className="w-6 h-6 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-white">Pick date & time</p>
+                          </div>
+                        </button>
+                      </div>
+                      <p className="text-center text-xs text-gray-500 mt-3">
+                        All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                      </p>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Custom date/time picker modal */}
+              <AnimatePresence>
+                {showSchedulePopover && showCustomSchedule && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+                    onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="bg-[#2D2D2D] rounded-xl p-4 w-full max-w-xs sm:max-w-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-sm font-semibold text-white mb-3">Select date and time</p>
+                      <Calendar
+                        mode="single"
+                        selected={scheduleDate}
+                        onSelect={setScheduleDate}
+                        disabled={{ before: new Date() }}
+                        className="rounded-md border border-gray-600 bg-[#2D2D2D] p-1"
+                        modifiersClassNames={{
+                          selected: 'bg-[#4285F4] text-white rounded-md',
+                          today: 'bg-[#FBBC05]/20 rounded-md',
+                        }}
+                      />
+                      <div className="flex items-center gap-2 mt-3">
+                        <label className="text-xs text-gray-400 shrink-0">Time:</label>
+                        <Input
+                          type="time"
+                          value={scheduleTime}
+                          onChange={(e) => setScheduleTime(e.target.value)}
+                          className="h-8 text-sm bg-[#3A3A3A] border-gray-600 text-white"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs text-gray-300 hover:text-white"
+                          onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-[#4285F4] hover:bg-[#1a73e8]"
+                          onClick={handleCustomSchedule}
+                          disabled={!scheduleDate}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Schedule send
+                        </Button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Send button */}
               <button
