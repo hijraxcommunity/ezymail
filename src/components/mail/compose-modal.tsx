@@ -448,7 +448,10 @@ export function ComposeModal() {
         }
       }
       setErrors(e)
-      if (Object.keys(e).length > 0) return
+      if (Object.keys(e).length > 0) {
+        isSendingRef.current = false
+        return
+      }
 
       const html = editor?.getHTML() || ''
       const currentAttachments = attachments
@@ -1273,59 +1276,59 @@ export function ComposeModal() {
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.95, opacity: 0 }}
                       transition={{ duration: 0.15 }}
-                      className="bg-[#2D2D2D] rounded-xl p-4 w-full max-w-xs sm:max-w-sm"
+                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2.5">
                         {/* Tomorrow Morning */}
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getTomorrowMorning())}
-                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
-                          <Sun className="w-6 h-6 text-[#FBBC05]" />
+                          <Sun className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
-                            <p className="text-sm font-medium text-white">Tomorrow morning</p>
-                            <p className="text-xs text-gray-400">{format(getTomorrowMorning(), 'd MMM, h:mm a')}</p>
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow morning</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowMorning(), 'd MMM, h:mm a')}</p>
                           </div>
                         </button>
                         {/* Tomorrow Afternoon */}
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getTomorrowAfternoon())}
-                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
-                          <Sunset className="w-6 h-6 text-[#FBBC05]" />
+                          <Sunset className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
-                            <p className="text-sm font-medium text-white">Tomorrow afternoon</p>
-                            <p className="text-xs text-gray-400">{format(getTomorrowAfternoon(), 'd MMM, h:mm a')}</p>
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow afternoon</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowAfternoon(), 'd MMM, h:mm a')}</p>
                           </div>
                         </button>
                         {/* Monday Morning */}
                         <button
                           type="button"
                           onClick={() => handleQuickSchedule(getNextMonday())}
-                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
-                          <Briefcase className="w-6 h-6 text-[#FBBC05]" />
+                          <Briefcase className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
-                            <p className="text-sm font-medium text-white">Monday morning</p>
-                            <p className="text-xs text-gray-400">{format(getNextMonday(), 'd MMM, h:mm a')}</p>
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Monday morning</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getNextMonday(), 'd MMM, h:mm a')}</p>
                           </div>
                         </button>
                         {/* Pick date & time */}
                         <button
                           type="button"
                           onClick={() => setShowCustomSchedule(true)}
-                          className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
-                          <CalendarDays className="w-6 h-6 text-[#FBBC05]" />
+                          <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
                           <div className="text-center">
-                            <p className="text-sm font-medium text-white">Pick date & time</p>
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
                           </div>
                         </button>
                       </div>
-                      <p className="text-center text-xs text-gray-500 mt-3">
+                      <p className="text-center text-[11px] text-gray-400 mt-3">
                         All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
                       </p>
                     </motion.div>
@@ -1349,35 +1352,35 @@ export function ComposeModal() {
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.95, opacity: 0 }}
                       transition={{ duration: 0.15 }}
-                      className="bg-[#2D2D2D] rounded-xl p-4 w-full max-w-xs sm:max-w-sm"
+                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <p className="text-sm font-semibold text-white mb-3">Select date and time</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
                       <Calendar
                         mode="single"
                         selected={scheduleDate}
                         onSelect={setScheduleDate}
                         disabled={{ before: new Date() }}
-                        className="rounded-md border border-gray-600 bg-[#2D2D2D] p-1"
+                        className="rounded-md border border-gray-200 dark:border-gray-600 p-1"
                         modifiersClassNames={{
                           selected: 'bg-[#4285F4] text-white rounded-md',
-                          today: 'bg-[#FBBC05]/20 rounded-md',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
                         }}
                       />
                       <div className="flex items-center gap-2 mt-3">
-                        <label className="text-xs text-gray-400 shrink-0">Time:</label>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
                         <Input
                           type="time"
                           value={scheduleTime}
                           onChange={(e) => setScheduleTime(e.target.value)}
-                          className="h-8 text-sm bg-[#3A3A3A] border-gray-600 text-white"
+                          className="h-8 text-sm"
                         />
                       </div>
                       <div className="flex justify-end gap-2 mt-4">
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-8 text-xs text-gray-300 hover:text-white"
+                          className="h-8 text-xs"
                           onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
                         >
                           Cancel
