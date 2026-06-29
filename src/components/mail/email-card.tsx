@@ -332,8 +332,8 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 >
                   {contactName}
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
-                  {timeAgo}
+                <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}">
+                  {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -353,13 +353,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                   </span>
                 )}
               </div>
-              {/* Scheduled/Snoozed badge inline */}
-              {email.scheduledAt && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 mb-0.5">
-                  <Clock className="w-2.5 h-2.5" />
-                  {format(new Date(email.scheduledAt), 'MMM d, h:mm a')}
-                </Badge>
-              )}
               {email.snoozedUntil && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
                   <CalendarDays className="w-2.5 h-2.5" />
@@ -412,12 +405,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             >
               <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
             </button>
-            {/* Scheduled/Snoozed badge mobile */}
-            {email.scheduledAt && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 shrink-0">
-                <Clock className="w-2.5 h-2.5" />
-              </Badge>
-            )}
+
             {email.snoozedUntil && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
                 <CalendarDays className="w-2.5 h-2.5" />
@@ -510,8 +498,8 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             >
               {contactName}
             </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
-              {timeAgo}
+            <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}">
+              {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
             </span>
           </div>
           <div className="flex items-center gap-1.5 mb-0.5">
@@ -531,13 +519,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </span>
             )}
           </div>
-          {/* Scheduled/Snoozed badge inline desktop */}
-          {email.scheduledAt && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 mb-0.5">
-              <Clock className="w-2.5 h-2.5" />
-              {format(new Date(email.scheduledAt), 'MMM d, h:mm a')}
-            </Badge>
-          )}
           {email.snoozedUntil && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
               <CalendarDays className="w-2.5 h-2.5" />
@@ -589,12 +570,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
         >
           <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
         </button>
-        {/* Scheduled/Snoozed badge desktop */}
-        {email.scheduledAt && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 shrink-0">
-            <Clock className="w-2.5 h-2.5" />
-          </Badge>
-        )}
+
         {email.snoozedUntil && (
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
             <CalendarDays className="w-2.5 h-2.5" />
