@@ -1360,13 +1360,19 @@ export function ComposeModal() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
-                      <div className="[&_.rdp]:mx-auto">
+                      <div className="[&_[data-slot=calendar]]:w-full [&_[data-slot=calendar]]:mx-auto [&_[data-slot=calendar]]:p-1.5" style={{ '--cell-size': '1.6rem' } as React.CSSProperties}>
                       <Calendar
                         mode="single"
                         selected={scheduleDate}
                         onSelect={setScheduleDate}
                         disabled={{ before: new Date() }}
-                        className="[&_.rdp]:w-full [&_.rdp-table]:w-full [&_.rdp-head_cell]:w-9 [&_.rdp-head_cell]:text-[11px] [&_.rdp-day]:w-9 [&_.rdp-day]:h-8 [&_.rdp-day_button]:w-9 [&_.rdp-day_button]:h-8 [&_.rdp-day_button]:text-[12px] [&_.rdp-month_caption]:justify-center [&_.rdp-nav]:space-x-4"
+                        classNames={{
+                          root: 'w-full',
+                          table: 'w-full border-collapse',
+                          weekday: 'text-[10px] flex-1',
+                          day: 'flex-1 p-0 aspect-square',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md data-[selected=true]:rounded-none',
+                        }}
                         modifiersClassNames={{
                           selected: 'bg-[#4285F4] text-white rounded-md',
                           today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
