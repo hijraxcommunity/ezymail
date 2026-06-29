@@ -121,7 +121,9 @@ export function ComposeModal() {
   const [showSchedulePopover, setShowSchedulePopover] = useState(false)
   const [showTemplatesPopover, setShowTemplatesPopover] = useState(false)
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined)
-  const [scheduleTime, setScheduleTime] = useState('09:00')
+  const [scheduleHour, setScheduleHour] = useState('9')
+  const [scheduleMinute, setScheduleMinute] = useState('00')
+  const [scheduleAmPm, setScheduleAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSchedule, setShowCustomSchedule] = useState(false)
   const [undoCountdown, setUndoCountdown] = useState(0)
   const [showContactsPicker, setShowContactsPicker] = useState(false)
@@ -286,7 +288,9 @@ export function ComposeModal() {
     setAttachments([])
     setPriority('normal')
     setScheduleDate(undefined)
-    setScheduleTime('09:00')
+    setScheduleHour('9')
+    setScheduleMinute('00')
+    setScheduleAmPm('AM')
     setShowCustomSchedule(false)
     setShowSchedulePopover(false)
     setShowTemplatesPopover(false)
@@ -657,7 +661,9 @@ export function ComposeModal() {
 
   const handleCustomSchedule = () => {
     if (!scheduleDate) return
-    const [hours, minutes] = scheduleTime.split(':').map(Number)
+    const hr = parseInt(scheduleHour) || 0
+    let hours = scheduleAmPm === 'PM' && hr !== 12 ? hr + 12 : scheduleAmPm === 'AM' && hr === 12 ? 0 : hr
+    const minutes = parseInt(scheduleMinute) || 0
     const d = new Date(scheduleDate)
     d.setHours(hours, minutes, 0, 0)
     if (d <= new Date()) {
@@ -1365,14 +1371,39 @@ export function ComposeModal() {
                           today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
                         }}
                       />
-                      <div className="flex items-center gap-2 mt-3">
+                      <div className="flex items-center gap-1.5 mt-3">
                         <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
-                        <Input
-                          type="time"
-                          value={scheduleTime}
-                          onChange={(e) => setScheduleTime(e.target.value)}
-                          className="h-8 text-sm"
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={2}
+                          value={scheduleHour}
+                          onChange={(e) => setScheduleHour(e.target.value.replace(/[^1-9]/g, '').slice(0, 2))}
+                          placeholder="9"
+                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
                         />
+                        <span className="text-sm text-gray-400">:</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={2}
+                          value={scheduleMinute}
+                          onChange={(e) => setScheduleMinute(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                          placeholder="00"
+                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                        />
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                          <button
+                            type="button"
+                            onClick={() => setScheduleAmPm('AM')}
+                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'AM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                          >AM</button>
+                          <button
+                            type="button"
+                            onClick={() => setScheduleAmPm('PM')}
+                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'PM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                          >PM</button>
+                        </div>
                       </div>
                       <div className="flex justify-end gap-2 mt-4">
                         <Button
