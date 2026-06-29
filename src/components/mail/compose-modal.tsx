@@ -1360,17 +1360,19 @@ export function ComposeModal() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
+                      <div className="[&_.rdp]:mx-auto">
                       <Calendar
                         mode="single"
                         selected={scheduleDate}
                         onSelect={setScheduleDate}
                         disabled={{ before: new Date() }}
-                        className="rounded-md border border-gray-200 dark:border-gray-600 p-1"
+                        className="[&_.rdp]:w-full [&_.rdp-table]:w-full [&_.rdp-head_cell]:w-9 [&_.rdp-head_cell]:text-[11px] [&_.rdp-day]:w-9 [&_.rdp-day]:h-8 [&_.rdp-day_button]:w-9 [&_.rdp-day_button]:h-8 [&_.rdp-day_button]:text-[12px] [&_.rdp-month_caption]:justify-center [&_.rdp-nav]:space-x-4"
                         modifiersClassNames={{
                           selected: 'bg-[#4285F4] text-white rounded-md',
                           today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
                         }}
                       />
+                      </div>
                       <div className="flex items-center gap-1.5 mt-3">
                         <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
                         <input
