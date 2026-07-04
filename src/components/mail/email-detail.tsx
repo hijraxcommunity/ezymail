@@ -6,7 +6,7 @@ import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
   Paperclip, Forward, FileText, Download, Tag, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
-  ChevronDown, Lock, Copy, Mail, MoreVertical, Flag
+  ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -604,8 +604,11 @@ export function EmailDetail() {
   /* ─── Snooze ─── */
   const [showSnoozePopover, setShowSnoozePopover] = useState(false)
   const [snoozeDate, setSnoozeDate] = useState<Date | undefined>(undefined)
-  const [snoozeTime, setSnoozeTime] = useState('09:00')
+  const [snoozeHour, setSnoozeHour] = useState('9')
+  const [snoozeMinute, setSnoozeMinute] = useState('00')
+  const [snoozeAmPm, setSnoozeAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSnooze, setShowCustomSnooze] = useState(false)
+  const [showSnoozeModal, setShowSnoozeModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const getLaterToday = () => {
@@ -624,6 +627,22 @@ export function EmailDetail() {
     const d = new Date()
     d.setDate(d.getDate() + 7)
     d.setHours(9, 0, 0, 0)
+    return d
+  }
+  const getLaterThisWeek = () => {
+    const d = new Date()
+    const dayOfWeek = d.getDay()
+    const daysUntilMon = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
+    d.setDate(d.getDate() + daysUntilMon)
+    d.setHours(8, 0, 0, 0)
+    return d
+  }
+  const getThisWeekend = () => {
+    const d = new Date()
+    const dayOfWeek = d.getDay()
+    const daysUntilSat = dayOfWeek === 0 ? 6 : (6 - dayOfWeek)
+    d.setDate(d.getDate() + daysUntilSat)
+    d.setHours(8, 0, 0, 0)
     return d
   }
 
@@ -650,7 +669,9 @@ export function EmailDetail() {
 
   const handleCustomSnooze = () => {
     if (!snoozeDate) return
-    const [hours, minutes] = snoozeTime.split(':').map(Number)
+    const hr = parseInt(snoozeHour) || 0
+    let hours = snoozeAmPm === 'PM' && hr !== 12 ? hr + 12 : snoozeAmPm === 'AM' && hr === 12 ? 0 : hr
+    const minutes = parseInt(snoozeMinute) || 0
     const d = new Date(snoozeDate)
     d.setHours(hours, minutes, 0, 0)
     if (d <= new Date()) {
@@ -812,29 +833,9 @@ export function EmailDetail() {
                       <Forward className="w-4 h-4" /> Forward
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                        <Clock className="w-4 h-4" /> Snooze
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-52">
-                        <DropdownMenuItem onClick={() => handleSnooze(getLaterToday())} className="gap-2.5 cursor-pointer">
-                          <Clock className="w-4 h-4" /> Later Today
-                          <span className="ml-auto text-xs text-gray-400">5:00 PM</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSnooze(getTomorrow())} className="gap-2.5 cursor-pointer">
-                          <Clock className="w-4 h-4" /> Tomorrow
-                          <span className="ml-auto text-xs text-gray-400">9:00 AM</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSnooze(getNextWeek())} className="gap-2.5 cursor-pointer">
-                          <CalendarDays className="w-4 h-4" /> Next Week
-                          <span className="ml-auto text-xs text-gray-400">7 days</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setShowCustomSnooze(true)} className="gap-2.5 cursor-pointer text-[#4285F4]">
-                          <CalendarDays className="w-4 h-4" /> Pick date & time
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
+                      <Clock className="w-4 h-4" /> Snooze
+                    </DropdownMenuItem>
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
                         <Tag className="w-4 h-4" /> Label
@@ -852,57 +853,6 @@ export function EmailDetail() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {/* Hidden custom snooze popover for Pick date & time */}
-                <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1}>
-                      <CalendarDays className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="end" side="bottom">
-                    <div className="p-3 space-y-3">
-                      <Calendar
-                        mode="single"
-                        selected={snoozeDate}
-                        onSelect={setSnoozeDate}
-                        disabled={{ before: new Date() }}
-                        className="rounded-md border p-1"
-                        modifiersClassNames={{
-                          selected: 'bg-[#4285F4] text-white rounded-md',
-                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
-                        }}
-                      />
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-500 shrink-0">Time:</label>
-                        <Input
-                          type="time"
-                          value={snoozeTime}
-                          onChange={(e) => setSnoozeTime(e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
-                          onClick={handleCustomSnooze}
-                          disabled={!snoozeDate}
-                        >
-                          <Check className="w-3 h-3 mr-1" />
-                          Snooze
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 text-xs"
-                          onClick={() => setShowCustomSnooze(false)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </>
             ) : currentFolder === 'drafts' ? (
               <>
@@ -967,29 +917,9 @@ export function EmailDetail() {
                       <Forward className="w-4 h-4" /> Forward
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                        <Clock className="w-4 h-4" /> Snooze
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-52">
-                        <DropdownMenuItem onClick={() => handleSnooze(getLaterToday())} className="gap-2.5 cursor-pointer">
-                          <Clock className="w-4 h-4" /> Later Today
-                          <span className="ml-auto text-xs text-gray-400">5:00 PM</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSnooze(getTomorrow())} className="gap-2.5 cursor-pointer">
-                          <Clock className="w-4 h-4" /> Tomorrow
-                          <span className="ml-auto text-xs text-gray-400">9:00 AM</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSnooze(getNextWeek())} className="gap-2.5 cursor-pointer">
-                          <CalendarDays className="w-4 h-4" /> Next Week
-                          <span className="ml-auto text-xs text-gray-400">7 days</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setShowCustomSnooze(true)} className="gap-2.5 cursor-pointer text-[#4285F4]">
-                          <CalendarDays className="w-4 h-4" /> Pick date & time
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
+                      <Clock className="w-4 h-4" /> Snooze
+                    </DropdownMenuItem>
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
                         <Tag className="w-4 h-4" /> Label
@@ -1010,57 +940,6 @@ export function EmailDetail() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {/* Hidden custom snooze popover for Pick date & time */}
-                <Popover open={showCustomSnooze} onOpenChange={(open) => { if (!open) { setShowCustomSnooze(false); setShowSnoozePopover(false) } }}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-0 w-0 overflow-hidden opacity-0 pointer-events-none" tabIndex={-1}>
-                      <CalendarDays className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="end" side="bottom">
-                    <div className="p-3 space-y-3">
-                      <Calendar
-                        mode="single"
-                        selected={snoozeDate}
-                        onSelect={setSnoozeDate}
-                        disabled={{ before: new Date() }}
-                        className="rounded-md border p-1"
-                        modifiersClassNames={{
-                          selected: 'bg-[#4285F4] text-white rounded-md',
-                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
-                        }}
-                      />
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-500 shrink-0">Time:</label>
-                        <Input
-                          type="time"
-                          value={snoozeTime}
-                          onChange={(e) => setSnoozeTime(e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-8 text-xs flex-1 bg-[#4285F4] hover:bg-[#1a73e8]"
-                          onClick={handleCustomSnooze}
-                          disabled={!snoozeDate}
-                        >
-                          <Check className="w-3 h-3 mr-1" />
-                          Snooze
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 text-xs"
-                          onClick={() => setShowCustomSnooze(false)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </>
             )}
           </TooltipProvider>
@@ -1435,6 +1314,170 @@ export function EmailDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ─── Snooze Modal (Schedule-style) ─── */}
+      <AnimatePresence>
+        {showSnoozeModal && !showCustomSnooze && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+            onClick={() => setShowSnoozeModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSnooze(getLaterToday())}
+                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Sunset className="w-5 h-5 text-[#FBBC05]" />
+                  <div className="text-center">
+                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Later today</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getLaterToday(), 'd MMM, h:mm a')}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSnooze(getTomorrow())}
+                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Sun className="w-5 h-5 text-[#FBBC05]" />
+                  <div className="text-center">
+                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrow(), 'd MMM, h:mm a')}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSnooze(getLaterThisWeek())}
+                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Briefcase className="w-5 h-5 text-[#FBBC05]" />
+                  <div className="text-center">
+                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Later this week</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getLaterThisWeek(), 'd MMM, h:mm a')}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomSnooze(true)}
+                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
+                  <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
+                </button>
+              </div>
+              <p className="text-center text-[11px] text-gray-400 mt-3">
+                All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Snooze Custom date/time picker modal */}
+      <AnimatePresence>
+        {showSnoozeModal && showCustomSnooze && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+            onClick={() => { setShowCustomSnooze(false); setShowSnoozeModal(false) }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
+              <div className="[&_[data-slot=calendar]]:w-full [&_[data-slot=calendar]]:mx-auto [&_[data-slot=calendar]]:p-1.5" style={{ '--cell-size': '1.6rem' } as React.CSSProperties}>
+                <Calendar
+                  mode="single"
+                  selected={snoozeDate}
+                  onSelect={setSnoozeDate}
+                  disabled={{ before: new Date() }}
+                  classNames={{
+                    root: 'w-full',
+                    table: 'w-full border-collapse',
+                    weekday: 'text-[10px] flex-1',
+                    day: 'flex-1 p-0 aspect-square',
+                    today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md data-[selected=true]:rounded-none',
+                  }}
+                  modifiersClassNames={{
+                    selected: 'bg-[#4285F4] text-white rounded-md',
+                    today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-3">
+                <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={snoozeHour}
+                  onChange={(e) => setSnoozeHour(e.target.value.replace(/[^1-9]/g, '').slice(0, 2))}
+                  placeholder="9"
+                  className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                />
+                <span className="text-sm text-gray-400">:</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={snoozeMinute}
+                  onChange={(e) => setSnoozeMinute(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                  placeholder="00"
+                  className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                />
+                <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => setSnoozeAmPm('AM')}
+                    className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${snoozeAmPm === 'AM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                  >AM</button>
+                  <button
+                    type="button"
+                    onClick={() => setSnoozeAmPm('PM')}
+                    className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${snoozeAmPm === 'PM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                  >PM</button>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomSnooze(false); setShowSnoozeModal(false) }}
+                  className="h-8 px-3 text-xs font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+                >Cancel</button>
+                <button
+                  type="button"
+                  onClick={handleCustomSnooze}
+                  disabled={!snoozeDate}
+                  className="h-8 px-3 text-xs font-medium rounded-lg bg-[#4285F4] hover:bg-[#1a73e8] text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <Check className="w-3 h-3 inline mr-1 -mt-0.5" />
+                  Snooze
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
