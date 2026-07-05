@@ -110,7 +110,11 @@ export function ComposeModal() {
   const [toChips, setToChips] = useState<Array<{ email: string; name: string; avatar?: string | null }>>([])
   const [toInput, setToInput] = useState('')
   const [cc, setCc] = useState('')
+  const [ccChips, setCcChips] = useState<Array<{ email: string; name: string; avatar?: string | null }>>([])
+  const [ccInput, setCcInput] = useState('')
   const [bcc, setBcc] = useState('')
+  const [bccChips, setBccChips] = useState<Array<{ email: string; name: string; avatar?: string | null }>>([])
+  const [bccInput, setBccInput] = useState('')
   const [subject, setSubject] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [attachments, setAttachments] = useState<File[]>([])
@@ -147,41 +151,75 @@ export function ComposeModal() {
     return contacts.find(c => c.email.toLowerCase() === n)
   }
 
-  const addToChip = (email: string) => {
+  const lookupUser = async (email: string): Promise<{ name: string; avatar: string | null } | null> => {
+    try {
+      const res = await fetch(`/api/users/lookup?email=${encodeURIComponent(email)}`)
+      const json = await res.json()
+      if (json.data) return { name: json.data.name, avatar: json.data.avatar }
+    } catch { /* ignore */ }
+    return null
+  }
+
+  const addToChip = async (email: string, type: 'to' | 'cc' | 'bcc') => {
     const trimmed = email.trim().toLowerCase()
-    if (!trimmed || toChips.some(c => c.email === trimmed)) return
+    const chips = type === 'to' ? toChips : type === 'cc' ? ccChips : bccChips
+    const setChips = type === 'to' ? setToChips : type === 'cc' ? setCcChips : setBccChips
+    const setInput = type === 'to' ? setToInput : type === 'cc' ? setCcInput : setBccInput
+    const setField = type === 'to' ? setTo : type === 'cc' ? setCc : setBcc
+
+    if (!trimmed || chips.some(c => c.email === trimmed)) return
+
+    // First check local contacts
     const contact = findContactByEmail(trimmed)
-    setToChips(prev => [...prev, { email: trimmed, name: contact?.name || '', avatar: (contact as { avatar?: string | null })?.avatar || null }])
-    setToInput('')
-    setTo(prev => {
+    if (contact) {
+      setChips(prev => [...prev, { email: trimmed, name: (contact as { name: string; avatar?: string | null }).name || '', avatar: (contact as { avatar?: string | null })?.avatar || null }])
+      setInput('')
+      setField(prev => {
+        const existing = prev.split(',').map(s => s.trim()).filter(Boolean)
+        if (!existing.includes(trimmed)) return [...existing, trimmed].join(', ')
+        return prev
+      })
+      return
+    }
+
+    // Then lookup registered user via API
+    const user = await lookupUser(trimmed)
+    setChips(prev => [...prev, { email: trimmed, name: user?.name || '', avatar: user?.avatar || null }])
+    setInput('')
+    setField(prev => {
       const existing = prev.split(',').map(s => s.trim()).filter(Boolean)
       if (!existing.includes(trimmed)) return [...existing, trimmed].join(', ')
       return prev
     })
   }
 
-  const removeToChip = (email: string) => {
-    setToChips(prev => prev.filter(c => c.email !== email))
-    setTo(prev => {
+  const removeChip = (email: string, type: 'to' | 'cc' | 'bcc') => {
+    const setChips = type === 'to' ? setToChips : type === 'cc' ? setCcChips : setBccChips
+    const setField = type === 'to' ? setTo : type === 'cc' ? setCc : setBcc
+    setChips(prev => prev.filter(c => c.email !== email))
+    setField(prev => {
       const existing = prev.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
       return existing.filter(e => e !== email.toLowerCase()).join(', ')
     })
   }
 
-  const handleToKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleChipKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, type: 'to' | 'cc' | 'bcc') => {
+    const input = type === 'to' ? toInput : type === 'cc' ? ccInput : bccInput
+    const chips = type === 'to' ? toChips : type === 'cc' ? ccChips : bccChips
     if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
       e.preventDefault()
-      const v = toInput.replace(',', '').trim()
-      if (v && emailRegex.test(v)) addToChip(v)
+      const v = input.replace(',', '').trim()
+      if (v && emailRegex.test(v)) addToChip(v, type)
     }
-    if (e.key === 'Backspace' && toInput === '' && toChips.length > 0) {
-      removeToChip(toChips[toChips.length - 1].email)
+    if (e.key === 'Backspace' && input === '' && chips.length > 0) {
+      removeChip(chips[chips.length - 1].email, type)
     }
   }
 
-  const handleToBlur = () => {
-    const v = toInput.replace(',', '').trim()
-    if (v && emailRegex.test(v)) addToChip(v)
+  const handleChipBlur = (type: 'to' | 'cc' | 'bcc') => {
+    const input = type === 'to' ? toInput : type === 'cc' ? ccInput : bccInput
+    const v = input.replace(',', '').trim()
+    if (v && emailRegex.test(v)) addToChip(v, type)
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -260,7 +298,11 @@ export function ComposeModal() {
       setToChips([])
       setToInput('')
       setCc(data.cc)
+      setCcChips([])
+      setCcInput('')
       setBcc(data.bcc)
+      setBccChips([])
+      setBccInput('')
       setSubject(data.subject)
       setShowCc(data.showCc)
       setShowBcc(data.showBcc)
@@ -276,6 +318,10 @@ export function ComposeModal() {
       setTo(editDraftEmail.recipient?.email || '')
       setToChips([])
       setToInput('')
+      setCcChips([])
+      setCcInput('')
+      setBccChips([])
+      setBccInput('')
       setSubject(editDraftEmail.subject || '')
       editor.commands.setContent(editDraftEmail.bodyHtml || editDraftEmail.body?.replace(/\n/g, '<br>') || '')
       setErrors({})
@@ -293,6 +339,10 @@ export function ComposeModal() {
         setTo('')
         setToChips([])
         setToInput('')
+        setCcChips([])
+        setCcInput('')
+        setBccChips([])
+        setBccInput('')
         setSubject(replyToEmail.subject?.startsWith('Fwd: ')
           ? replyToEmail.subject
           : `Fwd: ${replyToEmail.subject || '(No subject)'}`)
@@ -331,11 +381,19 @@ export function ComposeModal() {
       setTo('')
       setToChips([])
       setToInput('')
+      setCcChips([])
+      setCcInput('')
+      setBccChips([])
+      setBccInput('')
       setSubject('')
       editor.commands.setContent('')
     }
     setCc('')
+    setCcChips([])
+    setCcInput('')
     setBcc('')
+    setBccChips([])
+    setBccInput('')
     setShowCc(false)
     setShowBcc(false)
     setAttachments([])
@@ -1026,7 +1084,7 @@ export function ComposeModal() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => removeToChip(chip.email)}
+                          onClick={() => removeChip(chip.email, 'to')}
                           className="w-5 h-5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center shrink-0 cursor-pointer"
                         >
                           <X className="w-3 h-3 text-gray-500" />
@@ -1037,8 +1095,8 @@ export function ComposeModal() {
                   <Input
                     value={toInput}
                     onChange={e => setToInput(e.target.value)}
-                    onKeyDown={handleToKeyDown}
-                    onBlur={handleToBlur}
+                    onKeyDown={e => handleChipKeyDown(e, 'to')}
+                    onBlur={() => handleChipBlur('to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
                     className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
                   />
@@ -1075,17 +1133,50 @@ export function ComposeModal() {
               {/* CC */}
               {showCc && (
                 <div className="border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center px-4 gap-2">
+                  <div className="flex items-center px-4 gap-2 min-h-[44px]">
                     <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
-                    <Input
-                      value={cc}
-                      onChange={e => {
-                        setCc(e.target.value)
-                        if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
-                      }}
-                      placeholder="CC recipients (comma-separated)"
-                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
-                    />
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                      {ccChips.map(chip => {
+                        const initials = chip.name
+                          ? chip.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                          : chip.email[0].toUpperCase()
+                        return (
+                          <span
+                            key={chip.email}
+                            className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full pl-0.5 pr-1 py-0.5 max-w-[240px] shrink-0"
+                          >
+                            {chip.avatar ? (
+                              <img src={chip.avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {initials}
+                              </span>
+                            )}
+                            <span className="text-sm text-[#1F1F1F] dark:text-white truncate max-w-[150px]">
+                              {chip.name || chip.email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeChip(chip.email, 'cc')}
+                              className="w-5 h-5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center shrink-0 cursor-pointer"
+                            >
+                              <X className="w-3 h-3 text-gray-500" />
+                            </button>
+                          </span>
+                        )
+                      })}
+                      <Input
+                        value={ccInput}
+                        onChange={e => {
+                          setCcInput(e.target.value)
+                          if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
+                        }}
+                        onKeyDown={e => handleChipKeyDown(e, 'cc')}
+                        onBlur={() => handleChipBlur('cc')}
+                        placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
+                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
+                      />
+                    </div>
                   </div>
                   {errors.cc && <p className="text-xs text-red-500 px-4 pb-2">{errors.cc}</p>}
                 </div>
@@ -1094,17 +1185,50 @@ export function ComposeModal() {
               {/* BCC */}
               {showBcc && (
                 <div className="border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center px-4 gap-2">
+                  <div className="flex items-center px-4 gap-2 min-h-[44px]">
                     <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
-                    <Input
-                      value={bcc}
-                      onChange={e => {
-                        setBcc(e.target.value)
-                        if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
-                      }}
-                      placeholder="BCC recipients (comma-separated)"
-                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
-                    />
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                      {bccChips.map(chip => {
+                        const initials = chip.name
+                          ? chip.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                          : chip.email[0].toUpperCase()
+                        return (
+                          <span
+                            key={chip.email}
+                            className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full pl-0.5 pr-1 py-0.5 max-w-[240px] shrink-0"
+                          >
+                            {chip.avatar ? (
+                              <img src={chip.avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {initials}
+                              </span>
+                            )}
+                            <span className="text-sm text-[#1F1F1F] dark:text-white truncate max-w-[150px]">
+                              {chip.name || chip.email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeChip(chip.email, 'bcc')}
+                              className="w-5 h-5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center shrink-0 cursor-pointer"
+                            >
+                              <X className="w-3 h-3 text-gray-500" />
+                            </button>
+                          </span>
+                        )
+                      })}
+                      <Input
+                        value={bccInput}
+                        onChange={e => {
+                          setBccInput(e.target.value)
+                          if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
+                        }}
+                        onKeyDown={e => handleChipKeyDown(e, 'bcc')}
+                        onBlur={() => handleChipBlur('bcc')}
+                        placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
+                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
+                      />
+                    </div>
                   </div>
                   {errors.bcc && <p className="text-xs text-red-500 px-4 pb-2">{errors.bcc}</p>}
                 </div>
