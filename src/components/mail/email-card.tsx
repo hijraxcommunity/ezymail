@@ -332,7 +332,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 >
                   {contactName}
                 </span>
-                <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}">
+                <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
                   {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
                 </span>
               </div>
@@ -492,7 +492,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             >
               {contactName}
             </span>
-            <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}">
+            <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
               {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
             </span>
           </div>
