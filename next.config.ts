@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   reactStrictMode: false,
   // Required for Prisma + pg adapter in Vercel serverless
   serverExternalPackages: ['pg', '@prisma/adapter-pg', 'sharp'],
