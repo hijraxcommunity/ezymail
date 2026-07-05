@@ -928,7 +928,7 @@ function ProfileTabContent({
         <div className="relative group" style={{ width: 96, height: 96 }}>
           {/* Upload progress SVG ring */}
           {avatarUploading && (
-            <svg className="absolute inset-0 m-auto w-20 h-20 sm:w-24 sm:h-24 -rotate-90" viewBox="0 0 96 96">
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 96 96">
               <circle cx="48" cy="48" r="45" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-200 dark:text-gray-700" />
               <circle
                 cx="48" cy="48" r="45" fill="none" stroke="#4285F4" strokeWidth="3"
@@ -939,7 +939,7 @@ function ProfileTabContent({
               />
             </svg>
           )}
-          <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
+          <Avatar className="w-full h-full">
             <AvatarImage src={profile.avatar || undefined} />
             <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xl sm:text-2xl font-bold">
               {initials}
