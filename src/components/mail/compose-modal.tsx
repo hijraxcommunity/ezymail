@@ -107,7 +107,7 @@ export function ComposeModal() {
     return globalThis.innerWidth < 768
   })
   const [to, setTo] = useState('')
-  const [toChips, setToChips] = useState<Array<{ email: string; name: string; avatar: string | null }>>([])
+  const [toChips, setToChips] = useState<Array<{ email: string; name: string }>>([])
   const [toInput, setToInput] = useState('')
   const [cc, setCc] = useState('')
   const [bcc, setBcc] = useState('')
@@ -122,6 +122,10 @@ export function ComposeModal() {
   const [priority, setPriority] = useState<'normal' | 'high'>('normal')
   const [showSchedulePopover, setShowSchedulePopover] = useState(false)
   const [showTemplatesPopover, setShowTemplatesPopover] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined)
+  const [scheduleHour, setScheduleHour] = useState('9')
+  const [scheduleMinute, setScheduleMinute] = useState('00')
+  const [scheduleAmPm, setScheduleAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSchedule, setShowCustomSchedule] = useState(false)
   const [undoCountdown, setUndoCountdown] = useState(0)
   const [showContactsPicker, setShowContactsPicker] = useState(false)
@@ -139,25 +143,19 @@ export function ComposeModal() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   const findContactByEmail = (email: string) => {
-    const normalized = email.toLowerCase().trim()
-    return contacts.find(c => c.email.toLowerCase() === normalized)
+    const n = email.toLowerCase().trim()
+    return contacts.find(c => c.email.toLowerCase() === n)
   }
 
   const addToChip = (email: string) => {
     const trimmed = email.trim().toLowerCase()
     if (!trimmed || toChips.some(c => c.email === trimmed)) return
     const contact = findContactByEmail(trimmed)
-    const name = contact?.name || ''
-    const avatar = null
-    const newChip = { email: trimmed, name, avatar }
-    setToChips(prev => [...prev, newChip])
+    setToChips(prev => [...prev, { email: trimmed, name: contact?.name || '' }])
     setToInput('')
-    // Update the raw to string
     setTo(prev => {
       const existing = prev.split(',').map(s => s.trim()).filter(Boolean)
-      if (!existing.includes(trimmed)) {
-        return [...existing, trimmed].join(', ')
-      }
+      if (!existing.includes(trimmed)) return [...existing, trimmed].join(', ')
       return prev
     })
   }
@@ -173,36 +171,17 @@ export function ComposeModal() {
   const handleToKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
       e.preventDefault()
-      const value = toInput.replace(',', '').trim()
-      if (!value) return
-      if (emailRegex.test(value)) {
-        addToChip(value)
-      }
+      const v = toInput.replace(',', '').trim()
+      if (v && emailRegex.test(v)) addToChip(v)
     }
     if (e.key === 'Backspace' && toInput === '' && toChips.length > 0) {
-      const last = toChips[toChips.length - 1]
-      removeToChip(last.email)
+      removeToChip(toChips[toChips.length - 1].email)
     }
   }
 
   const handleToBlur = () => {
-    const value = toInput.replace(',', '').trim()
-    if (value && emailRegex.test(value)) {
-      addToChip(value)
-    }
-  }
-
-  const handleToPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault()
-    const pasted = e.clipboardData.getData('text/plain')
-    const parts = pasted.split(/[,;\s]+/).filter(Boolean)
-    parts.forEach(part => {
-      if (emailRegex.test(part)) {
-        addToChip(part)
-      } else {
-        setToInput(prev => prev + (prev ? ' ' : '') + part)
-      }
-    })
+    const v = toInput.replace(',', '').trim()
+    if (v && emailRegex.test(v)) addToChip(v)
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -226,80 +205,49 @@ export function ComposeModal() {
         },
       }),
       Placeholder.configure({
-        placeholder: 'Compose your email...',
+        placeholder: 'Write your message...',
       }),
-      ImageExtension,
+      ImageExtension.configure({
+        HTMLAttributes: {
+          class: 'max-w-full rounded-lg',
+        },
+      }),
     ],
+    content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[120px] px-4 py-3 text-sm',
+        class: 'tiptap',
       },
+    },
+    onUpdate: ({ editor: updatedEditor }) => {
+      if (updatedEditor.getText().trim().length > 0) {
+        setErrors(prev => {
+          const next = { ...prev }
+          delete next.body
+          return next
+        })
+      }
     },
   })
 
-  // Mobile detection
+  // Mobile resize listener
   useEffect(() => {
     const handleResize = () => setIsMobile(globalThis.innerWidth < 768)
-    globalThis.addEventListener('resize', handleResize)
-    return () => globalThis.removeEventListener('resize', handleResize)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Save/restore compose content
+  // Fetch templates when compose opens
   useEffect(() => {
     if (!composeOpen) return
-    const saved = localStorage.getItem('ezymail_compose')
-    if (saved) {
-      try {
-        const data = JSON.parse(saved)
-        setTo(data.to || '')
-        setCc(data.cc || '')
-        setBcc(data.bcc || '')
-        setSubject(data.subject || '')
-        setAttachments([])
-        setPriority((data.priority as 'normal' | 'high') || 'normal')
-        setShowCc(!!data.showCc)
-        setShowBcc(!!data.showBcc)
-      } catch { /* ignore */ }
-    }
-  }, [composeOpen])
-
-  // Clear saved compose when modal closes
-  useEffect(() => {
-    if (!composeOpen) {
-      localStorage.removeItem('ezymail_compose')
-      setToChips([])
-      setToInput('')
-      return
-    }
-  }, [composeOpen])
-
-  // Save compose state periodically
-  useEffect(() => {
-    if (!composeOpen) return
-    const interval = setInterval(() => {
-      if (!composeOpen) return
-      localStorage.setItem('ezymail_compose', JSON.stringify({
-        to: to,
-        cc, bcc, subject,
-        html: editor?.getHTML() || '',
-        showCc, showBcc, priority,
-      }))
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [composeOpen, to, cc, bcc, subject, editor, showCc, showBcc, priority])
-
-  // Auto-save drafts
-  useEffect(() => {
-    if (!composeOpen) return
-    const interval = setInterval(() => {
-      if (!composeOpen || !editDraftEmail || !subject && !editor?.getText().trim()) return
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [composeOpen, editDraftEmail, subject, editor])
-
-  const handleClose = useCallback(() => {
-    setComposeOpen(false)
-  }, [setComposeOpen])
+    if (templates.length > 0) return
+    fetch('/api/templates')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setTemplates(data.data)
+      })
+      .catch(() => {})
+  }, [composeOpen, templates.length, setTemplates])
 
   // Reset editor when compose opens
   useEffect(() => {
@@ -325,14 +273,8 @@ export function ComposeModal() {
 
     // Load draft content when editing a draft
     if (editDraftEmail) {
-      const draftEmail = editDraftEmail.recipient?.email || ''
-      setTo(draftEmail)
-      if (draftEmail) {
-        const contact = findContactByEmail(draftEmail)
-        setToChips([{ email: draftEmail.toLowerCase(), name: contact?.name || '', avatar: null }])
-      } else {
-        setToChips([])
-      }
+      setTo(editDraftEmail.recipient?.email || '')
+      setToChips([])
       setToInput('')
       setSubject(editDraftEmail.subject || '')
       editor.commands.setContent(editDraftEmail.bodyHtml || editDraftEmail.body?.replace(/\n/g, '<br>') || '')
@@ -341,6 +283,7 @@ export function ComposeModal() {
     }
 
     if (replyToEmail && replyMode) {
+      // Always use the sender's actual email from the DB, never construct from name
       const senderEmail = replyToEmail.sender?.email || ''
       const senderName = replyToEmail.sender
         ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
@@ -358,19 +301,15 @@ export function ComposeModal() {
       } else {
         if (replyMode === 'reply') {
           setTo(senderEmail)
-          const replyContact = findContactByEmail(senderEmail)
-          setToChips([{ email: senderEmail.toLowerCase(), name: replyContact?.name || replyToEmail.sender ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}` : '', avatar: replyToEmail.sender?.avatar || null }])
-          setToInput('')
         } else {
           // Reply All: sender goes in To, recipient + CC go in CC
           const recipientEmail = replyToEmail.recipient?.email || ''
+          // Parse CC from the original email if available
           const originalCc = (() => { try { const cc = (replyToEmail as unknown as Record<string, unknown>).cc; if (!cc) return []; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean); if (Array.isArray(cc)) return cc } catch { return [] } return [] })()
+          // Build CC list: original recipient + original CC, excluding sender (that goes in To)
           const allCc = [recipientEmail, ...originalCc].filter(e => e && e !== senderEmail)
           const uniqueCc = [...new Set(allCc)]
           setTo(senderEmail)
-          const replyAllContact = findContactByEmail(senderEmail)
-          setToChips([{ email: senderEmail.toLowerCase(), name: replyAllContact?.name || replyToEmail.sender ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}` : '', avatar: replyToEmail.sender?.avatar || null }])
-          setToInput('')
           if (uniqueCc.length > 0) {
             setCc(uniqueCc.join(', '))
             setShowCc(true)
@@ -385,15 +324,7 @@ export function ComposeModal() {
         editor.commands.setContent(quotedBody)
       }
     } else if (replyToEmail) {
-      const fallbackEmail = replyToEmail.sender?.email || ''
-      setTo(fallbackEmail)
-      if (fallbackEmail) {
-        const fbContact = findContactByEmail(fallbackEmail)
-        setToChips([{ email: fallbackEmail.toLowerCase(), name: fbContact?.name || replyToEmail.sender ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}` : '', avatar: replyToEmail.sender?.avatar || null }])
-      } else {
-        setToChips([])
-      }
-      setToInput('')
+      setTo(replyToEmail.sender?.email || '')
       setSubject(`Re: ${replyToEmail.subject || ''}`)
       editor.commands.setContent('')
     } else {
@@ -409,9 +340,39 @@ export function ComposeModal() {
     setShowBcc(false)
     setAttachments([])
     setPriority('normal')
+    setScheduleDate(undefined)
+    setScheduleHour('9')
+    setScheduleMinute('00')
+    setScheduleAmPm('AM')
+    setShowCustomSchedule(false)
+    setShowSchedulePopover(false)
+    setShowTemplatesPopover(false)
     setErrors({})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composeOpen, editor])
+  }, [composeOpen, editor, replyToEmail, replyMode])
+
+  // Cleanup timers
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+    }
+  }, [])
+
+  const handleClose = useCallback(() => {
+    if (editDraftEmail) {
+      setCurrentFolder('drafts')
+    }
+    setComposeOpen(false)
+  }, [editDraftEmail, setCurrentFolder, setComposeOpen])
+
+  const handleDiscard = useCallback(() => {
+    if (editDraftEmail) {
+      removeEmail(editDraftEmail.id)
+      fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+      toast.success('Draft discarded')
+    }
+    setComposeOpen(false)
+  }, [editDraftEmail, removeEmail, setComposeOpen])
 
   const processRecipients = (value: string): string => {
     return value
@@ -490,69 +451,28 @@ export function ComposeModal() {
       html: pending.html,
       showCc: !!pending.cc.trim(),
       showBcc: !!pending.bcc.trim(),
-      attachments: [],
+      attachments: attachments,
       priority: pending.priority || 'normal',
     }
-
-    // Re-open compose with restored data
     setComposeOpen(true)
-    toast.success('Email unsent')
-  }, [setComposeOpen])
+    toast.success('Email draft restored')
+  }, [setComposeOpen, attachments])
 
-  // Upload a single file
-  const uploadSingleFile = async (file: File): Promise<{ name: string; url: string; size: number; type: string; data?: string } | null> => {
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error(`"${file.name}" exceeds 25MB limit`)
-      return null
-    }
+  const startUndoCountdown = useCallback(() => {
+    setUndoCountdown(5)
+    countdownTimerRef.current = setInterval(() => {
+      setUndoCountdown(prev => {
+        if (prev <= 1) {
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }, [])
 
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''))
-      return {
-        name: file.name,
-        url: `data:${file.type};base64,${base64}`,
-        size: file.size,
-        type: file.type,
-        data: base64,
-      }
-    } catch {
-      toast.error(`Failed to process "${file.name}"`)
-      return null
-    }
-  }
-
-  // Handle file selection (from button or drag-drop)
-  const handleFiles = async (files: FileList | File[]) => {
-    const fileArray = Array.from(files)
-    const totalNewSize = fileArray.reduce((sum, f) => sum + f.size, 0)
-    const currentTotalSize = attachments.reduce((sum, f) => sum + f.size, 0)
-
-    if (currentTotalSize + totalNewSize > MAX_TOTAL_SIZE) {
-      toast.error('Total attachments cannot exceed 50MB')
-      return
-    }
-
-    setIsUploading(true)
-    setUploadProgress(0)
-
-    const newAttachments: File[] = []
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i]
-      if (file.size <= MAX_FILE_SIZE) {
-        newAttachments.push(file)
-      } else {
-        toast.error(`"${file.name}" exceeds 25MB limit`)
-      }
-      setUploadProgress(Math.round(((i + 1) / fileArray.length) * 100))
-    }
-
-    setAttachments(prev => [...prev, ...newAttachments])
-    setIsUploading(false)
-    setUploadProgress(0)
-  }
-
-  const handleSend = async (scheduledAt?: string | null) => {
+  const handleSend = async (scheduledAtDate?: Date | null) => {
+    // Prevent double-send from double-click or rapid taps
     if (isSendingRef.current) return
     isSendingRef.current = true
 
@@ -564,20 +484,22 @@ export function ComposeModal() {
       if (!text || text.length === 0) e.body = 'Message body is required'
       // Validate CC recipients if provided
       if (showCc && cc.trim()) {
-        const ccList = cc.split(',').map(s => s.trim()).filter(Boolean)
-        for (const addr of ccList) {
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-            e.cc = `Invalid CC address: ${addr}`
+        const ccParts = cc.split(',').map(r => r.trim()).filter(Boolean)
+        for (const part of ccParts) {
+          const processed = processRecipients(part)
+          if (!processed.endsWith('@ezy.af')) {
+            e.cc = `"${part}" is not a valid @ezy.af address`
             break
           }
         }
       }
       // Validate BCC recipients if provided
       if (showBcc && bcc.trim()) {
-        const bccList = bcc.split(',').map(s => s.trim()).filter(Boolean)
-        for (const addr of bccList) {
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-            e.bcc = `Invalid BCC address: ${addr}`
+        const bccParts = bcc.split(',').map(r => r.trim()).filter(Boolean)
+        for (const part of bccParts) {
+          const processed = processRecipients(part)
+          if (!processed.endsWith('@ezy.af')) {
+            e.bcc = `"${part}" is not a valid @ezy.af address`
             break
           }
         }
@@ -589,134 +511,195 @@ export function ComposeModal() {
       }
 
       const html = editor?.getHTML() || ''
+      const currentAttachments = attachments
 
-      // Upload attachments
-      const uploadedAttachments: Array<{ name: string; url: string; size: number; type: string; data?: string }> = []
-      if (attachments.length > 0) {
+      // Upload attachments FIRST
+      let uploadedFiles: Array<{ name: string; url: string; size: number; type: string }> | undefined
+      if (currentAttachments.length > 0) {
         setIsUploading(true)
-        for (let i = 0; i < attachments.length; i++) {
-          const result = await uploadSingleFile(attachments[i])
-          if (result) uploadedAttachments.push(result)
-          setUploadProgress(Math.round(((i + 1) / attachments.length) * 100))
+        setUploadProgress(0)
+        try {
+          const result = await new Promise<Array<{ name: string; url: string; size: number; type: string; data: string }>>((resolve, reject) => {
+            const formData = new FormData()
+            currentAttachments.forEach(file => formData.append('files', file))
+            const xhr = new XMLHttpRequest()
+            xhr.open('POST', '/api/upload')
+            xhr.withCredentials = true
+            xhr.upload.addEventListener('progress', (ev) => {
+              if (ev.lengthComputable) {
+                setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
+              }
+            })
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const data = JSON.parse(xhr.responseText)
+                  resolve(data.files)
+                } catch {
+                  reject(new Error('Invalid response from server'))
+                }
+              } else {
+                try {
+                  const err = JSON.parse(xhr.responseText)
+                  reject(new Error(err.error || `Upload failed (status ${xhr.status})`))
+                } catch {
+                  reject(new Error(`Upload failed (status ${xhr.status})`))
+                }
+              }
+            })
+            xhr.addEventListener('error', () => reject(new Error('Network error — check your connection')))
+            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+            xhr.timeout = 120000 // 2 minute timeout
+            xhr.addEventListener('timeout', () => reject(new Error('Upload timed out — try a smaller file')))
+            xhr.send(formData)
+          })
+          uploadedFiles = result
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to upload attachments')
+          setIsUploading(false)
+          setUploadProgress(0)
+          return
         }
         setIsUploading(false)
         setUploadProgress(0)
       }
 
-      const finalTo = processRecipients(to)
-      const pendingData: PendingSendData = {
-        to: finalTo,
-        cc: showCc ? cc.trim() : '',
-        bcc: showBcc ? bcc.trim() : '',
-        subject: subject.trim(),
-        html,
+      const data: PendingSendData = {
+        to, cc, bcc, subject, html,
         replyToId: replyToEmail?.id,
-        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        attachments: uploadedFiles,
         priority,
-        scheduledAt,
+        scheduledAt: scheduledAtDate ? scheduledAtDate.toISOString() : null,
       }
+      pendingSendRef.current = data
 
-      // If editing a draft, delete the old draft first
-      if (editDraftEmail) {
-        try { await fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }) } catch { /* ignore */ }
-        removeEmail(editDraftEmail.id)
-        setCurrentFolder('drafts')
-      }
-
-      // Close compose immediately for snappy UX
+      // Close compose modal
       setComposeOpen(false)
-      localStorage.removeItem('ezymail_compose')
+      setShowSchedulePopover(false)
 
-      if (scheduledAt) {
-        // For scheduled emails, send immediately with scheduledAt
-        await actuallySendEmail({ ...pendingData, scheduledAt })
-        toast.success('Email scheduled successfully')
+      if (scheduledAtDate) {
+        // Schedule send — send immediately to API (no undo)
+        toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
+        actuallySendEmail(data)
+        // Delete draft if editing one
+        if (editDraftEmail) {
+          fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+        }
       } else {
-        // Send immediately
-        await actuallySendEmail(pendingData)
-        toast.success('Email sent')
-      }
+        // Normal send with undo
+        const sendResult = await actuallySendEmailWithResponse(data)
+        if (sendResult?.emailId) {
+          pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
+          // Delete draft if editing one
+          if (editDraftEmail) {
+            fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+          }
+        }
 
-      // Reset
-      setTo('')
-      setToChips([])
-      setToInput('')
-      setCc('')
-      setBcc('')
-      setSubject('')
-      setAttachments([])
-      setShowCc(false)
-      setShowBcc(false)
-      setPriority('normal')
-      setErrors({})
-    } catch {
-      toast.error('Failed to send email')
+        toast('Message sent.', {
+          description: undoCountdown > 0 ? `Undo available (${undoCountdown}s)` : undefined,
+          action: {
+            label: 'Undo',
+            onClick: handleUndo,
+          },
+          duration: 5000,
+        })
+
+        startUndoCountdown()
+
+        undoTimerRef.current = setTimeout(() => {
+          const payload = pendingSendRef.current
+          if (!payload) return
+          pendingSendRef.current = null
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+          setUndoCountdown(0)
+        }, 5000)
+      }
     } finally {
       isSendingRef.current = false
     }
   }
 
-  // Drag and drop handlers
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current++
-    setIsDragging(true)
-  }
+  const actuallySendEmailWithResponse = useCallback(async (data: PendingSendData) => {
+    try {
+      const finalTo = processRecipients(data.to)
+      const payload: Record<string, unknown> = {
+        to: finalTo,
+        subject: data.subject,
+        body: data.html.replace(/<[^>]*>/g, ''),
+        bodyHtml: data.html,
+      }
+      if (data.cc.trim()) payload.cc = processRecipients(data.cc)
+      if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
+      if (data.replyToId) payload.replyToId = data.replyToId
+      if (data.attachments && data.attachments.length > 0) {
+        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
+      }
+      if (data.priority === 'high') payload.priority = 'high'
+      payload.sentAt = new Date().toISOString()
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current--
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false)
+      const res = await fetch('/api/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json()
+        toast.error(errData.error || 'Failed to send email')
+        return null
+      }
+
+      const responseData = await res.json()
+      return { emailId: responseData.email?.id }
+    } catch {
+      toast.error('Failed to send email')
+      return null
     }
-  }
+  }, [])
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current = 0
-    setIsDragging(false)
-    if (e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files)
+  const handleLink = useCallback(() => {
+    if (!editor) return
+    const previousUrl = editor.getAttributes('link').href
+    const url = window.prompt('Enter URL:', previousUrl || '')
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
     }
-  }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }, [editor])
 
-  // Schedule helpers
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined)
-  const [scheduleHour, setScheduleHour] = useState('9')
-  const [scheduleMinute, setScheduleMinute] = useState('00')
-  const [scheduleAmPm, setScheduleAmPm] = useState<'AM' | 'PM'>('AM')
+  const handleImage = useCallback(() => {
+    if (!editor) return
+    const url = window.prompt('Enter image URL:')
+    if (!url) return
+    editor.chain().focus().setImage({ src: url }).run()
+  }, [editor])
 
+  // Schedule send helpers
   const getLaterToday = () => {
-    const now = new Date()
-    const h = now.getHours()
-    const m = now.getMinutes()
-    const later = new Date(now)
-    if (h < 12) {
-      later.setHours(12, 0, 0, 0)
-    } else if (h < 17) {
-      later.setHours(17, 0, 0, 0)
-    } else {
-      later.setHours(20, 0, 0, 0)
-    }
-    return later
+    const d = new Date()
+    d.setHours(17, 0, 0, 0)
+    if (d <= new Date()) d.setDate(d.getDate() + 1)
+    return d
   }
 
   const getTomorrowMorning = () => {
     const d = new Date()
     d.setDate(d.getDate() + 1)
-    d.setHours(8, 0, 0, 0)
+    d.setHours(9, 0, 0, 0)
     return d
   }
 
-  const getLaterThisWeek = () => {
+  const getTomorrowAfternoon = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setHours(13, 0, 0, 0)
+    return d
+  }
+
+  const getNextMonday = () => {
     const d = new Date()
     const day = d.getDay()
     const daysUntilMon = day === 0 ? 1 : (8 - day)
@@ -725,129 +708,192 @@ export function ComposeModal() {
     return d
   }
 
-  const handleSchedule = (date: Date) => {
-    handleSend(date.toISOString())
-    setShowSchedulePopover(false)
-    setShowCustomSchedule(false)
+  const handleQuickSchedule = (date: Date) => {
+    handleSend(date)
   }
 
   const handleCustomSchedule = () => {
-    if (!scheduleDate) {
-      toast.error('Please select a date')
-      return
-    }
-    let hour = parseInt(scheduleHour)
-    if (scheduleAmPm === 'PM' && hour !== 12) hour += 12
-    if (scheduleAmPm === 'AM' && hour === 12) hour = 0
+    if (!scheduleDate) return
+    const hr = parseInt(scheduleHour) || 0
+    let hours = scheduleAmPm === 'PM' && hr !== 12 ? hr + 12 : scheduleAmPm === 'AM' && hr === 12 ? 0 : hr
+    const minutes = parseInt(scheduleMinute) || 0
     const d = new Date(scheduleDate)
-    d.setHours(hour, parseInt(scheduleMinute), 0, 0)
+    d.setHours(hours, minutes, 0, 0)
     if (d <= new Date()) {
-      toast.error('Schedule time must be in the future')
+      toast.error('Please select a future date and time')
       return
     }
-    handleSend(d.toISOString())
+    handleSend(d)
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const totalAttachmentSize = attachments.reduce((sum, f) => sum + f.size, 0)
-
-  const fadeInUp = {
-    initial: { opacity: 0, y: 8 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -8 },
-    transition: { duration: 0.15 },
-  }
-
-  // Template application
-  const applyTemplate = (template: Template) => {
+  // Template handling
+  const handleLoadTemplate = (template: Template) => {
+    if (!editor) return
     if (template.subject) setSubject(template.subject)
-    if (template.body) {
-      editor?.commands.setContent(template.body)
+    if (template.bodyHtml) {
+      editor.commands.setContent(template.bodyHtml)
+    } else if (template.body) {
+      editor.commands.setContent(template.body.replace(/\n/g, '<br>'))
     }
     setShowTemplatesPopover(false)
-    toast.success(`Template "${template.name}" applied`)
+    toast.success(`Template "${template.name}" loaded`)
   }
 
-  if (!composeOpen) return null
+  const handleSaveAsTemplate = async () => {
+    const html = editor?.getHTML() || ''
+    const name = subject.trim() || 'Untitled Template'
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          subject: subject.trim(),
+          body: html.replace(/<[^>]*>/g, ''),
+          bodyHtml: html,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('Template saved')
+      } else {
+        toast.error(data.error || 'Failed to save template')
+      }
+    } catch {
+      toast.error('Failed to save template')
+    }
+  }
 
+  // Drag and drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes('Files')) setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    dragCounterRef.current = 0
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files)
+      const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
+      if (oversized.length > 0) {
+        toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
+        return
+      }
+      const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
+      const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
+      if (newTotal > MAX_TOTAL_SIZE) {
+        toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+        return
+      }
+      setAttachments(prev => [...prev, ...newFiles])
+    }
+  }, [attachments])
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments(prev => prev.filter((_, idx) => idx !== index))
+  }, [])
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <AnimatePresence>
-      <motion.div
-        key="compose-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className={cn(
-          'fixed inset-0 z-[100]',
-          isMobile ? 'bg-black/40' : 'bg-black/30'
-        )}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) handleClose()
-        }}
-      >
+      {composeOpen && (
         <motion.div
-          key="compose-modal"
-          initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }}
-          animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
-          exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-          className={cn(
-            'bg-white dark:bg-[#1e1e1e] flex flex-col overflow-hidden',
-            isMobile
-              ? 'fixed inset-x-0 bottom-0 max-h-[92vh] rounded-t-2xl'
-              : 'fixed bottom-4 right-4 w-[600px] max-w-[calc(100vw-2rem)] rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50'
-          )}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
+          key="compose-root"
+          className="fixed inset-0 z-[100]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
         >
-          {/* Drag overlay */}
-          {isDragging && (
-            <div className="absolute inset-0 z-50 bg-[#4285F4]/10 border-2 border-dashed border-[#4285F4] rounded-2xl flex items-center justify-center">
-              <div className="text-center">
-                <Paperclip className="w-8 h-8 text-[#4285F4] mx-auto mb-2" />
-                <p className="text-sm font-medium text-[#4285F4]">Drop files here</p>
-              </div>
-            </div>
-          )}
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={handleClose}
+          />
 
-          {/* Header */}
-          <div className="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
-                {editDraftEmail ? 'Edit Draft' : replyToEmail ? `${replyMode === 'forward' ? 'Forward' : 'Reply'}${replyMode === 'replyAll' ? ' All' : ''}` : 'New Message'}
-              </h2>
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Attachments indicator */}
-                {attachments.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4] gap-1">
-                    <Paperclip className="w-2.5 h-2.5" />
-                    {attachments.length}
-                    {totalAttachmentSize > 0 && ` (${formatFileSize(totalAttachmentSize)})`}
+          {/* Panel */}
+          <motion.div
+            initial={
+              isMobile
+                ? { opacity: 0, y: '100%' }
+                : { opacity: 0, scale: 0.95, y: 20 }
+            }
+            animate={
+              isMobile
+                ? { opacity: 1, y: 0 }
+                : { opacity: 1, scale: 1, y: 0 }
+            }
+            exit={
+              isMobile
+                ? { opacity: 0, y: '100%' }
+                : { opacity: 0, scale: 0.95, y: 20 }
+            }
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className={
+              isMobile
+                ? 'absolute inset-x-0 bottom-0 z-[1] h-[85vh] bg-white dark:bg-gray-900 rounded-t-2xl overflow-hidden shadow-2xl border-t border-gray-200 dark:border-gray-700 flex flex-col'
+                : 'absolute top-[5vh] right-4 z-[1] w-[560px] max-w-[calc(100vw-2rem)] h-[80vh] bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col'
+            }
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <div className="flex items-center gap-2">
+                {priority === 'high' && (
+                  <Badge variant="destructive" className="text-xs h-5 gap-1 px-1.5">
+                    <Flag className="w-3 h-3" />
+                    High Priority
                   </Badge>
                 )}
-                {/* Contacts Picker */}
+                <h2 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">
+                  {editDraftEmail ? 'Edit Draft' : replyMode === 'forward' ? 'Forward' : replyMode === 'replyAll' ? 'Reply All' : replyToEmail ? 'Reply' : 'New Message'}
+                </h2>
+              </div>
+              <div className="flex items-center gap-1">
+                {/* 3-dot menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                      aria-label="Contacts"
+                      aria-label="More options"
                     >
-                      <Users className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                      <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={() => setShowContactsPicker(true)}>
-                      <Users className="w-4 h-4 mr-2" />
-                      Select from contacts
+                  <DropdownMenuContent align="end" className="w-52 z-[200]">
+                    <DropdownMenuItem onClick={() => { setShowSchedulePopover(true) }} className="cursor-pointer gap-2">
+                      <Clock className="w-4 h-4" />
+                      Schedule
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setShowContactsPicker(true) }} className="cursor-pointer gap-2">
+                      <Users className="w-4 h-4" />
+                      Add from Contacts
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDiscard} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
+                      <Trash2 className="w-4 h-4" />
+                      Discard
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -859,28 +905,30 @@ export function ComposeModal() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-                      onClick={(e) => {
-                        if (e.target === e.currentTarget) setShowContactsPicker(false)
-                      }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40"
+                      onClick={(e) => { if (e.target === e.currentTarget) { setShowContactsPicker(false); setContactSearch('') } }}
                     >
                       <motion.div
-                        key="contacts-modal"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-white dark:bg-[#1e1e1e] rounded-2xl shadow-xl w-full max-w-sm max-h-[70vh] flex flex-col overflow-hidden"
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' as const }}
+                        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden w-[calc(100%-2rem)] max-w-sm max-h-[70vh]"
                       >
+                        {/* Header */}
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                          <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Contacts</h3>
+                          <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Add from Contacts</h3>
                           <button
                             type="button"
                             onClick={() => { setShowContactsPicker(false); setContactSearch('') }}
-                            className="w-7 h-7 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center cursor-pointer"
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                            aria-label="Close contacts"
                           >
-                            <X className="w-3.5 h-3.5 text-gray-500" />
+                            <X className="w-4 h-4 text-gray-400" />
                           </button>
                         </div>
+                        {/* Search */}
                         <div className="p-2 border-b border-gray-100 dark:border-gray-800">
                           <Input
                             placeholder="Search contacts..."
@@ -946,499 +994,550 @@ export function ComposeModal() {
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Fields */}
-          <div className="shrink-0 border-b border-gray-200 dark:border-gray-700">
-            {/* To */}
-            <div className="flex items-center px-4 gap-2 min-h-[44px]">
-              <span className="text-sm text-gray-500 shrink-0 w-8">To</span>
-              <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
-                {toChips.map(chip => {
-                  const initials = chip.name
-                    ? chip.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-                    : chip.email[0].toUpperCase()
-                  return (
-                    <span
-                      key={chip.email}
-                      className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full pl-0.5 pr-1 py-0.5 max-w-[240px] shrink-0"
-                    >
-                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                        {initials}
-                      </span>
-                      <span className="text-sm text-[#1F1F1F] dark:text-white truncate max-w-[150px]">
-                        {chip.name || chip.email}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeToChip(chip.email)}
-                        className="w-5 h-5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center shrink-0 cursor-pointer"
+            {/* Fields */}
+            <div className="shrink-0 border-b border-gray-200 dark:border-gray-700">
+              {/* To */}
+              <div className="flex items-center px-4 gap-2 min-h-[44px]">
+                <span className="text-sm text-gray-500 shrink-0 w-8">To</span>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                  {toChips.map(chip => {
+                    const initials = chip.name
+                      ? chip.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                      : chip.email[0].toUpperCase()
+                    return (
+                      <span
+                        key={chip.email}
+                        className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full pl-0.5 pr-1 py-0.5 max-w-[240px] shrink-0"
                       >
-                        <X className="w-3 h-3 text-gray-500" />
-                      </button>
-                    </span>
-                  )
-                })}
-                <input
-                  type="text"
-                  value={toInput}
-                  onChange={e => setToInput(e.target.value)}
-                  onKeyDown={handleToKeyDown}
-                  onBlur={handleToBlur}
-                  onPaste={handleToPaste}
-                  placeholder={toChips.length === 0 ? 'recipient' : ''}
-                  className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent outline-none"
-                />
-              </div>
-              <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowCc(prev => !prev)}
-                  className={cn(
-                    'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
-                    showCc
-                      ? 'text-[#4285F4] bg-[#4285F4]/10'
-                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  )}
-                >
-                  CC
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowBcc(prev => !prev)}
-                  className={cn(
-                    'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
-                    showBcc
-                      ? 'text-[#4285F4] bg-[#4285F4]/10'
-                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  )}
-                >
-                  BCC
-                </button>
-              </div>
-            </div>
-            {errors.to && <p className="text-xs text-red-500 px-4 pb-2">{errors.to}</p>}
-
-            {/* CC */}
-            {showCc && (
-              <div className="border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center px-4 gap-2">
-                  <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
+                        <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                          {initials}
+                        </span>
+                        <span className="text-sm text-[#1F1F1F] dark:text-white truncate max-w-[150px]">
+                          {chip.name || chip.email}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeToChip(chip.email)}
+                          className="w-5 h-5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          <X className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </span>
+                    )
+                  })}
                   <Input
-                    value={cc}
-                    onChange={e => {
-                      setCc(e.target.value)
-                      if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
-                    }}
-                    placeholder="CC recipients (comma-separated)"
-                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+                    value={toInput}
+                    onChange={e => setToInput(e.target.value)}
+                    onKeyDown={handleToKeyDown}
+                    onBlur={handleToBlur}
+                    placeholder={toChips.length === 0 ? 'recipient' : ''}
+                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
                   />
                 </div>
-                {errors.cc && <p className="text-xs text-red-500 px-4 pb-2">{errors.cc}</p>}
-              </div>
-            )}
-
-            {/* BCC */}
-            {showBcc && (
-              <div className="border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center px-4 gap-2">
-                  <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
-                  <Input
-                    value={bcc}
-                    onChange={e => {
-                      setBcc(e.target.value)
-                      if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
-                    }}
-                    placeholder="BCC recipients (comma-separated)"
-                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
-                  />
-                </div>
-                {errors.bcc && <p className="text-xs text-red-500 px-4 pb-2">{errors.bcc}</p>}
-              </div>
-            )}
-
-            {/* Subject */}
-            <div className="border-t border-gray-100 dark:border-gray-800">
-              <div className="flex items-center px-4 gap-2">
-                <Input
-                  value={subject}
-                  onChange={e => {
-                    setSubject(e.target.value)
-                    if (errors.subject) setErrors(prev => { const n = { ...prev }; delete n.subject; return n })
-                  }}
-                  placeholder="Subject"
-                  className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1"
-                />
-              </div>
-              {errors.subject && <p className="text-xs text-red-500 px-4 pb-2">{errors.subject}</p>}
-            </div>
-          </div>
-
-          {/* Editor */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <EditorContent editor={editor} />
-
-            {/* Attachments preview */}
-            {attachments.length > 0 && (
-              <div className="px-4 pb-2">
-                <div className="flex flex-wrap gap-2">
-                  {attachments.map((file, idx) => (
-                    <div
-                      key={idx}
-                      className="inline-flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-1.5 text-xs group"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="text-[#1F1F1F] dark:text-white truncate max-w-[150px]">{file.name}</span>
-                      <span className="text-gray-400 shrink-0">{formatFileSize(file.size)}</span>
-                      <button
-                        type="button"
-                        onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
-                        className="w-4 h-4 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      >
-                        <X className="w-2.5 h-2.5 text-gray-500" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Upload progress bar */}
-          {isUploading && (
-            <div className="shrink-0 h-1 bg-gray-100 dark:bg-gray-800">
-              <div
-                className="h-full bg-[#4285F4] transition-all duration-200 ease-out"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          )}
-
-          {/* Footer / Toolbar */}
-          <div className="shrink-0 border-t border-gray-200 dark:border-gray-700">
-            {/* Formatting toolbar */}
-            <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 overflow-x-auto">
-              <ToolbarButton
-                active={editor?.isActive('bold')}
-                onClick={() => editor?.chain().focus().toggleBold().run()}
-                disabled={!editor?.isEditable}
-                title="Bold"
-              >
-                <Bold className="w-4 h-4" />
-              </ToolbarButton>
-              <ToolbarButton
-                active={editor?.isActive('italic')}
-                onClick={() => editor?.chain().focus().toggleItalic().run()}
-                disabled={!editor?.isEditable}
-                title="Italic"
-              >
-                <Italic className="w-4 h-4" />
-              </ToolbarButton>
-              <ToolbarButton
-                active={editor?.isActive('strike')}
-                onClick={() => editor?.chain().focus().toggleStrike().run()}
-                disabled={!editor?.isEditable}
-                title="Strikethrough"
-              >
-                <Strikethrough className="w-4 h-4" />
-              </ToolbarButton>
-              <Separator orientation="vertical" className="h-5 mx-1" />
-              <ToolbarButton
-                active={editor?.isActive('bulletList')}
-                onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                disabled={!editor?.isEditable}
-                title="Bullet List"
-              >
-                <List className="w-4 h-4" />
-              </ToolbarButton>
-              <ToolbarButton
-                active={editor?.isActive('orderedList')}
-                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                disabled={!editor?.isEditable}
-                title="Numbered List"
-              >
-                <ListOrdered className="w-4 h-4" />
-              </ToolbarButton>
-              <Separator orientation="vertical" className="h-5 mx-1" />
-              <ToolbarButton
-                active={editor?.isActive('link')}
-                onClick={() => {
-                  const url = globalThis.prompt('Enter URL:')
-                  if (url) editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-                }}
-                disabled={!editor?.isEditable}
-                title="Insert Link"
-              >
-                <Link className="w-4 h-4" />
-              </ToolbarButton>
-              <ToolbarButton
-                onClick={() => {
-                  const url = globalThis.prompt('Enter image URL:')
-                  if (url) editor?.chain().focus().setImage({ src: url }).run()
-                }}
-                disabled={!editor?.isEditable}
-                title="Insert Image"
-              >
-                <ImageIcon className="w-4 h-4" />
-              </ToolbarButton>
-            </div>
-
-            {/* Action bar */}
-            <div className="flex items-center justify-between px-3 py-2.5 gap-2">
-              <div className="flex items-center gap-1.5">
-                {/* Send button */}
-                <Button
-                  onClick={() => handleSend()}
-                  disabled={isSendingRef.current || isUploading}
-                  className="bg-[#4285F4] hover:bg-[#3367D6] text-white rounded-full px-5 h-9 text-sm font-medium gap-1.5 shrink-0"
-                >
-                  <Send className="w-4 h-4" />
-                  {!isMobile && 'Send'}
-                </Button>
-
-                {/* Attachment button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="rounded-full h-9 w-9 p-0"
-                  title="Attach file"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={e => {
-                    if (e.target.files) handleFiles(e.target.files)
-                    e.target.value = ''
-                  }}
-                />
-
-                {/* Schedule button */}
-                <Popover open={showSchedulePopover} onOpenChange={setShowSchedulePopover}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-full h-9 w-9 p-0"
-                      title="Schedule send"
-                    >
-                      <Clock className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-0" align="start">
-                    {/* Schedule options grid */}
-                    {!showCustomSchedule ? (
-                      <div className="p-2">
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleSchedule(getLaterToday())}
-                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left cursor-pointer"
-                          >
-                            <Sun className="w-5 h-5 text-[#FBBC05]" />
-                            <div>
-                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Later today</p>
-                              <p className="text-[11px] text-gray-400">
-                                {format(getLaterToday(), 'h:mm a')}
-                              </p>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSchedule(getTomorrowMorning())}
-                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left cursor-pointer"
-                          >
-                            <Briefcase className="w-5 h-5 text-[#4285F4]" />
-                            <div>
-                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Tomorrow</p>
-                              <p className="text-[11px] text-gray-400">8:00 AM</p>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSchedule(getLaterThisWeek())}
-                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left cursor-pointer"
-                          >
-                            <Sunset className="w-5 h-5 text-[#EA4335]" />
-                            <div>
-                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Next week</p>
-                              <p className="text-[11px] text-gray-400">Monday 8:00 AM</p>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowCustomSchedule(true)}
-                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left cursor-pointer"
-                          >
-                            <CalendarDays className="w-5 h-5 text-[#34A853]" />
-                            <div>
-                              <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Pick date</p>
-                              <p className="text-[11px] text-gray-400">Choose custom date</p>
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Custom date/time picker */
-                      <div className="p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Custom Schedule</p>
-                          <button
-                            type="button"
-                            onClick={() => setShowCustomSchedule(false)}
-                            className="text-xs text-[#4285F4] hover:underline cursor-pointer"
-                          >
-                            Back
-                          </button>
-                        </div>
-                        <Calendar
-                          mode="single"
-                          selected={scheduleDate}
-                          onSelect={setScheduleDate}
-                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                          className="rounded-xl border-0 p-0"
-                        />
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="1"
-                            max="12"
-                            value={scheduleHour}
-                            onChange={e => setScheduleHour(String(Math.max(1, Math.min(12, parseInt(e.target.value) || 1))))}
-                            className="w-14 h-9 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-transparent"
-                          />
-                          <span className="text-gray-400">:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="59"
-                            value={scheduleMinute}
-                            onChange={e => setScheduleMinute(String(Math.max(0, Math.min(59, parseInt(e.target.value) || 0))).padStart(2, '0'))}
-                            className="w-14 h-9 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-transparent"
-                          />
-                          <select
-                            value={scheduleAmPm}
-                            onChange={e => setScheduleAmPm(e.target.value as 'AM' | 'PM')}
-                            className="h-9 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-transparent px-2"
-                          >
-                            <option value="AM">AM</option>
-                            <option value="PM">PM</option>
-                          </select>
-                          <Button
-                            onClick={handleCustomSchedule}
-                            size="sm"
-                            className="ml-auto bg-[#4285F4] hover:bg-[#3367D6] text-white rounded-lg h-9 text-sm"
-                          >
-                            Schedule
-                          </Button>
-                        </div>
-                      </div>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowCc(prev => !prev)}
+                    className={cn(
+                      'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
+                      showCc
+                        ? 'text-[#4285F4] bg-[#4285F4]/10'
+                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
                     )}
+                  >
+                    CC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBcc(prev => !prev)}
+                    className={cn(
+                      'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
+                      showBcc
+                        ? 'text-[#4285F4] bg-[#4285F4]/10'
+                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    )}
+                  >
+                    BCC
+                  </button>
+                </div>
+              </div>
+              {errors.to && <p className="text-xs text-red-500 px-4 pb-2">{errors.to}</p>}
+
+              {/* CC */}
+              {showCc && (
+                <div className="border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center px-4 gap-2">
+                    <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
+                    <Input
+                      value={cc}
+                      onChange={e => {
+                        setCc(e.target.value)
+                        if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
+                      }}
+                      placeholder="CC recipients (comma-separated)"
+                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+                    />
+                  </div>
+                  {errors.cc && <p className="text-xs text-red-500 px-4 pb-2">{errors.cc}</p>}
+                </div>
+              )}
+
+              {/* BCC */}
+              {showBcc && (
+                <div className="border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center px-4 gap-2">
+                    <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
+                    <Input
+                      value={bcc}
+                      onChange={e => {
+                        setBcc(e.target.value)
+                        if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
+                      }}
+                      placeholder="BCC recipients (comma-separated)"
+                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+                    />
+                  </div>
+                  {errors.bcc && <p className="text-xs text-red-500 px-4 pb-2">{errors.bcc}</p>}
+                </div>
+              )}
+
+              {/* Subject */}
+              <div className="border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center px-4 gap-2">
+                  <span className="text-sm text-gray-500 shrink-0 w-8">Sub</span>
+                  <Input
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    placeholder="Email subject"
+                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+                  />
+                </div>
+                {errors.subject && <p className="text-xs text-red-500 px-4 pb-2">{errors.subject}</p>}
+              </div>
+            </div>
+
+            {/* Rich text editor area */}
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+              {/* Toolbar */}
+              <div className="flex items-center gap-0.5 px-3 py-2 border-b border-gray-100 dark:border-gray-800 shrink-0 flex-wrap">
+                <ToolbarButton
+                  title="Bold"
+                  active={editor?.isActive('bold')}
+                  onClick={() => editor?.chain().focus().toggleBold().run()}
+                  disabled={!editor}
+                >
+                  <Bold className="w-4 h-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  title="Italic"
+                  active={editor?.isActive('italic')}
+                  onClick={() => editor?.chain().focus().toggleItalic().run()}
+                  disabled={!editor}
+                >
+                  <Italic className="w-4 h-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  title="Strikethrough"
+                  active={editor?.isActive('strike')}
+                  onClick={() => editor?.chain().focus().toggleStrike().run()}
+                  disabled={!editor}
+                >
+                  <Strikethrough className="w-4 h-4" />
+                </ToolbarButton>
+
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+
+                <ToolbarButton
+                  title="Insert Link"
+                  active={editor?.isActive('link')}
+                  onClick={handleLink}
+                  disabled={!editor}
+                >
+                  <Link className="w-4 h-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  title="Bullet List"
+                  active={editor?.isActive('bulletList')}
+                  onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                  disabled={!editor}
+                >
+                  <List className="w-4 h-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  title="Ordered List"
+                  active={editor?.isActive('orderedList')}
+                  onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                  disabled={!editor}
+                >
+                  <ListOrdered className="w-4 h-4" />
+                </ToolbarButton>
+
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+
+                <ToolbarButton
+                  title="Insert Image"
+                  onClick={handleImage}
+                  disabled={!editor}
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </ToolbarButton>
+
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+
+                {/* Templates button */}
+                <Popover open={showTemplatesPopover} onOpenChange={setShowTemplatesPopover}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      title="Templates"
+                      className={cn(
+                        'inline-flex items-center justify-center h-9 w-9 rounded-lg shrink-0 transition-colors cursor-pointer',
+                        'hover:bg-accent hover:text-accent-foreground',
+                        'active:scale-95',
+                        showTemplatesPopover && 'bg-accent text-accent-foreground'
+                      )}
+                    >
+                      <FileText className="w-4 h-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-0" align="start" side="bottom">
+                    <div className="px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Templates</p>
+                    </div>
+                    <Separator />
+                    <div className="max-h-48 overflow-y-auto">
+                      {templates.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-sm text-gray-400">
+                          No templates yet
+                        </div>
+                      ) : (
+                        templates.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => handleLoadTemplate(t)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-800 last:border-0"
+                          >
+                            <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{t.name}</p>
+                            <p className="text-xs text-gray-400 truncate mt-0.5">
+                              {t.subject || 'No subject'}
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </PopoverContent>
                 </Popover>
 
                 {/* Priority toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPriority(p => p === 'high' ? 'normal' : 'high')}
-                  className={cn(
-                    'rounded-full h-9 w-9 p-0',
-                    priority === 'high' && 'text-[#EA4335]'
-                  )}
-                  title={priority === 'high' ? 'High priority (click to remove)' : 'Mark as high priority'}
+                <ToolbarButton
+                  title={priority === 'high' ? 'High Priority (click to change)' : 'Set High Priority'}
+                  active={priority === 'high'}
+                  onClick={() => setPriority(prev => prev === 'high' ? 'normal' : 'high')}
                 >
                   <Flag className="w-4 h-4" />
-                </Button>
+                </ToolbarButton>
+              </div>
 
-                {/* Templates */}
-                {templates.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="rounded-full h-9 w-9 p-0" title="Templates">
-                        <FileText className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56">
-                      {templates.map((t) => (
-                        <DropdownMenuItem key={t.id} onClick={() => applyTemplate(t)}>
-                          {t.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-
-                {/* More options (mobile) */}
-                {isMobile && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="rounded-full h-9 w-9 p-0">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                        <Paperclip className="w-4 h-4 mr-2" />
-                        Attach file
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setShowCc(p => !p)}>
-                        <Users className="w-4 h-4 mr-2" />
-                        {showCc ? 'Hide CC' : 'Show CC'}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+              {/* Editor */}
+              <div className="flex-1 overflow-y-auto min-h-[120px] relative tiptap-editor-wrap">
+                {editor ? (
+                  <EditorContent editor={editor} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm text-gray-400">
+                    Loading editor...
+                  </div>
                 )}
               </div>
 
-              {/* Undo bar */}
-              <AnimatePresence>
-                {undoCountdown > 0 && (
-                  <motion.div
-                    key="undo-bar"
-                    {...fadeInUp}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <span className="text-gray-500">Sent</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleUndo}
-                      className="text-[#4285F4] hover:text-[#3367D6] text-sm font-medium h-7 px-2 rounded-md"
+              {errors.body && <p className="text-xs text-red-500 px-4 pb-1">{errors.body}</p>}
+
+              {/* Drag overlay */}
+              {isDragging && (
+                <div className="absolute inset-0 z-10 m-2 border-2 border-dashed border-[#4285F4] bg-[#4285F4]/5 rounded-lg flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <Paperclip className="w-8 h-8 mx-auto text-[#4285F4] mb-2" />
+                    <p className="text-sm font-medium text-[#4285F4]">Drop files here</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Attachments */}
+            {attachments.length > 0 && (
+              <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2 shrink-0 max-h-24 overflow-y-auto">
+                {attachments.map((file, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1.5 pr-1">
+                    <Paperclip className="w-3 h-3" />
+                    <span className="max-w-[120px] truncate">{file.name}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {(file.size / 1024).toFixed(0)}KB
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(i)}
+                      className="inline-flex items-center justify-center h-4 w-4 ml-1 hover:text-red-500 cursor-pointer"
                     >
-                      Undo ({undoCountdown}s)
-                    </Button>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div
+              className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 shrink-0"
+              style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 12px, 12px)' }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,.gz,.tar,.json,.xml,.html,.css,.js,.heic,.heif"
+                className="hidden"
+                onChange={e => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    const newFiles = Array.from(e.target.files)
+                    const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
+                    if (oversized.length > 0) {
+                      toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                      return
+                    }
+                    const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
+                    const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
+                    if (newTotal > MAX_TOTAL_SIZE) {
+                      toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                      return
+                    }
+                    setAttachments(prev => [...prev, ...newFiles])
+                  }
+                  if (fileInputRef.current) fileInputRef.current.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center justify-center h-9 w-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                aria-label="Attach file"
+              >
+                <Paperclip className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              </button>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={handleClose}
+                className="inline-flex items-center justify-center h-9 px-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+              >
+                Discard
+              </button>
+
+              {/* Schedule Send button */}
+              <button
+                type="button"
+                disabled={!editor || isUploading}
+                onClick={() => setShowSchedulePopover(true)}
+                className="inline-flex items-center justify-center h-9 gap-1.5 text-sm font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 rounded-xl px-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Clock className="w-4 h-4" />
+                <span className="hidden sm:inline">Schedule</span>
+              </button>
+
+              {/* Schedule Send Modal */}
+              <AnimatePresence>
+                {showSchedulePopover && !showCustomSchedule && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+                    onClick={() => setShowSchedulePopover(false)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {/* Tomorrow Morning */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getTomorrowMorning())}
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Sun className="w-5 h-5 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow morning</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowMorning(), 'd MMM, h:mm a')}</p>
+                          </div>
+                        </button>
+                        {/* Tomorrow Afternoon */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getTomorrowAfternoon())}
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Sunset className="w-5 h-5 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow afternoon</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowAfternoon(), 'd MMM, h:mm a')}</p>
+                          </div>
+                        </button>
+                        {/* Monday Morning */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickSchedule(getNextMonday())}
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <Briefcase className="w-5 h-5 text-[#FBBC05]" />
+                          <div className="text-center">
+                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Monday morning</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getNextMonday(), 'd MMM, h:mm a')}</p>
+                          </div>
+                        </button>
+                        {/* Pick date & time */}
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomSchedule(true)}
+                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
+                          <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
+                        </button>
+                      </div>
+                      <p className="text-center text-[11px] text-gray-400 mt-3">
+                        All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                      </p>
+                    </motion.div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Discard draft button */}
-              {editDraftEmail && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (editDraftEmail) {
-                      removeEmail(editDraftEmail.id)
-                      setComposeOpen(false)
-                      toast.success('Draft discarded')
-                    }
-                  }}
-                  className="rounded-full h-8 px-2 text-gray-400 hover:text-[#EA4335] shrink-0"
-                  title="Discard draft"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+              {/* Custom date/time picker modal */}
+              <AnimatePresence>
+                {showSchedulePopover && showCustomSchedule && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+                    onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
+                      <div className="[&_[data-slot=calendar]]:w-full [&_[data-slot=calendar]]:mx-auto [&_[data-slot=calendar]]:p-1.5" style={{ '--cell-size': '1.6rem' } as React.CSSProperties}>
+                      <Calendar
+                        mode="single"
+                        selected={scheduleDate}
+                        onSelect={setScheduleDate}
+                        disabled={{ before: new Date() }}
+                        classNames={{
+                          root: 'w-full',
+                          table: 'w-full border-collapse',
+                          weekday: 'text-[10px] flex-1',
+                          day: 'flex-1 p-0 aspect-square',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md data-[selected=true]:rounded-none',
+                        }}
+                        modifiersClassNames={{
+                          selected: 'bg-[#4285F4] text-white rounded-md',
+                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+                        }}
+                      />
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-3">
+                        <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={2}
+                          value={scheduleHour}
+                          onChange={(e) => setScheduleHour(e.target.value.replace(/[^1-9]/g, '').slice(0, 2))}
+                          placeholder="9"
+                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                        />
+                        <span className="text-sm text-gray-400">:</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={2}
+                          value={scheduleMinute}
+                          onChange={(e) => setScheduleMinute(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                          placeholder="00"
+                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                        />
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                          <button
+                            type="button"
+                            onClick={() => setScheduleAmPm('AM')}
+                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'AM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                          >AM</button>
+                          <button
+                            type="button"
+                            onClick={() => setScheduleAmPm('PM')}
+                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'PM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+                          >PM</button>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-[#4285F4] hover:bg-[#1a73e8]"
+                          onClick={handleCustomSchedule}
+                          disabled={!scheduleDate}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Schedule send
+                        </Button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Send button */}
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={!editor || isUploading}
+                className="inline-flex items-center justify-center h-9 bg-[#4285F4] hover:bg-[#1a73e8] active:bg-[#1557b0] text-white font-medium rounded-xl px-4 sm:px-5 shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUploading ? (
+                  <svg className="w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {isUploading ? (uploadProgress > 0 ? `${uploadProgress}%` : 'Uploading...') : 'Send'}
+              </button>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   )
 }
