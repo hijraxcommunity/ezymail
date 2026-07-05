@@ -107,7 +107,7 @@ export function ComposeModal() {
     return globalThis.innerWidth < 768
   })
   const [to, setTo] = useState('')
-  const [toChips, setToChips] = useState<Array<{ email: string; name: string }>>([])
+  const [toChips, setToChips] = useState<Array<{ email: string; name: string; avatar?: string | null }>>([])
   const [toInput, setToInput] = useState('')
   const [cc, setCc] = useState('')
   const [bcc, setBcc] = useState('')
@@ -129,7 +129,7 @@ export function ComposeModal() {
   const [showCustomSchedule, setShowCustomSchedule] = useState(false)
   const [undoCountdown, setUndoCountdown] = useState(0)
   const [showContactsPicker, setShowContactsPicker] = useState(false)
-  const [contacts, setContacts] = useState<Array<{ id: string; name: string; email: string }>>([])
+  const [contacts, setContacts] = useState<Array<{ id: string; name: string; email: string; avatar?: string | null }>>([])
   const [contactSearch, setContactSearch] = useState('')
 
   // Fetch contacts when compose opens or picker opens
@@ -151,7 +151,7 @@ export function ComposeModal() {
     const trimmed = email.trim().toLowerCase()
     if (!trimmed || toChips.some(c => c.email === trimmed)) return
     const contact = findContactByEmail(trimmed)
-    setToChips(prev => [...prev, { email: trimmed, name: contact?.name || '' }])
+    setToChips(prev => [...prev, { email: trimmed, name: contact?.name || '', avatar: (contact as { avatar?: string | null })?.avatar || null }])
     setToInput('')
     setTo(prev => {
       const existing = prev.split(',').map(s => s.trim()).filter(Boolean)
@@ -1010,9 +1010,17 @@ export function ComposeModal() {
                         key={chip.email}
                         className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full pl-0.5 pr-1 py-0.5 max-w-[240px] shrink-0"
                       >
-                        <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {initials}
-                        </span>
+                        {chip.avatar ? (
+                          <img
+                            src={chip.avatar}
+                            alt=""
+                            className="w-6 h-6 rounded-full object-cover shrink-0"
+                          />
+                        ) : (
+                          <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                            {initials}
+                          </span>
+                        )}
                         <span className="text-sm text-[#1F1F1F] dark:text-white truncate max-w-[150px]">
                           {chip.name || chip.email}
                         </span>
