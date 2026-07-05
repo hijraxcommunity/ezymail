@@ -337,13 +337,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mb-0.5">
-                <p
-                  className={`text-[13px] truncate flex-1 ${
-                    !email.isRead
-                      ? 'font-semibold text-[#1F1F1F] dark:text-white'
-                      : 'text-[#444746] dark:text-gray-300'
-                  }`}
-                >
+                <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
                   {email.subject || '(No subject)'}
                 </p>
                 {email.replyCount > 0 && (
@@ -503,13 +497,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             </span>
           </div>
           <div className="flex items-center gap-1.5 mb-0.5">
-            <p
-              className={`text-[13px] truncate flex-1 ${
-                !email.isRead
-                  ? 'font-semibold text-[#1F1F1F] dark:text-white'
-                  : 'text-[#444746] dark:text-gray-300'
-              }`}
-            >
+            <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
               {email.subject || '(No subject)'}
             </p>
             {email.replyCount > 0 && (
