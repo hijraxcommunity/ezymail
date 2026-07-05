@@ -48,7 +48,22 @@ export async function GET(request: NextRequest) {
       orderBy: { [sortField]: sortOrder },
     });
 
-    return NextResponse.json({ success: true, data: contacts });
+    // Look up avatars for contacts whose email matches a registered user
+    const contactEmails = contacts.map(c => c.email.toLowerCase());
+    const usersWithAvatar = contactEmails.length > 0
+      ? await db.user.findMany({
+          where: { email: { in: contactEmails } },
+          select: { email: true, avatar: true },
+        })
+      : [];
+    const avatarMap = new Map(usersWithAvatar.map(u => [u.email.toLowerCase(), u.avatar || null]));
+
+    const enriched = contacts.map(c => ({
+      ...c,
+      avatar: avatarMap.get(c.email.toLowerCase()) ?? null,
+    }));
+
+    return NextResponse.json({ success: true, data: enriched });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('List contacts error:', message);
