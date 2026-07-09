@@ -1016,7 +1016,7 @@ export function ComposeModal() {
                                   key={c.id}
                                   type="button"
                                   onClick={() => {
-                                    addToChip(c.email)
+                                    addToChip(c.email, 'to')
                                     setShowContactsPicker(false)
                                     setContactSearch('')
                                   }}
