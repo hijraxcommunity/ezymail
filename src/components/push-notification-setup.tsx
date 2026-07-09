@@ -100,9 +100,9 @@ export function PushNotificationSetup() {
   useEffect(() => {
     if (!isAuthenticated || !user) return
 
-    // Check if Firebase is configured
-    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-      // Firebase not configured — use native browser notifications (existing behavior)
+    // Check if Firebase is fully configured (VAPID key required for push)
+    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+      // Firebase not fully configured — use native browser notifications (existing behavior)
       return
     }
 
@@ -138,7 +138,7 @@ export function PushNotificationSetup() {
   }, [isAuthenticated, unsubscribeToken])
 
   // Don't render anything if not authenticated or Firebase not configured
-  if (!isAuthenticated || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  if (!isAuthenticated || !process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
     return null
   }
 
