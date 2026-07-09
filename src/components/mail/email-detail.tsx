@@ -576,6 +576,23 @@ export function EmailDetail() {
     }
   }
 
+  const handleReportSpam = async () => {
+    if (!email) return
+    removeEmail(email.id)
+    handleBack()
+    try {
+      const res = await fetch(`/api/emails/${email.id}/report-spam`, { method: 'POST' })
+      const json = await res.json()
+      if (res.ok) {
+        toast.success('Reported as spam')
+      } else {
+        toast.error(json.error || 'Failed to report')
+      }
+    } catch {
+      toast.error('Failed to report spam')
+    }
+  }
+
   /* ─── Restore (trash → inbox) ─── */
   const handleRestore = async () => {
     if (!email) return
@@ -845,7 +862,7 @@ export function EmailDetail() {
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
+                    <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
                       <Flag className="w-4 h-4" /> Report
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
@@ -932,7 +949,7 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
                       <Archive className="w-4 h-4" /> Archive
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => toast.success('Email reported as spam')} className="gap-2.5 cursor-pointer">
+                    <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
                       <Flag className="w-4 h-4" /> Report
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
