@@ -51,6 +51,7 @@ interface Contact {
   isFavorite: boolean
   createdAt: string
   updatedAt: string
+  avatar?: string | null
 }
 
 type SortOption = 'name' | 'email' | 'createdAt'
@@ -529,11 +530,15 @@ export function ContactsPanel() {
                   >
                     {/* Avatar */}
                     <div
-                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(contact.name)} flex items-center justify-center shrink-0`}
+                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(contact.name)} flex items-center justify-center shrink-0 overflow-hidden`}
                     >
-                      <span className="text-white text-xs font-bold">
-                        {getInitials(contact.name)}
-                      </span>
+                      {contact.avatar ? (
+                        <img src={contact.avatar} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-white text-xs font-bold">
+                          {getInitials(contact.name)}
+                        </span>
+                      )}
                     </div>
 
                     {/* Info */}
