@@ -382,7 +382,7 @@ export function MailSidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-56 lg:w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex-col shrink-0">
+      <aside className="hidden md:flex w-56 lg:w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex-col shrink-0 overflow-hidden">
         {sidebarContent}
       </aside>
 
