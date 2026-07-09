@@ -188,13 +188,13 @@ export function MailSidebar() {
   const sidebarContent = (
     <div className="flex flex-col h-full min-h-0">
       {/* Compose Button */}
-      <div className="p-3 sm:p-4">
+      <div className="p-3 pb-2">
         <Button
           onClick={() => {
             setComposeOpen(true)
             setSidebarOpen(false)
           }}
-          className="w-full h-10 sm:h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium gap-2 shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
+          className="w-full h-9 sm:h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium gap-2 shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
         >
           <Plus className="w-4 h-4" />
           Compose
@@ -218,7 +218,7 @@ export function MailSidebar() {
                 key={item.view}
                 variants={itemVariants}
                 onClick={() => handleNavClick(item.view)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[44px] ${
+                className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[36px] ${
                   isActive
                     ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4]'
                     : 'text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -247,7 +247,7 @@ export function MailSidebar() {
 
           {/* ─── Labels Section ─── */}
           {labels.length > 0 && (
-            <div className="pt-4">
+            <div className="pt-2">
               <div className="flex items-center justify-between px-3 mb-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                   Labels
@@ -269,7 +269,7 @@ export function MailSidebar() {
                         handleLabelClick(label.id)
                       }
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[44px] cursor-pointer group ${
+                    className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[36px] cursor-pointer group ${
                       isActive
                         ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4]'
                         : 'text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -306,14 +306,14 @@ export function MailSidebar() {
             setContactsView(true)
             setSidebarOpen(false)
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[44px] mt-2"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm font-medium text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[36px] mt-1"
         >
           <Users className="w-5 h-5 shrink-0 text-[#1F1F1F] dark:text-gray-300" />
           <span className="flex-1 text-left">Contacts</span>
         </motion.button>
 
         {/* ─── Create Label Section ─── */}
-        <div className="mt-3 pb-4">
+        <div className="mt-2 pb-4">
           <AnimatePresence>
             {showNewLabelForm ? (
               <motion.div
@@ -361,7 +361,7 @@ export function MailSidebar() {
               <motion.button
                 variants={itemVariants}
                 onClick={() => setShowNewLabelForm(true)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[44px]"
+                className="w-full flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm font-medium text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[36px]"
               >
                 <Tag className="w-5 h-5 shrink-0 text-[#1F1F1F] dark:text-gray-300" />
                 <span className="flex-1 text-left">Create label</span>
