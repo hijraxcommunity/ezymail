@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Tag, X, Users, Clock, CalendarClock } from 'lucide-react'
+import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Tag, X, Users, Clock, CalendarClock, ShieldAlert } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -74,6 +74,7 @@ export function MailSidebar() {
     { view: 'drafts', label: 'Drafts', icon: FileText, count: draftsCount },
     { view: 'archive', label: 'Archive', icon: Archive, count: archiveCount },
     { view: 'trash', label: 'Trash', icon: Trash2 },
+    { view: 'spam', label: 'Spam', icon: ShieldAlert },
   ]
 
   /* ─── Fetch labels ─── */
