@@ -15,9 +15,9 @@ export async function POST(
 
     const { id } = await params;
 
-    // Check email exists and belongs to user
+    // Check email exists and belongs to user (recipientEmail matches session email)
     const email = await db.email.findFirst({
-      where: { id, recipientId: session.userId },
+      where: { id, recipientEmail: session.email },
     });
 
     if (!email) {
