@@ -578,12 +578,12 @@ export function EmailDetail() {
 
   const handleReportSpam = async () => {
     if (!email) return
-    removeEmail(email.id)
-    handleBack()
     try {
       const res = await fetch(`/api/emails/${email.id}/report-spam`, { method: 'POST' })
       const json = await res.json()
       if (res.ok) {
+        removeEmail(email.id)
+        handleBack()
         toast.success('Reported as spam')
       } else {
         toast.error(json.error || 'Failed to report')
