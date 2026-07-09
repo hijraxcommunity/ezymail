@@ -251,6 +251,21 @@ export function EmailList() {
     }
   }
 
+  const handleEmptySpam = async () => {
+    try {
+      await Promise.all(
+        displayEmails.map((e) =>
+          fetch(`/api/emails/${e.id}`, { method: 'DELETE' })
+        )
+      )
+      displayEmails.forEach((e) => removeEmail(e.id))
+      setTotalEmails(0)
+      toast.success('All spam deleted')
+    } catch {
+      toast.error('Failed to delete spam')
+    }
+  }
+
   // Build operator badges for search header
   const operatorBadges = searchOperators
     ? Object.entries(searchOperators)
@@ -264,6 +279,23 @@ export function EmailList() {
     <div className="flex-1 flex flex-col min-w-0 h-full">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 h-12 border-b border-gray-100 dark:border-gray-800 shrink-0">
+        {currentFolder === 'spam' ? (
+          <div className="flex items-center justify-between w-full">
+            <h2 className="text-sm font-semibold text-[#1F1F1F] dark:text-white capitalize">Spam</h2>
+            {displayEmails.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 h-8 px-3"
+                onClick={handleEmptySpam}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Delete all spam
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
         <div className="flex items-center gap-2 min-w-0">
           {/* Select All checkbox */}
           {displayEmails.length > 0 && (
@@ -307,6 +339,8 @@ export function EmailList() {
           >
             <X className="w-4 h-4" />
           </Button>
+        )}
+        </>
         )}
       </div>
 
@@ -360,6 +394,7 @@ export function EmailList() {
       </AnimatePresence>
 
       {/* Bulk action bar */}
+      {currentFolder !== 'spam' && (
       <AnimatePresence>
         {selectedCount > 0 && (
           <motion.div
@@ -427,6 +462,7 @@ export function EmailList() {
           </motion.div>
         )}
       </AnimatePresence>
+      )}
 
       {/* Pull-to-refresh indicator */}
       <div
