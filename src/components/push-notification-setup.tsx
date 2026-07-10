@@ -51,7 +51,7 @@ export function PushNotificationSetup() {
     }
   }, [])
 
-  const requestPermissionAndSubscribe = useCallback(async () => {
+  const requestPermissionAndSubscribe = useCallback(async (silent = false) => {
     if (statusRef.current === 'loading') return
     statusRef.current = 'loading'
 
@@ -63,7 +63,7 @@ export function PushNotificationSetup() {
       const messaging = await getFirebaseMessaging()
       if (!messaging) {
         statusRef.current = 'unsupported'
-        toast.error('Push notifications are not supported in this browser')
+        if (!silent) toast.error('Push notifications are not supported in this browser')
         return
       }
 
@@ -85,15 +85,16 @@ export function PushNotificationSetup() {
 
       if (token) {
         await subscribeToken(token)
-        toast.success('Push notifications enabled')
+        if (!silent) toast.success('Push notifications enabled')
       } else {
         statusRef.current = 'error'
-        toast.error('Failed to get notification token')
+        if (!silent) toast.error('Failed to get notification token')
       }
     } catch (err) {
       console.error('Push setup error:', err)
       statusRef.current = 'error'
-      toast.error('Failed to enable push notifications')
+      // Only show error toast when user explicitly requested (not on auto-subscribe)
+      if (!silent) toast.error('Failed to enable push notifications')
     }
   }, [subscribeToken])
 
@@ -101,8 +102,13 @@ export function PushNotificationSetup() {
     if (!isAuthenticated || !user) return
 
     // Check if Firebase is fully configured (VAPID key required for push)
-    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !vapidKey) {
       // Firebase not fully configured — use native browser notifications (existing behavior)
+      return
+    }
+    // Extra guard: VAPID key must not be a placeholder or empty
+    if (vapidKey.length < 20) {
       return
     }
 
@@ -118,8 +124,8 @@ export function PushNotificationSetup() {
     }
 
     if (Notification.permission === 'granted') {
-      // Auto-subscribe when permission already granted
-      requestPermissionAndSubscribe()
+      // Auto-subscribe silently when permission already granted
+      requestPermissionAndSubscribe(true)
     } else {
       statusRef.current = 'prompt'
     }
