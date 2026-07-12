@@ -320,13 +320,7 @@ export const useAppStore = create<AppState>()(
       searchOperators: null,
 
       // Actions - Auth
-      setUser: (user) => set({
-        user,
-        isAuthenticated: !!user,
-        authView: null,
-        showOnboarding: false,
-        ...(user?.role === 'admin' ? { adminView: 'dashboard' as const } : {}),
-      }),
+      setUser: (user) => set({ user, isAuthenticated: !!user, authView: null, showOnboarding: false }),
       setAuthView: (view) => set({ authView: view }),
 
       // Actions - Mail

@@ -203,6 +203,16 @@ export default function HomePage() {
     return <BusinessApp />
   }
 
+  // ─── Admin users go directly to admin panel (no personal inbox) ───────
+  if (user?.role === 'admin') {
+    return (
+      <div className="h-dvh bg-gray-50 dark:bg-gray-950 overflow-hidden">
+        <AdminPanel />
+        <PushNotificationSetup />
+      </div>
+    )
+  }
+
   // ─── Main mail view (personal users) ─────────────────────────────────────
   return (
     <div className="h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
