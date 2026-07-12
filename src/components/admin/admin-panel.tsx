@@ -7,7 +7,7 @@ import {
   Loader2, Ban, CheckCircle, Trash2, Eye, X, Server, Clock, Cpu, Wifi,
   Megaphone, Settings, ScrollText, KeyRound, UserCog, AlertTriangle,
   ChevronDown, Copy, RefreshCw, Filter, Globe, Zap, Database,
-  Building2, ClipboardCheck
+  Building2, ClipboardCheck, LogOut, User, ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
@@ -200,26 +200,122 @@ const fadeInUp = {
 /* ─── Main Component ─── */
 
 export function AdminPanel() {
-  const { setAdminView } = useAppStore()
+  const { user, setAdminView, logout } = useAppStore()
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  // Close profile menu on outside click
+  useEffect(() => {
+    if (!profileOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [profileOpen])
+
+  const initials = user
+    ? `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase()
+    : 'A'
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      toast.success('Logged out')
+      logout()
+    } catch {
+      toast.error('Failed to log out')
+    }
+    setProfileOpen(false)
+  }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-950 overflow-y-auto custom-scrollbar">
+    <div className="h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 z-10">
+      <div className="shrink-0 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 z-10">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-[#4285F4]" />
             <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white">Admin Panel</h2>
             <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">v2.0</Badge>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setAdminView(null)} className="h-9 w-9">
-            <X className="w-5 h-5" />
-          </Button>
+
+          {/* Profile dropdown */}
+          <div className="relative" ref={profileRef}>
+            <button
+              onClick={() => setProfileOpen(!profileOpen)}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.avatar || undefined} />
+                <AvatarFallback className="bg-[#D3E3FD] text-[#4285F4] text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:block text-sm font-medium text-[#1F1F1F] dark:text-white max-w-[140px] truncate">
+                {user?.firstName} {user?.lastName}
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+
+            <AnimatePresence>
+              {profileOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-lg overflow-hidden z-50"
+                >
+                  {/* Profile info */}
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user?.avatar || undefined} />
+                        <AvatarFallback className="bg-[#D3E3FD] text-[#4285F4] text-sm font-semibold">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                          {user?.firstName} {user?.lastName}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Menu items */}
+                  <div className="py-1">
+                    <button
+                      onClick={() => { setActiveTab('settings'); setProfileOpen(false) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-gray-500" />
+                      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 text-left">Admin Settings</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                    <Separator />
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span className="text-sm font-medium text-red-600 dark:text-red-400">Log out</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-4 md:p-6">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-w-6xl mx-auto p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="dashboard">
@@ -262,6 +358,7 @@ export function AdminPanel() {
             {activeTab === 'settings' && <SettingsTab key="settings" />}
           </AnimatePresence>
         </Tabs>
+        </div>
       </div>
     </div>
   )

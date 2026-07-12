@@ -206,10 +206,10 @@ export default function HomePage() {
   // ─── Admin users go directly to admin panel (no personal inbox) ───────
   if (user?.role === 'admin') {
     return (
-      <div className="h-dvh bg-gray-50 dark:bg-gray-950 overflow-hidden">
+      <>
         <AdminPanel />
         <PushNotificationSetup />
-      </div>
+      </>
     )
   }
 
