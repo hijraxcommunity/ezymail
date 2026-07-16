@@ -75,6 +75,7 @@ export function EmailList() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const touchStartY = useRef<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollSaveRafRef = useRef<number | null>(null)
 
   const fetchEmails = useCallback(async () => {
     if (!isAuthenticated) return
@@ -500,10 +501,15 @@ export function EmailList() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onScroll={() => {
-          // PRD 5.2: Save scroll position (debounced via rAF)
-          if (scrollContainerRef.current) {
-            const pos = scrollContainerRef.current.scrollTop
-            if (pos > 10) setScrollPosition(currentFolder, pos)
+          // PRD 5.2: Save scroll position (throttled to avoid re-render flood on low-end devices)
+          if (!scrollSaveRafRef.current) {
+            scrollSaveRafRef.current = requestAnimationFrame(() => {
+              scrollSaveRafRef.current = null
+              if (scrollContainerRef.current) {
+                const pos = scrollContainerRef.current.scrollTop
+                if (pos > 10) setScrollPosition(currentFolder, pos)
+              }
+            })
           }
         }}
       >
