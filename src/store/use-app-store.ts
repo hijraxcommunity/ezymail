@@ -157,6 +157,10 @@ interface AppState {
   // Recent searches
   recentSearches: string[];
 
+  // PRD 5.2: Scroll memory per folder
+  scrollPositions: Record<string, number>;
+  setScrollPosition: (folder: string, position: number) => void;
+
   // Saved searches
   savedSearches: SavedSearch[];
 
@@ -309,6 +313,10 @@ export const useAppStore = create<AppState>()(
 
       // Recent searches
       recentSearches: [],
+      scrollPositions: {},
+      setScrollPosition: (folder, position) => set((s) => ({
+        scrollPositions: { ...s.scrollPositions, [folder]: position },
+      })),
 
       // Saved searches
       savedSearches: [],

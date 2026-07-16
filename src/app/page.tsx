@@ -186,10 +186,16 @@ export default function HomePage() {
   if (isCheckingAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#D3E3FD] via-white to-[#E6F4EA] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-[#4285F4] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Loading...</p>
-        </div>
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+          className="flex flex-col items-center gap-3"
+        >
+          <img src="/logo.png" alt="EzyMail" className="w-14 h-14 rounded-xl" />
+          <p className="font-bold text-xl">EzyMail</p>
+          <p className="text-xs text-gray-400">Email made Ezy</p>
+        </motion.div>
       </div>
     )
   }
