@@ -11,17 +11,40 @@ import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
 const SNAP_OPEN_PX = 100
 const ELASTIC_FACTOR = 0.35 // Resistance beyond snap point — feels like rubber band
+const VELOCITY_THRESHOLD = 400 // px/s — fast flick auto-completes
+const MIN_DRAG_FOR_FAST = 40 // Minimum px for velocity-based trigger
+
+/* ─── Motion timing constants (PRD 7.2) ─── */
+export const TAP_MS = 120
+export const NAV_MS = 250
+export const SWIPE_RELEASE_MS = 180
 
 function elasticDrag(dx: number, maxPx: number): number {
-  if (Math.abs(dx) <= maxPx) return dx
+  // High resistance under 30% of threshold
+  const threshold30 = maxPx * 0.3
+  if (Math.abs(dx) <= threshold30) {
+    return dx * 0.4 // High resistance in first 30%
+  }
+  // Smooth release after 30%
+  const beyond30 = Math.abs(dx) - threshold30
+  const remaining = maxPx - threshold30
+  if (Math.abs(dx) <= maxPx) {
+    return Math.sign(dx) * (threshold30 * 0.4 + beyond30)
+  }
+  // Elastic overshoot beyond 100%
   const overshoot = Math.abs(dx) - maxPx
-  return Math.sign(dx) * (maxPx + overshoot * ELASTIC_FACTOR)
+  return Math.sign(dx) * (threshold30 * 0.4 + remaining + overshoot * ELASTIC_FACTOR)
 }
 
-function triggerHaptic() {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate(10)
-  }
+/* ─── Haptic feedback layer (PRD 3.2) ─── */
+function hapticLight() {
+  try { navigator.vibrate?.(8) } catch {}
+}
+function hapticMedium() {
+  try { navigator.vibrate?.(20) } catch {}
+}
+function hapticHeavy() {
+  try { navigator.vibrate?.([30, 10, 30]) } catch {}
 }
 
 interface EmailCardProps {
@@ -43,6 +66,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
   const [swipeOpenDir, setSwipeOpenDir] = useState<'left' | 'right' | null>(null)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const touchStartTime = useRef(0)
   const isSwiping = useRef(false)
   const isVertical = useRef(false)
 
@@ -66,6 +90,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
 
   const doArchive = useCallback(() => {
     if (!email) return
+    hapticMedium() // PRD 3.2: medium impact on swipe action
     setUndoAction({ id: email.id, type: 'archive', email, timestamp: Date.now() })
     removeEmail(email.id)
     animateOffScreen('right')
@@ -78,6 +103,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
 
   const doUnarchive = useCallback(() => {
     if (!email) return
+    hapticMedium()
     setUndoAction({ id: email.id, type: 'archive', email, timestamp: Date.now() })
     removeEmail(email.id)
     animateOffScreen('left')
@@ -90,6 +116,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
 
   const doDelete = useCallback(() => {
     if (!email) return
+    hapticHeavy() // PRD 3.2: heavy impact on delete
     setUndoAction({ id: email.id, type: 'delete', email, timestamp: Date.now() })
     removeEmail(email.id)
     animateOffScreen('right')
@@ -107,6 +134,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     const touch = e.touches[0]
     touchStartX.current = touch.clientX
     touchStartY.current = touch.clientY
+    touchStartTime.current = Date.now()
     isSwiping.current = false
     isVertical.current = false
   }, [])
@@ -138,13 +166,30 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
   const onTouchEnd = useCallback(() => {
     if (!isSwiping.current) return
     const currentX = swipeX.get()
-    if (currentX > SNAP_OPEN_PX) {
-      triggerHaptic()
-      animate(swipeX, SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35 })
+
+    // PRD 3.3: Predictive touch — calculate velocity
+    const elapsed = (Date.now() - touchStartTime.current) / 1000 || 0.016
+    const velocity = Math.abs(currentX) / elapsed
+    const isFastFlick = velocity > VELOCITY_THRESHOLD && Math.abs(currentX) > MIN_DRAG_FOR_FAST
+
+    // PRD 3.1: Velocity-based auto-complete
+    if (isFastFlick) {
+      if (currentX > 0) {
+        hapticMedium()
+        animate(swipeX, SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35, duration: SWIPE_RELEASE_MS / 1000 })
+        setSwipeOpenDir('right')
+      } else {
+        hapticMedium()
+        animate(swipeX, -SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35, duration: SWIPE_RELEASE_MS / 1000 })
+        setSwipeOpenDir('left')
+      }
+    } else if (currentX > SNAP_OPEN_PX) {
+      hapticMedium()
+      animate(swipeX, SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35, duration: SWIPE_RELEASE_MS / 1000 })
       setSwipeOpenDir('right')
     } else if (currentX < -SNAP_OPEN_PX) {
-      triggerHaptic()
-      animate(swipeX, -SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35 })
+      hapticMedium()
+      animate(swipeX, -SNAP_OPEN_PX, { type: 'spring', stiffness: 500, damping: 35, duration: SWIPE_RELEASE_MS / 1000 })
       setSwipeOpenDir('left')
     } else {
       resetSwipe()
@@ -157,6 +202,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
       resetSwipe()
       return
     }
+    hapticLight() // PRD 3.2: light impact on tap
     onSelect()
   }, [swipeOpenDir, resetSwipe, onSelect])
 
@@ -288,7 +334,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 }
               }}
               className={`shrink-0 items-center justify-center relative z-10 cursor-pointer ${multiSelectMode ? 'flex' : 'hidden md:flex'}`}
-              style={{ minWidth: 36, minHeight: 44 }}
+              style={{ minWidth: 44, minHeight: 44 }}
               aria-label={`Select email from ${contactName}`}
             >
               <div
@@ -306,9 +352,9 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </div>
             </div>
 
-            {/* Avatar */}
+            {/* Avatar — PRD 11: lazy load */}
             <Avatar className="w-10 h-10 shrink-0">
-              <AvatarImage src={contactPerson?.avatar} />
+              <AvatarImage src={contactPerson?.avatar || undefined} loading="lazy" />
               <AvatarFallback
                 className={`text-white text-xs font-semibold ${
                   contactPerson
@@ -387,10 +433,10 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </div>
             </div>
 
-            {/* Star toggle - mobile */}
+            {/* Star toggle - mobile — PRD 10: 44px touch target */}
             <button
               onClick={handleStar}
-              className={`shrink-0 p-1.5 rounded-full transition-colors ${
+              className={`shrink-0 p-2.5 rounded-full transition-colors ${
                 email.isStarred
                   ? 'text-amber-500'
                   : 'text-gray-300 dark:text-gray-600 hover:text-amber-400'
@@ -466,9 +512,9 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
           </div>
         </div>
 
-        {/* Avatar */}
+        {/* Avatar — PRD 11: lazy load */}
         <Avatar className="w-10 h-10 shrink-0">
-          <AvatarImage src={contactPerson?.avatar} />
+          <AvatarImage src={contactPerson?.avatar || undefined} loading="lazy" />
           <AvatarFallback
             className={`text-white text-xs font-semibold ${
               contactPerson
@@ -549,7 +595,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
         {/* Star toggle - desktop */}
         <button
           onClick={handleStar}
-          className={`shrink-0 p-1.5 rounded-full transition-colors ${
+          className={`shrink-0 p-2.5 rounded-full transition-colors ${
             email.isStarred
               ? 'text-amber-500'
               : 'text-gray-300 dark:text-gray-600 hover:text-amber-400'

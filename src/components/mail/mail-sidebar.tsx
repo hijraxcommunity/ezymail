@@ -218,7 +218,7 @@ export function MailSidebar() {
                 key={item.view}
                 variants={itemVariants}
                 onClick={() => handleNavClick(item.view)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[40px] ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[40px] active:scale-[0.97] transition-transform ${
                   isActive
                     ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4]'
                     : 'text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'

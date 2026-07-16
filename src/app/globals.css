@@ -119,6 +119,19 @@
   }
   body {
     @apply bg-background text-foreground;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Re-enable text selection only on static text content */
+  p, span, h1, h2, h3, h4, h5, h6, div, textarea, input {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  /* Keep interactive elements non-selectable */
+  button, a, [role="button"], [role="checkbox"], [role="tab"], label, option {
+    -webkit-user-select: none;
+    user-select: none;
   }
 }
 
@@ -392,4 +405,10 @@ html, body {
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
+}
+
+/* PRD 10: RTL support for Afghanistan */
+[dir="rtl"] .rtl-flip {
+  direction: rtl;
+  text-align: right;
 }

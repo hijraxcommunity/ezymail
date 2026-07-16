@@ -65,6 +65,8 @@ export function EmailList() {
     setSearchResults,
     setSearchTotal,
     setSearchOperators,
+    scrollPositions,
+    setScrollPosition,
   } = useAppStore()
 
   // Pull-to-refresh state
@@ -96,6 +98,13 @@ export function EmailList() {
       toast.error('Failed to load emails')
     } finally {
       setIsLoading(false)
+      // PRD 5.2: Restore scroll position
+      const saved = scrollPositions[currentFolder]
+      if (saved && saved > 0 && scrollContainerRef.current) {
+        requestAnimationFrame(() => {
+          scrollContainerRef.current?.scrollTo(0, saved)
+        })
+      }
     }
   }, [
     isAuthenticated,
@@ -321,7 +330,7 @@ export function EmailList() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0"
+            className="h-11 w-11 shrink-0"
             onClick={fetchEmails}
             disabled={isLoading}
           >
@@ -333,7 +342,7 @@ export function EmailList() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            className="h-11 w-11 shrink-0 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             onClick={handleClearSearch}
             title="Clear search"
           >
@@ -412,7 +421,7 @@ export function EmailList() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-11 w-11"
                   onClick={() => handleBulkMarkRead(true)}
                   title="Mark as read"
                 >
@@ -421,7 +430,7 @@ export function EmailList() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-11 w-11"
                   onClick={() => handleBulkMarkRead(false)}
                   title="Mark as unread"
                 >
@@ -431,7 +440,7 @@ export function EmailList() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-11 w-11"
                     onClick={handleBulkUnarchive}
                     title="Unarchive"
                   >
@@ -441,7 +450,7 @@ export function EmailList() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-11 w-11"
                     onClick={handleBulkArchive}
                     title="Archive"
                   >
@@ -490,6 +499,13 @@ export function EmailList() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onScroll={() => {
+          // PRD 5.2: Save scroll position (debounced via rAF)
+          if (scrollContainerRef.current) {
+            const pos = scrollContainerRef.current.scrollTop
+            if (pos > 10) setScrollPosition(currentFolder, pos)
+          }
+        }}
       >
         {isLoading && emails.length === 0 ? (
           <EmailListSkeleton />
