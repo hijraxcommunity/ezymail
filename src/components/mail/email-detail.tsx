@@ -285,59 +285,56 @@ function LabelManager({ emailId }: { emailId: string }) {
   }
 
   return (
-    <DropdownMenuContent align="end" className="w-56 p-0">
-      <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-        Labels
-      </DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      <div className="max-h-48 overflow-y-auto">
+    <div className="p-2">
+      <div className="space-y-0.5">
         {labels.map((label) => {
           const isApplied = appliedIds.has(label.id)
           const isLoading = isAdding === label.id || isRemoving === label.id
           return (
-            <DropdownMenuItem
+            <button
               key={label.id}
+              type="button"
               onClick={() => handleToggleLabel(label)}
               disabled={isLoading}
-              className="flex items-center gap-2.5 px-3 py-2 cursor-pointer"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
             >
               {isLoading ? (
-                <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin shrink-0" />
               ) : isApplied ? (
                 <div
-                  className="w-4 h-4 rounded-sm flex items-center justify-center shrink-0"
+                  className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
                   style={{ backgroundColor: label.color }}
                 >
                   <Check className="w-3 h-3 text-white" />
                 </div>
               ) : (
                 <div
-                  className="w-4 h-4 rounded-sm border-2 shrink-0"
+                  className="w-5 h-5 rounded-md border-2 shrink-0"
                   style={{ borderColor: label.color }}
                 />
               )}
-              <span className="flex-1 text-sm truncate">{label.name}</span>
-            </DropdownMenuItem>
+              <span className="flex-1 truncate text-[#1F1F1F] dark:text-white">{label.name}</span>
+            </button>
           )
         })}
         {labels.length === 0 && (
-          <div className="px-3 py-4 text-center text-sm text-gray-400">
-            No labels yet
+          <div className="px-3 py-8 text-center text-sm text-gray-400">
+            No labels yet. Create one below.
           </div>
         )}
       </div>
-      <DropdownMenuSeparator />
-      <div className="p-2">
+      <div className="border-t border-gray-100 dark:border-gray-800 mt-2 pt-2">
         {!showCreate ? (
           <button
+            type="button"
             onClick={() => setShowCreate(true)}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-lg transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-xl transition-colors font-medium"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             Create new label
           </button>
         ) : (
-          <div className="space-y-2 p-1">
+          <div className="space-y-2.5 p-1">
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -346,30 +343,32 @@ function LabelManager({ emailId }: { emailId: string }) {
                 if (e.key === 'Escape') setShowCreate(false)
               }}
               placeholder="Label name"
-              className="h-7 text-xs"
+              className="h-9 text-sm"
               autoFocus
             />
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#E91E63'].map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setNewColor(c)}
-                  className={`w-4 h-4 rounded-full transition-transform ${newColor === c ? 'scale-125 ring-1 ring-offset-1 ring-gray-400' : ''}`}
+                  className={`w-6 h-6 rounded-full transition-transform ${newColor === c ? 'scale-125 ring-2 ring-offset-1 ring-gray-400 dark:ring-offset-gray-900' : ''}`}
                   style={{ backgroundColor: c }}
                 />
               ))}
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleCreateLabel}
-                className="flex-1 text-xs text-[#4285F4] font-medium hover:bg-[#D3E3FD]/50 rounded-md py-1 transition-colors"
+                className="flex-1 text-sm text-white font-medium bg-[#4285F4] hover:bg-[#1a73e8] rounded-lg py-2 transition-colors"
               >
                 Create
               </button>
               <button
+                type="button"
                 onClick={() => setShowCreate(false)}
-                className="text-xs text-gray-500 hover:bg-gray-100 rounded-md px-2 py-1 transition-colors"
+                className="text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg px-3 py-2 transition-colors"
               >
                 Cancel
               </button>
@@ -377,7 +376,7 @@ function LabelManager({ emailId }: { emailId: string }) {
           </div>
         )}
       </div>
-    </DropdownMenuContent>
+    </div>
   )
 }
 
@@ -626,6 +625,7 @@ export function EmailDetail() {
   const [snoozeAmPm, setSnoozeAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSnooze, setShowCustomSnooze] = useState(false)
   const [showSnoozeModal, setShowSnoozeModal] = useState(false)
+  const [showLabelPanel, setShowLabelPanel] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const getLaterToday = () => {
@@ -853,14 +853,9 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
                       <Clock className="w-4 h-4" /> Snooze
                     </DropdownMenuItem>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                        <Tag className="w-4 h-4" /> Label
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-56 p-2">
-                        <LabelManager emailId={email.id} />
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={() => setShowLabelPanel(true)} className="gap-2.5 cursor-pointer">
+                      <Tag className="w-4 h-4" /> Label
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
                       <Flag className="w-4 h-4" /> Report
@@ -937,14 +932,9 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
                       <Clock className="w-4 h-4" /> Snooze
                     </DropdownMenuItem>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
-                        <Tag className="w-4 h-4" /> Label
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-56 p-2">
-                        <LabelManager emailId={email.id} />
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={() => setShowLabelPanel(true)} className="gap-2.5 cursor-pointer">
+                      <Tag className="w-4 h-4" /> Label
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
                       <Archive className="w-4 h-4" /> Archive
@@ -1490,6 +1480,43 @@ export function EmailDetail() {
                   <Check className="w-3 h-3 inline mr-1 -mt-0.5" />
                   Snooze
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Label Panel (Centered Modal) ─── */}
+      <AnimatePresence>
+        {showLabelPanel && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowLabelPanel(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15, ease: 'easeOut' as const }}
+              className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden w-[calc(100%-2rem)] max-w-sm max-h-[70vh]"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Manage Labels</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowLabelPanel(false)}
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  aria-label="Close labels"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <LabelManager emailId={email.id} />
               </div>
             </motion.div>
           </motion.div>
