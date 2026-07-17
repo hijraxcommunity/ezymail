@@ -534,29 +534,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
             </Badge>
           )}
-          {emailLabels.length > 0 && (
-            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-              {emailLabels.slice(0, 3).map((label) => (
-                <span
-                  key={label.id}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-full leading-none"
-                  style={{
-                    backgroundColor: `${label.color}15`,
-                    color: label.color,
-                  }}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: label.color }}
-                  />
-                  {label.name}
-                </span>
-              ))}
-              {emailLabels.length > 3 && (
-                <span className="text-[10px] text-gray-400">+{emailLabels.length - 3}</span>
-              )}
-            </div>
-          )}
+
           <div className="flex items-center gap-2">
             <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
               {snippet}
