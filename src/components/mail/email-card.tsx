@@ -56,7 +56,7 @@ interface EmailCardProps {
 }
 
 export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
-  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction, setEditDraftEmail, setSelectedEmailId, setEmailDetailOpen } = useAppStore()
+  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, setUndoAction, setEditDraftEmail, setSelectedEmailId, setEmailDetailOpen } = useAppStore()
   const isArchive = currentFolder === 'archive'
   const isDrafts = currentFolder === 'drafts'
 
@@ -225,7 +225,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     .replace(/\n/g, ' ') || ''
 
   const isChecked = selectedEmailIds.has(email.id)
-  const emailLabels = emailLabelsMap[email.id] || []
 
   const handleStar = async (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation()
@@ -398,30 +397,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                   <CalendarDays className="w-2.5 h-2.5" />
                   {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
                 </Badge>
-              )}
-              {/* Label chips inline */}
-              {emailLabels.length > 0 && (
-                <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                  {emailLabels.slice(0, 3).map((label) => (
-                    <span
-                      key={label.id}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-full leading-none"
-                      style={{
-                        backgroundColor: `${label.color}15`,
-                        color: label.color,
-                      }}
-                    >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ backgroundColor: label.color }}
-                      />
-                      {label.name}
-                    </span>
-                  ))}
-                  {emailLabels.length > 3 && (
-                    <span className="text-[10px] text-gray-400">+{emailLabels.length - 3}</span>
-                  )}
-                </div>
               )}
               <div className="flex items-center gap-2">
                 <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">

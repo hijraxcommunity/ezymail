@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
-  Paperclip, Forward, FileText, Download, Tag, Check, Pencil,
+  Paperclip, Forward, FileText, Download, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
   ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase
 } from 'lucide-react'
@@ -13,8 +13,6 @@ import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { EmailDetailSkeleton } from '@/components/shared/loading-skeleton'
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -43,7 +41,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { useAppStore, type EmailWithSender, type Label } from '@/store/use-app-store'
+import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 
 /* ─── Helpers ─── */
 
@@ -204,182 +202,6 @@ function AttachmentGallery({ attachments }: { attachments: Array<{ name: string;
   )
 }
 
-/* ─── Label Manager Popover ─── */
-
-function LabelManager({ emailId }: { emailId: string }) {
-  const { labels, emailLabelsMap, setEmailLabels, setLabels, addLabel } = useAppStore()
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState('#4285F4')
-  const [isAdding, setIsAdding] = useState<string | null>(null)
-  const [isRemoving, setIsRemoving] = useState<string | null>(null)
-
-  const currentLabels = emailLabelsMap[emailId] || []
-  const appliedIds = new Set(currentLabels.map((l) => l.id))
-
-  const handleToggleLabel = async (label: Label) => {
-    const isApplied = appliedIds.has(label.id)
-
-    if (isApplied) {
-      // Remove label from email
-      setIsRemoving(label.id)
-      try {
-        const res = await fetch(`/api/emails/${emailId}/labels`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ labelIds: [label.id] }),
-        })
-        const data = await res.json()
-        if (data.success) {
-          setEmailLabels(emailId, data.data)
-        }
-      } catch {
-        toast.error('Failed to remove label')
-      } finally {
-        setIsRemoving(null)
-      }
-    } else {
-      // Add label to email
-      setIsAdding(label.id)
-      try {
-        const res = await fetch(`/api/emails/${emailId}/labels`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ labelIds: [label.id] }),
-        })
-        const data = await res.json()
-        if (data.success) {
-          setEmailLabels(emailId, data.data)
-        }
-      } catch {
-        toast.error('Failed to add label')
-      } finally {
-        setIsAdding(null)
-      }
-    }
-  }
-
-  const handleCreateLabel = async () => {
-    const name = newName.trim()
-    if (!name) return
-
-    try {
-      const res = await fetch('/api/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color: newColor }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        addLabel(data.data)
-        setNewName('')
-        setNewColor('#4285F4')
-        setShowCreate(false)
-        toast.success('Label created')
-      } else {
-        toast.error(data.error || 'Failed to create label')
-      }
-    } catch {
-      toast.error('Failed to create label')
-    }
-  }
-
-  return (
-    <div className="p-2">
-      <div className="space-y-0.5">
-        {labels.map((label) => {
-          const isApplied = appliedIds.has(label.id)
-          const isLoading = isAdding === label.id || isRemoving === label.id
-          return (
-            <button
-              key={label.id}
-              type="button"
-              onClick={() => handleToggleLabel(label)}
-              disabled={isLoading}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin shrink-0" />
-              ) : isApplied ? (
-                <div
-                  className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: label.color }}
-                >
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-              ) : (
-                <div
-                  className="w-5 h-5 rounded-md border-2 shrink-0"
-                  style={{ borderColor: label.color }}
-                />
-              )}
-              <span className="flex-1 truncate text-[#1F1F1F] dark:text-white">{label.name}</span>
-            </button>
-          )
-        })}
-        {labels.length === 0 && (
-          <div className="px-3 py-8 text-center text-sm text-gray-400">
-            No labels yet. Create one below.
-          </div>
-        )}
-      </div>
-      <div className="border-t border-gray-100 dark:border-gray-800 mt-2 pt-2">
-        {!showCreate ? (
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-xl transition-colors font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Create new label
-          </button>
-        ) : (
-          <div className="space-y-2.5 p-1">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateLabel()
-                if (e.key === 'Escape') setShowCreate(false)
-              }}
-              placeholder="Label name"
-              className="h-9 text-sm"
-              autoFocus
-            />
-            <div className="flex items-center gap-2">
-              {['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#E91E63'].map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNewColor(c)}
-                  className={`w-6 h-6 rounded-full transition-transform ${newColor === c ? 'scale-125 ring-2 ring-offset-1 ring-gray-400 dark:ring-offset-gray-900' : ''}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCreateLabel}
-                className="flex-1 text-sm text-white font-medium bg-[#4285F4] hover:bg-[#1a73e8] rounded-lg py-2 transition-colors"
-              >
-                Create
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg px-3 py-2 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 /* ═══════════════════════════════════════════
    Main EmailDetail Component
    ═══════════════════════════════════════════ */
@@ -392,8 +214,6 @@ export function EmailDetail() {
     removeEmail,
     updateEmail,
     setReplyToEmail,
-    emailLabelsMap,
-    setEmailLabels,
     currentFolder,
     setEditDraftEmail,
   } = useAppStore()
@@ -462,20 +282,7 @@ export function EmailDetail() {
     })
   }, [])
 
-  /* ─── Fetch email labels ─── */
-  useEffect(() => {
-    if (!selectedEmailId) return
-    if (emailLabelsMap[selectedEmailId]) return
 
-    fetch(`/api/emails/${selectedEmailId}/labels`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setEmailLabels(selectedEmailId, data.data)
-        }
-      })
-      .catch(() => {})
-  }, [selectedEmailId, emailLabelsMap, setEmailLabels])
 
   /* ─── Back navigation ─── */
   const handleBack = useCallback(() => {
@@ -625,7 +432,6 @@ export function EmailDetail() {
   const [snoozeAmPm, setSnoozeAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSnooze, setShowCustomSnooze] = useState(false)
   const [showSnoozeModal, setShowSnoozeModal] = useState(false)
-  const [showLabelPanel, setShowLabelPanel] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const getLaterToday = () => {
@@ -748,7 +554,6 @@ export function EmailDetail() {
   if (!email) return null
 
   const replies = email.replies || []
-  const currentEmailLabels = emailLabelsMap[email.id] || []
 
   // Use thread array if available (full conversation), otherwise fall back to email + replies
   const threadMessages = thread.length > 0 ? thread : [email, ...replies]
@@ -853,10 +658,6 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
                       <Clock className="w-4 h-4" /> Snooze
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShowLabelPanel(true)} className="gap-2.5 cursor-pointer">
-                      <Tag className="w-4 h-4" /> Label
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
                       <Flag className="w-4 h-4" /> Report
                     </DropdownMenuItem>
@@ -932,10 +733,6 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
                       <Clock className="w-4 h-4" /> Snooze
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShowLabelPanel(true)} className="gap-2.5 cursor-pointer">
-                      <Tag className="w-4 h-4" /> Label
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
                       <Archive className="w-4 h-4" /> Archive
                     </DropdownMenuItem>
@@ -959,29 +756,6 @@ export function EmailDetail() {
           <h1 className="text-base sm:text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1 leading-tight">
             {email.subject || '(No subject)'}
           </h1>
-
-          {/* Label chips */}
-          {currentEmailLabels.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {currentEmailLabels.map((label) => (
-                <Badge
-                  key={label.id}
-                  variant="secondary"
-                  className="text-xs font-medium px-2 py-0.5 border-0 gap-1"
-                  style={{
-                    backgroundColor: `${label.color}18`,
-                    color: label.color,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: label.color }}
-                  />
-                  {label.name}
-                </Badge>
-              ))}
-            </div>
-          )}
 
           {/* ─── Thread: Full conversation (Gmail-style, flat) ─── */}
           <div className="mb-4">
@@ -1486,42 +1260,7 @@ export function EmailDetail() {
         )}
       </AnimatePresence>
 
-      {/* ─── Label Panel (Centered Modal) ─── */}
-      <AnimatePresence>
-        {showLabelPanel && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40"
-            onClick={(e) => { if (e.target === e.currentTarget) setShowLabelPanel(false) }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.15, ease: 'easeOut' as const }}
-              className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden w-[calc(100%-2rem)] max-w-sm max-h-[70vh]"
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Manage Labels</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowLabelPanel(false)}
-                  className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                  aria-label="Close labels"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <LabelManager emailId={email.id} />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
     </div>
   )
 }
