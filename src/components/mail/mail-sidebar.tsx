@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import type React from 'react'
 import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Users, Clock, CalendarClock, ShieldAlert } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { ScrollArea } from '@/components/ui/scroll-area'
