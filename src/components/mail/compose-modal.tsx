@@ -144,6 +144,39 @@ export function ComposeModal() {
       .catch(() => setContacts([]))
   }, [composeOpen, showContactsPicker])
 
+  // Pre-fill "to" from contacts panel
+  const prefillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (composeOpen) {
+      const prefill = sessionStorage.getItem('compose_prefill_to')
+      if (prefill) {
+        sessionStorage.removeItem('compose_prefill_to')
+        prefillRef.current = prefill
+      }
+    }
+  }, [composeOpen])
+  useEffect(() => {
+    if (prefillRef.current) {
+      const email = prefillRef.current
+      prefillRef.current = null
+      // Use setTimeout to ensure contacts are loaded first
+      const timer = setTimeout(() => {
+        const trimmed = email.trim().toLowerCase()
+        if (!toChips.some(c => c.email === trimmed)) {
+          const contact = contacts.find(c => c.email.toLowerCase() === trimmed)
+          if (contact) {
+            setToChips(prev => [...prev, { email: trimmed, name: contact.name, avatar: contact.avatar || null }])
+            setToInput('')
+          } else {
+            setToChips(prev => [...prev, { email: trimmed, name: '', avatar: null }])
+            setToInput('')
+          }
+        }
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [composeOpen, contacts])
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   const findContactByEmail = (email: string) => {
@@ -1022,9 +1055,13 @@ export function ComposeModal() {
                                   }}
                                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
                                 >
-                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
-                                    {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                                  </div>
+                                  {c.avatar ? (
+                                    <img src={c.avatar} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                                  ) : (
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                                      {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                  )}
                                   <div className="min-w-0 flex-1">
                                     <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{c.name}</p>
                                     <p className="text-xs text-gray-400 truncate">{c.email}</p>
