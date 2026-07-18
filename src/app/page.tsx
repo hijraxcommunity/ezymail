@@ -182,6 +182,58 @@ export default function HomePage() {
       : 'EzyMail - Email made Ezy'
   }, [isAuthenticated, emails])
 
+  // ─── Mobile back button: navigate within app instead of closing PWA ──
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const handlePopState = () => {
+      const store = useAppStore.getState()
+      // Close overlays first (compose > contacts > settings > admin > email detail)
+      if (store.composeOpen) {
+        store.setComposeOpen(false)
+        history.pushState(null, '', location.href)
+        return
+      }
+      if (store.contactsView) {
+        store.setContactsView(false)
+        history.pushState(null, '', location.href)
+        return
+      }
+      if (store.settingsView) {
+        store.setSettingsView(null)
+        history.pushState(null, '', location.href)
+        return
+      }
+      if (store.adminView) {
+        store.setAdminView(null)
+        history.pushState(null, '', location.href)
+        return
+      }
+      if (store.selectedEmailId) {
+        store.setSelectedEmailId(null)
+        return
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [isAuthenticated])
+
+  // Push history entry when entering a "sub-page" so back button works
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const prevId = selectedEmailId
+    const prevCompose = composeOpen
+    const prevContacts = contactsView
+    const prevSettings = settingsView
+    const prevAdmin = adminView
+
+    // Any of these opening means we're entering a sub-page
+    if (selectedEmailId || composeOpen || contactsView || settingsView || adminView) {
+      history.pushState(null, '', location.href)
+    }
+  }, [isAuthenticated, selectedEmailId, composeOpen, contactsView, settingsView, adminView])
+
   // ─── Auth views ──────────────────────────────────────────────────────────
   if (isCheckingAuth) {
     return (
