@@ -213,6 +213,22 @@ export default function HomePage() {
         store.setSelectedEmailId(null)
         return
       }
+      // Navigate back to previous folder
+      const folderHistory = useAppStore.getState().folderHistory
+      if (folderHistory.length > 1) {
+        const prev = folderHistory[folderHistory.length - 2]
+        useAppStore.getState().setFolderHistory(folderHistory.slice(0, -1))
+        if (prev.folderId) {
+          useAppStore.getState().setCurrentFolderId(prev.folderId)
+        } else {
+          useAppStore.getState().setCurrentFolder(prev.folder)
+        }
+      } else if (folderHistory.length === 1 && folderHistory[0].folder !== 'inbox') {
+        // Last folder in history isn't inbox — go to inbox
+        useAppStore.getState().setFolderHistory([{ folder: 'inbox' as const, folderId: null }])
+        useAppStore.getState().setCurrentFolder('inbox')
+      }
+      // If already at inbox (the root), let the browser handle it (exit app)
     }
 
     window.addEventListener('popstate', handlePopState)
@@ -233,6 +249,23 @@ export default function HomePage() {
       history.pushState(null, '', location.href)
     }
   }, [isAuthenticated, selectedEmailId, composeOpen, contactsView, settingsView, adminView])
+
+  // Push history entry when switching folders so back button can navigate between them
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const store = useAppStore.getState()
+    const history = store.folderHistory
+    const currentEntry = currentFolderId
+      ? { folder: 'folder' as const, folderId: currentFolderId }
+      : { folder: currentFolder, folderId: null as string | null }
+    const last = history[history.length - 1]
+    // Only push if this is a different folder than the last recorded one
+    if (!last || last.folder !== currentEntry.folder || last.folderId !== currentEntry.folderId) {
+      const newHistory = [...history, currentEntry]
+      useAppStore.getState().setFolderHistory(newHistory)
+      window.history.pushState(null, '', location.href)
+    }
+  }, [isAuthenticated, currentFolder, currentFolderId])
 
   // ─── Auth views ──────────────────────────────────────────────────────────
   if (isCheckingAuth) {

@@ -140,6 +140,10 @@ interface AppState {
   // Contacts
   contactsView: boolean;
 
+  // Folder navigation history (for mobile back button)
+  folderHistory: { folder: MailView; folderId: string | null }[];
+  setFolderHistory: (history: { folder: MailView; folderId: string | null }[]) => void;
+
   // Mobile
   sidebarOpen: boolean;
   emailDetailOpen: boolean;
@@ -296,6 +300,10 @@ export const useAppStore = create<AppState>()(
 
       // Contacts
       contactsView: false,
+
+      // Folder navigation history
+      folderHistory: [{ folder: 'inbox' as MailView, folderId: null }],
+      setFolderHistory: (history) => set({ folderHistory: history }),
 
       // Mobile
       sidebarOpen: false,
