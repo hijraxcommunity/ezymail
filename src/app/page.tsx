@@ -111,6 +111,7 @@ export default function HomePage() {
     selectedEmailId,
     composeOpen,
     currentFolder,
+    currentFolderId,
     emails,
     user,
     setSelectedEmailId,
@@ -254,15 +255,15 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAuthenticated) return
     const store = useAppStore.getState()
-    const history = store.folderHistory
+    const fh = store.folderHistory
     const currentEntry = currentFolderId
       ? { folder: 'folder' as const, folderId: currentFolderId }
       : { folder: currentFolder, folderId: null as string | null }
-    const last = history[history.length - 1]
+    const last = fh[fh.length - 1]
     // Only push if this is a different folder than the last recorded one
     if (!last || last.folder !== currentEntry.folder || last.folderId !== currentEntry.folderId) {
-      const newHistory = [...history, currentEntry]
-      useAppStore.getState().setFolderHistory(newHistory)
+      const updated = [...fh, currentEntry]
+      useAppStore.getState().setFolderHistory(updated)
       window.history.pushState(null, '', location.href)
     }
   }, [isAuthenticated, currentFolder, currentFolderId])
