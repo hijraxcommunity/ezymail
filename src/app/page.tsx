@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useAppStore } from '@/store/use-app-store'
+import { useAppStore, type MailView } from '@/store/use-app-store'
 import { toast } from 'sonner'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { MailHeader } from '@/components/mail/mail-header'
@@ -187,7 +187,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    const handlePopState = () => {
+    const handlePopState = (e: PopStateEvent) => {
       const store = useAppStore.getState()
       // Close overlays first (compose > contacts > settings > admin > email detail)
       if (store.composeOpen) {
@@ -214,20 +214,17 @@ export default function HomePage() {
         store.setSelectedEmailId(null)
         return
       }
-      // Navigate back to previous folder
-      const folderHistory = useAppStore.getState().folderHistory
-      if (folderHistory.length > 1) {
-        const prev = folderHistory[folderHistory.length - 2]
-        useAppStore.getState().setFolderHistory(folderHistory.slice(0, -1))
-        if (prev.folderId) {
-          useAppStore.getState().setCurrentFolderId(prev.folderId)
+      // Navigate back to previous folder using browser history state
+      const state = e.state as { folder?: string; folderId?: string | null } | null
+      if (state && state.folder) {
+        if (state.folderId) {
+          store.setCurrentFolderId(state.folderId)
         } else {
-          useAppStore.getState().setCurrentFolder(prev.folder)
+          store.setCurrentFolder(state.folder as MailView)
         }
-      } else if (folderHistory.length === 1 && folderHistory[0].folder !== 'inbox') {
-        // Last folder in history isn't inbox — go to inbox
-        useAppStore.getState().setFolderHistory([{ folder: 'inbox' as const, folderId: null }])
-        useAppStore.getState().setCurrentFolder('inbox')
+      } else if (store.currentFolder !== 'inbox') {
+        // No folder state in history but not on inbox — go to inbox
+        store.setCurrentFolder('inbox')
       }
       // If already at inbox (the root), let the browser handle it (exit app)
     }
@@ -254,18 +251,11 @@ export default function HomePage() {
   // Push history entry when switching folders so back button can navigate between them
   useEffect(() => {
     if (!isAuthenticated) return
-    const store = useAppStore.getState()
-    const fh = store.folderHistory
-    const currentEntry = currentFolderId
-      ? { folder: 'folder' as const, folderId: currentFolderId }
-      : { folder: currentFolder, folderId: null as string | null }
-    const last = fh[fh.length - 1]
-    // Only push if this is a different folder than the last recorded one
-    if (!last || last.folder !== currentEntry.folder || last.folderId !== currentEntry.folderId) {
-      const updated = [...fh, currentEntry]
-      useAppStore.getState().setFolderHistory(updated)
-      window.history.pushState(null, '', location.href)
-    }
+    // Skip if this folder change was triggered by back navigation
+    // (the browser already positioned us at the correct history entry)
+    const hs = window.history.state as { folder?: string; folderId?: string | null } | null
+    if (hs && hs.folder === currentFolder && hs.folderId === currentFolderId) return
+    window.history.pushState({ folder: currentFolder, folderId: currentFolderId }, '')
   }, [isAuthenticated, currentFolder, currentFolderId])
 
   // ─── Auth views ──────────────────────────────────────────────────────────
