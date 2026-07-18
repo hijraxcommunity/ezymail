@@ -1135,7 +1135,7 @@ export function ComposeModal() {
                     onKeyDown={e => handleChipKeyDown(e, 'to')}
                     onBlur={() => handleChipBlur('to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
-                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
+                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                   />
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
@@ -1211,7 +1211,7 @@ export function ComposeModal() {
                         onKeyDown={e => handleChipKeyDown(e, 'cc')}
                         onBlur={() => handleChipBlur('cc')}
                         placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
-                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
+                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
                     </div>
                   </div>
@@ -1263,7 +1263,7 @@ export function ComposeModal() {
                         onKeyDown={e => handleChipKeyDown(e, 'bcc')}
                         onBlur={() => handleChipBlur('bcc')}
                         placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
-                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px]"
+                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
                     </div>
                   </div>
@@ -1279,7 +1279,7 @@ export function ComposeModal() {
                     value={subject}
                     onChange={e => setSubject(e.target.value)}
                     placeholder="Email subject"
-                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0 bg-transparent dark:bg-transparent"
                   />
                 </div>
                 {errors.subject && <p className="text-xs text-red-500 px-4 pb-2">{errors.subject}</p>}
