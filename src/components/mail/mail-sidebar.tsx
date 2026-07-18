@@ -3,6 +3,7 @@
 import type React from 'react'
 import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Users, Clock, CalendarClock, ShieldAlert } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore, type MailView } from '@/store/use-app-store'
