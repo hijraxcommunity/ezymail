@@ -100,7 +100,7 @@ function ToolbarButton({
 }
 
 export function ComposeModal() {
-  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, setCurrentFolder } = useAppStore()
+  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, setCurrentFolder, requestComposeClose } = useAppStore()
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof globalThis === 'undefined') return false
@@ -494,6 +494,13 @@ export function ComposeModal() {
     }
     setComposeOpen(false)
   }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail, setCurrentFolder, setComposeOpen])
+
+  // When back button or external trigger requests compose close, save draft first
+  useEffect(() => {
+    if (requestComposeClose && composeOpen) {
+      handleClose()
+    }
+  }, [requestComposeClose, composeOpen, handleClose])
 
   const handleDiscard = useCallback(() => {
     if (editDraftEmail) {

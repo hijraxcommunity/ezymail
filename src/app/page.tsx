@@ -191,7 +191,7 @@ export default function HomePage() {
       const store = useAppStore.getState()
       // Close overlays first (compose > contacts > settings > admin > email detail)
       if (store.composeOpen) {
-        store.setComposeOpen(false)
+        useAppStore.setState({ requestComposeClose: true })
         history.pushState(null, '', location.href)
         return
       }
