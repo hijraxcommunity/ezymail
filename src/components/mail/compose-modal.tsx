@@ -462,12 +462,38 @@ export function ComposeModal() {
     }
   }, [])
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
+    // Auto-save as draft if there's any content
+    const toStr = toChips.map(c => c.email).join(', ') || to
+    const ccStr = ccChips.map(c => c.email).join(', ') || cc
+    const bccStr = bccChips.map(c => c.email).join(', ') || bcc
+    const html = editor?.getHTML() || ''
+    const plainBody = html.replace(/<[^>]*>/g, '').trim()
+    const hasContent = toStr.trim() || subject.trim() || plainBody
+
+    if (hasContent) {
+      try {
+        await fetch('/api/drafts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editDraftEmail?.id || null,
+            to: toStr,
+            cc: ccStr || null,
+            bcc: bccStr || null,
+            subject: subject || '(No subject)',
+            body: plainBody,
+            bodyHtml: html,
+          }),
+        })
+      } catch { /* silent — best effort */ }
+    }
+
     if (editDraftEmail) {
       setCurrentFolder('drafts')
     }
     setComposeOpen(false)
-  }, [editDraftEmail, setCurrentFolder, setComposeOpen])
+  }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail, setCurrentFolder, setComposeOpen])
 
   const handleDiscard = useCallback(() => {
     if (editDraftEmail) {
