@@ -262,6 +262,8 @@ export function ComposeModal() {
   const dragCounterRef = useRef(0)
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isSendingRef = useRef(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedDraftIdRef = useRef<string | null>(null)
 
   // TipTap Editor
   const editor = useEditor({
@@ -462,38 +464,57 @@ export function ComposeModal() {
     }
   }, [])
 
-  const handleClose = useCallback(async () => {
-    // Auto-save as draft if there's any content
+  // ─── Gmail-style auto-draft save ──
+  const saveDraftNow = useCallback(async () => {
     const toStr = toChips.map(c => c.email).join(', ') || to
     const ccStr = ccChips.map(c => c.email).join(', ') || cc
     const bccStr = bccChips.map(c => c.email).join(', ') || bcc
     const html = editor?.getHTML() || ''
     const plainBody = html.replace(/<[^>]*>/g, '').trim()
     const hasContent = toStr.trim() || subject.trim() || plainBody
+    if (!hasContent) return
+    try {
+      const res = await fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editDraftEmail?.id || savedDraftIdRef.current || null,
+          to: toStr,
+          cc: ccStr || null,
+          bcc: bccStr || null,
+          subject: subject || '(No subject)',
+          body: plainBody,
+          bodyHtml: html,
+        }),
+      })
+      const data = await res.json()
+      if (data.draft?.id) savedDraftIdRef.current = data.draft.id
+    } catch { /* silent */ }
+  }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail])
 
-    if (hasContent) {
-      try {
-        await fetch('/api/drafts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editDraftEmail?.id || null,
-            to: toStr,
-            cc: ccStr || null,
-            bcc: bccStr || null,
-            subject: subject || '(No subject)',
-            body: plainBody,
-            bodyHtml: html,
-          }),
-        })
-      } catch { /* silent — best effort */ }
+  // Debounced auto-save: saves 3s after user stops typing/changing fields
+  useEffect(() => {
+    if (!composeOpen || !editor) return
+    // Reset saved draft ID when editing a specific draft
+    if (editDraftEmail) savedDraftIdRef.current = editDraftEmail.id
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveDraftNow()
+    }, 3000)
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     }
+  }, [composeOpen, to, toChips, cc, ccChips, bcc, bccChips, subject, editor?.getHTML(), editDraftEmail, saveDraftNow])
 
+  // Save draft on close, then close
+  const handleClose = useCallback(async () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    await saveDraftNow()
     if (editDraftEmail) {
       setCurrentFolder('drafts')
     }
     setComposeOpen(false)
-  }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail, setCurrentFolder, setComposeOpen])
+  }, [saveDraftNow, editDraftEmail, setCurrentFolder, setComposeOpen])
 
   // When back button or external trigger requests compose close, save draft first
   useEffect(() => {
