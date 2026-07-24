@@ -350,8 +350,19 @@ export function ComposeModal() {
 
     // Load draft content when editing a draft
     if (editDraftEmail) {
-      setTo(editDraftEmail.recipient?.email || '')
-      setToChips([])
+      const draftTo = editDraftEmail.recipientEmail || ''
+      // Don't show the TO chip if recipientEmail is the user's own email (no real recipient set)
+      const isOwnEmail = draftTo === editDraftEmail.sender?.email
+      const toAddr = isOwnEmail ? '' : draftTo
+      setTo(toAddr)
+      if (toAddr) {
+        const draftName = editDraftEmail.recipient?.firstName && editDraftEmail.recipient?.lastName
+          ? `${editDraftEmail.recipient.firstName} ${editDraftEmail.recipient.lastName}`
+          : ''
+        setToChips([{ email: toAddr, name: draftName, avatar: editDraftEmail.recipient?.avatar || null }])
+      } else {
+        setToChips([])
+      }
       setToInput('')
       setCcChips([])
       setCcInput('')
