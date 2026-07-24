@@ -1,0 +1,736 @@
+     1→'use client'
+     2→
+     3→import { useRef, useState, useCallback } from 'react'
+     4→import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare, MoreVertical, Reply, ReplyAll, Forward, Tag, Flag } from 'lucide-react'
+     5→import { formatDistanceToNow, format } from 'date-fns'
+     6→import { toast } from 'sonner'
+     7→import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
+     8→import { Badge } from '@/components/ui/badge'
+     9→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    10→import {
+    11→  DropdownMenu,
+    12→  DropdownMenuContent,
+    13→  DropdownMenuItem,
+    14→  DropdownMenuSeparator,
+    15→  DropdownMenuTrigger,
+    16→} from '@/components/ui/dropdown-menu'
+    17→import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
+    18→
+    19→const SWIPE_THRESHOLD = 60
+    20→const SNAP_OPEN_PX = 100
+    21→
+    22→interface EmailCardProps {
+    23→  email: EmailWithSender
+    24→  isSelected: boolean
+    25→  onSelect: () => void
+    26→  index: number
+    27→  currentFolder?: string
+    28→}
+    29→
+    30→export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
+    31→  const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, emailLabelsMap, setUndoAction, setReplyToEmail } = useAppStore()
+    32→  const isArchive = currentFolder === 'archive'
+    33→
+    34→  /* ─── Swipe state ─── */
+    35→  const swipeX = useMotionValue(0)
+    36→  const cardRef = useRef<HTMLDivElement>(null)
+    37→  const [swipeOpenDir, setSwipeOpenDir] = useState<'left' | 'right' | null>(null)
+    38→  const touchStartX = useRef(0)
+    39→  const touchStartY = useRef(0)
+    40→  const isSwiping = useRef(false)
+    41→  const isVertical = useRef(false)
+    42→
+    43→  const backgroundOpacity = useTransform(swipeX, [-120, 0, 120], [1, 0, 1])
+    44→
+    45→  const resetSwipe = useCallback(() => {
+    46→    animate(swipeX, 0, { type: 'spring', stiffness: 500, damping: 35 })
+    47→    setSwipeOpenDir(null)
+    48→  }, [swipeX])
+    49→
+    50→  const animateOffScreen = useCallback((direction: 'left' | 'right') => {
+    51→    const target = direction === 'left' ? -window.innerWidth : window.innerWidth
+    52→    animate(swipeX, target, {
+    53→      duration: 0.3,
+    54→      ease: 'easeIn',
+    55→      onComplete: () => {
+    56→        animate(swipeX, 0, { duration: 0 })
+    57→      },
+    58→    })
+    59→  }, [swipeX])
+    60→
+    61→  const doArchive = useCallback(() => {
+    62→    if (!email) return
+    63→    setUndoAction({ id: email.id, type: 'archive', email, timestamp: Date.now() })
+    64→    removeEmail(email.id)
+    65→    animateOffScreen('right')
+    66→    fetch(`/api/emails/${email.id}`, {
+    67→      method: 'PUT',
+    68→      headers: { 'Content-Type': 'application/json' },
+    69→      body: JSON.stringify({ isArchived: true }),
+    70→    }).catch(() => {})
+    71→  }, [email, removeEmail, animateOffScreen, setUndoAction])
+    72→
+    73→  const doUnarchive = useCallback(() => {
+    74→    if (!email) return
+    75→    setUndoAction({ id: email.id, type: 'archive', email, timestamp: Date.now() })
+    76→    removeEmail(email.id)
+    77→    animateOffScreen('left')
+    78→    fetch(`/api/emails/${email.id}`, {
+    79→      method: 'PUT',
+    80→      headers: { 'Content-Type': 'application/json' },
+    81→      body: JSON.stringify({ isArchived: false }),
+    82→    }).then(() => toast.success('Moved to inbox')).catch(() => {})
+    83→  }, [email, removeEmail, animateOffScreen, setUndoAction])
+    84→
+    85→  const doDelete = useCallback(() => {
+    86→    if (!email) return
+    87→    setUndoAction({ id: email.id, type: 'delete', email, timestamp: Date.now() })
+    88→    removeEmail(email.id)
+    89→    animateOffScreen('right')
+    90→    fetch(`/api/emails/${email.id}`, { method: 'DELETE' }).catch(() => {})
+    91→  }, [email, removeEmail, animateOffScreen, setUndoAction])
+    92→
+    93→  const doSnooze = useCallback(() => {
+    94→    if (!email) return
+    95→    const laterToday = new Date()
+    96→    laterToday.setHours(17, 0, 0, 0)
+    97→    if (laterToday <= new Date()) laterToday.setDate(laterToday.getDate() + 1)
+    98→    removeEmail(email.id)
+    99→    animateOffScreen('left')
+   100→    fetch(`/api/emails/${email.id}/snooze`, {
+   101→      method: 'POST',
+   102→      headers: { 'Content-Type': 'application/json' },
+   103→      body: JSON.stringify({ snoozeUntil: laterToday.toISOString() }),
+   104→    }).then(() => toast.success('Snoozed until later today')).catch(() => toast.error('Failed to snooze'))
+   105→  }, [email, removeEmail, animateOffScreen])
+   106→
+   107→  const handleMenuReply = useCallback((e: React.MouseEvent) => {
+   108→    e.stopPropagation()
+   109→    setReplyToEmail({ ...email }, 'reply')
+   110→  }, [email, setReplyToEmail])
+   111→
+   112→  const handleMenuReplyAll = useCallback((e: React.MouseEvent) => {
+   113→    e.stopPropagation()
+   114→    setReplyToEmail({ ...email }, 'replyAll')
+   115→  }, [email, setReplyToEmail])
+   116→
+   117→  const handleMenuForward = useCallback((e: React.MouseEvent) => {
+   118→    e.stopPropagation()
+   119→    setReplyToEmail({ ...email }, 'forward')
+   120→  }, [email, setReplyToEmail])
+   121→
+   122→  const handleMenuSnooze = useCallback((e: React.MouseEvent) => {
+   123→    e.stopPropagation()
+   124→    doSnooze()
+   125→  }, [doSnooze])
+   126→
+   127→  const handleMenuDelete = useCallback((e: React.MouseEvent) => {
+   128→    e.stopPropagation()
+   129→    doDelete()
+   130→  }, [doDelete])
+   131→
+   132→  const handleMenuArchive = useCallback((e: React.MouseEvent) => {
+   133→    e.stopPropagation()
+   134→    if (isArchive) {
+   135→      doUnarchive()
+   136→    } else {
+   137→      doArchive()
+   138→    }
+   139→  }, [isArchive, doArchive, doUnarchive])
+   140→
+   141→  const handleMenuReport = useCallback((e: React.MouseEvent) => {
+   142→    e.stopPropagation()
+   143→    toast.success('Email reported as spam')
+   144→  }, [])
+   145→
+   146→  /* Touch handlers for swipe */
+   147→  const onTouchStart = useCallback((e: React.TouchEvent) => {
+   148→    const touch = e.touches[0]
+   149→    touchStartX.current = touch.clientX
+   150→    touchStartY.current = touch.clientY
+   151→    isSwiping.current = false
+   152→    isVertical.current = false
+   153→  }, [])
+   154→
+   155→  const onTouchMove = useCallback((e: React.TouchEvent) => {
+   156→    const touch = e.touches[0]
+   157→    const dx = touch.clientX - touchStartX.current
+   158→    const dy = touch.clientY - touchStartY.current
+   159→
+   160→    // Lock direction after 10px
+   161→    if (!isSwiping.current && !isVertical.current) {
+   162→      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+   163→        isSwiping.current = true
+   164→      } else if (Math.abs(dy) > 10) {
+   165→        isVertical.current = true
+   166→        return
+   167→      }
+   168→    }
+   169→    if (isVertical.current || !isSwiping.current) return
+   170→
+   171→    // If swipe is already open, only allow closing
+   172→    if (swipeOpenDir === 'left' && dx < 0) return
+   173→    if (swipeOpenDir === 'right' && dx > 0) return
+   174→
+   175→    e.preventDefault()
+   176→    swipeX.set(dx)
+   177→  }, [swipeX, swipeOpenDir])
+   178→
+   179→  const onTouchEnd = useCallback(() => {
+   180→    if (!isSwiping.current) return
+   181→    const currentX = swipeX.get()
+   182→    if (currentX > SNAP_OPEN_PX) {
+   183→      animate(swipeX, 100, { type: 'spring', stiffness: 500, damping: 35 })
+   184→      setSwipeOpenDir('right')
+   185→    } else if (currentX < -SNAP_OPEN_PX) {
+   186→      animate(swipeX, -100, { type: 'spring', stiffness: 500, damping: 35 })
+   187→      setSwipeOpenDir('left')
+   188→    } else {
+   189→      resetSwipe()
+   190→    }
+   191→    isSwiping.current = false
+   192→  }, [swipeX, resetSwipe])
+   193→
+   194→  const handleCardClick = useCallback(() => {
+   195→    if (swipeOpenDir) {
+   196→      resetSwipe()
+   197→      return
+   198→    }
+   199→    onSelect()
+   200→  }, [swipeOpenDir, resetSwipe, onSelect])
+   201→
+   202→  /* ─── Email data ─── */
+   203→  const isSent = email.folder === 'sent'
+   204→  // For sent emails, show the recipient; for others, show the sender
+   205→  const contactPerson = isSent
+   206→    ? (email.recipient || null)
+   207→    : email.sender
+   208→  const contactName = contactPerson
+   209→    ? `${contactPerson.firstName} ${contactPerson.lastName}`
+   210→    : (isSent ? email.recipientEmail : email.sender?.email || email.recipientEmail)
+   211→  const initials = contactPerson
+   212→    ? `${contactPerson.firstName?.charAt(0) || ''}${contactPerson.lastName?.charAt(0) || ''}`.toUpperCase()
+   213→    : 'U'
+   214→  const timeAgo = formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })
+   215→  const snippet = email.body
+   216→    ?.substring(0, 100)
+   217→    .replace(/<[^>]*>/g, '')
+   218→    .replace(/\n/g, ' ') || ''
+   219→
+   220→  const isChecked = selectedEmailIds.has(email.id)
+   221→  const emailLabels = emailLabelsMap[email.id] || []
+   222→
+   223→  const handleStar = async (e: React.MouseEvent | React.TouchEvent) => {
+   224→    e.stopPropagation()
+   225→    const newValue = !email.isStarred
+   226→    updateEmail(email.id, { isStarred: newValue })
+   227→    try {
+   228→      await fetch(`/api/emails/${email.id}`, {
+   229→        method: 'PUT',
+   230→        headers: { 'Content-Type': 'application/json' },
+   231→        body: JSON.stringify({ isStarred: newValue }),
+   232→      })
+   233→      toast.success(newValue ? 'Starred' : 'Unstarred')
+   234→    } catch {
+   235→      updateEmail(email.id, { isStarred: !newValue })
+   236→    }
+   237→  }
+   238→
+   239→  return (
+   240→    <motion.div
+   241→      initial={{ opacity: 0, y: 12 }}
+   242→      animate={{ opacity: 1, y: 0 }}
+   243→      transition={{
+   244→        duration: 0.2,
+   245→        delay: index * 0.03,
+   246→        ease: 'easeOut' as const,
+   247→      }}
+   248→    >
+   249→      {/* Mobile swipe wrapper */}
+   250→      <div className="relative overflow-hidden md:hidden">
+   251→        {/* Left swipe background: Unarchive (archive folder) or Delete (other folders) */}
+   252→        <motion.div
+   253→          style={{ opacity: backgroundOpacity }}
+   254→          className="absolute inset-y-0 left-0 right-1/2 z-[5] flex items-center justify-start pl-5 bg-[#4285F4]"
+   255→          onClick={(e) => {
+   256→            e.stopPropagation()
+   257→            isArchive ? doUnarchive() : doDelete()
+   258→          }}
+   259→        >
+   260→          <div className="flex items-center gap-2 text-white">
+   261→            {isArchive ? <ArchiveRestore className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+   262→            <span className="text-sm font-semibold">{isArchive ? 'Unarchive' : 'Delete'}</span>
+   263→          </div>
+   264→        </motion.div>
+   265→
+   266→        {/* Right swipe background: Delete (archive folder) or Archive (other folders) */}
+   267→        <motion.div
+   268→          style={{ opacity: backgroundOpacity }}
+   269→          className="absolute inset-y-0 left-1/2 right-0 z-[5] flex items-center justify-end pr-5 bg-[#EA4335]"
+   270→          onClick={(e) => {
+   271→            e.stopPropagation()
+   272→            isArchive ? doDelete() : doArchive()
+   273→          }}
+   274→        >
+   275→          <div className="flex items-center gap-2 text-white">
+   276→            <span className="text-sm font-semibold">{isArchive ? 'Delete' : 'Archive'}</span>
+   277→            {isArchive ? <Trash2 className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+   278→          </div>
+   279→        </motion.div>
+   280→
+   281→        {/* Swipeable card */}
+   282→        <motion.div
+   283→          ref={cardRef}
+   284→          style={{ x: swipeX }}
+   285→          className="relative z-10 bg-white dark:bg-gray-950"
+   286→          onTouchStart={onTouchStart}
+   287→          onTouchMove={onTouchMove}
+   288→          onTouchEnd={onTouchEnd}
+   289→        >
+   290→          <div
+   291→            onClick={handleCardClick}
+   292→            role="button"
+   293→            tabIndex={0}
+   294→            onKeyDown={(e) => {
+   295→              if (e.key === 'Enter' || e.key === ' ') {
+   296→                e.preventDefault()
+   297→                handleCardClick()
+   298→              }
+   299→            }}
+   300→            className={`group w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
+   301→              isSelected
+   302→                ? 'bg-blue-50 dark:bg-blue-950/30'
+   303→                : 'hover:bg-gray-50 dark:hover:bg-gray-900'
+   304→            } ${!email.isRead ? 'bg-blue-50/50 dark:bg-blue-950/10' : ''}`}
+   305→          >
+   306→            {/* Unread indicator - blue left border */}
+   307→            {!email.isRead && (
+   308→              <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-[#4285F4]" />
+   309→            )}
+   310→
+   311→            {/* Checkbox */}
+   312→            <div
+   313→              role="checkbox"
+   314→              aria-checked={isChecked}
+   315→              tabIndex={0}
+   316→              onClick={(e) => {
+   317→                e.stopPropagation()
+   318→                toggleSelectEmail(email.id)
+   319→              }}
+   320→              onTouchStart={(e) => e.stopPropagation()}
+   321→              onTouchEnd={(e) => e.stopPropagation()}
+   322→              onKeyDown={(e) => {
+   323→                if (e.key === ' ' || e.key === 'Enter') {
+   324→                  e.preventDefault()
+   325→                  e.stopPropagation()
+   326→                  toggleSelectEmail(email.id)
+   327→                }
+   328→              }}
+   329→              className={`shrink-0 items-center justify-center relative z-10 cursor-pointer ${multiSelectMode ? 'flex' : 'hidden md:flex'}`}
+   330→              style={{ minWidth: 36, minHeight: 44 }}
+   331→              aria-label={`Select email from ${contactName}`}
+   332→            >
+   333→              <div
+   334→                className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
+   335→                  isChecked
+   336→                    ? 'bg-primary border-primary text-primary-foreground'
+   337→                    : 'border-input dark:bg-input/30'
+   338→                }`}
+   339→              >
+   340→                {isChecked && (
+   341→                  <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+   342→                    <path d="M20 6L9 17l-5-5" />
+   343→                  </svg>
+   344→                )}
+   345→              </div>
+   346→            </div>
+   347→
+   348→            {/* Avatar */}
+   349→            <Avatar className="w-10 h-10 shrink-0">
+   350→              <AvatarImage src={contactPerson?.avatar} />
+   351→              <AvatarFallback
+   352→                className={`text-white text-xs font-semibold ${
+   353→                  contactPerson
+   354→                    ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
+   355→                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
+   356→                }`}
+   357→              >
+   358→                {initials}
+   359→              </AvatarFallback>
+   360→            </Avatar>
+   361→
+   362→            {/* Content */}
+   363→            <div className="flex-1 min-w-0">
+   364→              <div className="flex items-center justify-between gap-2 mb-0.5">
+   365→                <span
+   366→                  className={`text-sm truncate ${
+   367→                    !email.isRead
+   368→                      ? 'font-bold text-[#1F1F1F] dark:text-white'
+   369→                      : 'text-[#444746] dark:text-gray-300'
+   370→                  }`}
+   371→                >
+   372→                  {contactName}
+   373→                </span>
+   374→                <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
+   375→                  {timeAgo}
+   376→                </span>
+   377→              </div>
+   378→              <div className="flex items-center gap-1.5 mb-0.5">
+   379→                <p
+   380→                  className={`text-sm truncate flex-1 ${
+   381→                    !email.isRead
+   382→                      ? 'font-semibold text-[#1F1F1F] dark:text-white'
+   383→                      : 'text-[#444746] dark:text-gray-300'
+   384→                  }`}
+   385→                >
+   386→                  {email.subject || '(No subject)'}
+   387→                </p>
+   388→                {email.replyCount > 0 && (
+   389→                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
+   390→                    <MessageSquare className="w-2.5 h-2.5" />
+   391→                    {email.replyCount}
+   392→                  </span>
+   393→                )}
+   394→              </div>
+   395→              {/* Scheduled/Snoozed badge inline */}
+   396→              {email.scheduledAt && (
+   397→                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 mb-0.5">
+   398→                  <Clock className="w-2.5 h-2.5" />
+   399→                  {format(new Date(email.scheduledAt), 'MMM d, h:mm a')}
+   400→                </Badge>
+   401→              )}
+   402→              {email.snoozedUntil && (
+   403→                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
+   404→                  <CalendarDays className="w-2.5 h-2.5" />
+   405→                  {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+   406→                </Badge>
+   407→              )}
+   408→              {/* Label chips inline */}
+   409→              {emailLabels.length > 0 && (
+   410→                <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+   411→                  {emailLabels.slice(0, 3).map((label) => (
+   412→                    <span
+   413→                      key={label.id}
+   414→                      className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-full leading-none"
+   415→                      style={{
+   416→                        backgroundColor: `${label.color}15`,
+   417→                        color: label.color,
+   418→                      }}
+   419→                    >
+   420→                      <span
+   421→                        className="w-1.5 h-1.5 rounded-full shrink-0"
+   422→                        style={{ backgroundColor: label.color }}
+   423→                      />
+   424→                      {label.name}
+   425→                    </span>
+   426→                  ))}
+   427→                  {emailLabels.length > 3 && (
+   428→                    <span className="text-[10px] text-gray-400">+{emailLabels.length - 3}</span>
+   429→                  )}
+   430→                </div>
+   431→              )}
+   432→              <div className="flex items-center gap-2">
+   433→                <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+   434→                  {snippet}
+   435→                </p>
+   436→                {email.attachments && (
+   437→                  <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+   438→                )}
+   439→              </div>
+   440→            </div>
+   441→
+   442→            {/* Three-dot menu - mobile */}
+   443→            <DropdownMenu>
+   444→              <DropdownMenuTrigger asChild>
+   445→                <button
+   446→                  onClick={(e) => e.stopPropagation()}
+   447→                  onTouchStart={(e) => e.stopPropagation()}
+   448→                  onTouchEnd={(e) => e.stopPropagation()}
+   449→                  className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+   450→                  aria-label="More actions"
+   451→                >
+   452→                  <MoreVertical className="w-4 h-4" />
+   453→                </button>
+   454→              </DropdownMenuTrigger>
+   455→              <DropdownMenuContent align="end" className="w-48">
+   456→                <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
+   457→                  <Reply className="w-4 h-4" /> Reply
+   458→                </DropdownMenuItem>
+   459→                <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
+   460→                  <ReplyAll className="w-4 h-4" /> Reply to all
+   461→                </DropdownMenuItem>
+   462→                <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
+   463→                  <Forward className="w-4 h-4" /> Forward
+   464→                </DropdownMenuItem>
+   465→                <DropdownMenuSeparator />
+   466→                <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
+   467→                  <Clock className="w-4 h-4" /> Snooze
+   468→                </DropdownMenuItem>
+   469→                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
+   470→                  e.stopPropagation()
+   471→                  toast.info('Label feature coming soon')
+   472→                }}>
+   473→                  <Tag className="w-4 h-4" /> Label
+   474→                </DropdownMenuItem>
+   475→                <DropdownMenuSeparator />
+   476→                <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
+   477→                  {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
+   478→                </DropdownMenuItem>
+   479→                <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
+   480→                  <Flag className="w-4 h-4" /> Report
+   481→                </DropdownMenuItem>
+   482→                <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
+   483→                  <Trash2 className="w-4 h-4" /> Delete
+   484→                </DropdownMenuItem>
+   485→              </DropdownMenuContent>
+   486→            </DropdownMenu>
+   487→
+   488→            {/* Star toggle - mobile */}
+   489→            <button
+   490→              onClick={handleStar}
+   491→              className={`shrink-0 p-1.5 rounded-full transition-colors ${
+   492→                email.isStarred
+   493→                  ? 'text-amber-500'
+   494→                  : 'text-gray-300 dark:text-gray-600 hover:text-amber-400'
+   495→              }`}
+   496→              aria-label={email.isStarred ? 'Unstar email' : 'Star email'}
+   497→            >
+   498→              <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
+   499→            </button>
+   500→            {/* Scheduled/Snoozed badge mobile */}
+   501→            {email.scheduledAt && (
+   502→              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 shrink-0">
+   503→                <Clock className="w-2.5 h-2.5" />
+   504→              </Badge>
+   505→            )}
+   506→            {email.snoozedUntil && (
+   507→              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
+   508→                <CalendarDays className="w-2.5 h-2.5" />
+   509→              </Badge>
+   510→            )}
+   511→          </div>
+   512→        </motion.div>
+   513→      </div>
+   514→
+   515→      {/* Desktop card (no swipe) */}
+   516→      <div
+   517→        onClick={onSelect}
+   518→        role="button"
+   519→        tabIndex={0}
+   520→        onKeyDown={(e) => {
+   521→          if (e.key === 'Enter' || e.key === ' ') {
+   522→            e.preventDefault()
+   523→            onSelect()
+   524→          }
+   525→        }}
+   526→        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative ${
+   527→          isSelected
+   528→            ? 'bg-blue-50 dark:bg-blue-950/30'
+   529→            : 'hover:bg-gray-50 dark:hover:bg-gray-900'
+   530→        } ${!email.isRead ? 'bg-blue-50/50 dark:bg-blue-950/10' : ''}`}
+   531→      >
+   532→        {/* Unread indicator */}
+   533→        {!email.isRead && (
+   534→          <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-[#4285F4]" />
+   535→        )}
+   536→
+   537→        {/* Checkbox */}
+   538→        <div
+   539→          role="checkbox"
+   540→          aria-checked={isChecked}
+   541→          tabIndex={0}
+   542→          onClick={(e) => {
+   543→            e.stopPropagation()
+   544→            toggleSelectEmail(email.id)
+   545→          }}
+   546→          onKeyDown={(e) => {
+   547→            if (e.key === ' ' || e.key === 'Enter') {
+   548→              e.preventDefault()
+   549→              e.stopPropagation()
+   550→              toggleSelectEmail(email.id)
+   551→            }
+   552→          }}
+   553→          className="shrink-0 flex items-center justify-center relative z-10 cursor-pointer"
+   554→          style={{ minWidth: 36, minHeight: 44 }}
+   555→          aria-label={`Select email from ${contactName}`}
+   556→        >
+   557→          <div
+   558→            className={`flex items-center justify-center size-4 rounded-[4px] border transition-colors ${
+   559→              isChecked
+   560→                ? 'bg-primary border-primary text-primary-foreground'
+   561→                : 'border-input dark:bg-input/30'
+   562→            }`}
+   563→          >
+   564→            {isChecked && (
+   565→              <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+   566→                <path d="M20 6L9 17l-5-5" />
+   567→              </svg>
+   568→            )}
+   569→          </div>
+   570→        </div>
+   571→
+   572→        {/* Avatar */}
+   573→        <Avatar className="w-10 h-10 shrink-0">
+   574→          <AvatarImage src={contactPerson?.avatar} />
+   575→          <AvatarFallback
+   576→            className={`text-white text-xs font-semibold ${
+   577→              contactPerson
+   578→                ? 'bg-gradient-to-br from-[#4285F4] to-[#34A853]'
+   579→                : 'bg-gradient-to-br from-gray-400 to-gray-500'
+   580→            }`}
+   581→          >
+   582→            {initials}
+   583→          </AvatarFallback>
+   584→        </Avatar>
+   585→
+   586→        {/* Content */}
+   587→        <div className="flex-1 min-w-0">
+   588→          <div className="flex items-center justify-between gap-2 mb-0.5">
+   589→            <span
+   590→              className={`text-sm truncate ${
+   591→                !email.isRead
+   592→                  ? 'font-bold text-[#1F1F1F] dark:text-white'
+   593→                  : 'text-[#444746] dark:text-gray-300'
+   594→              }`}
+   595→            >
+   596→              {contactName}
+   597→            </span>
+   598→            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
+   599→              {timeAgo}
+   600→            </span>
+   601→          </div>
+   602→          <div className="flex items-center gap-1.5 mb-0.5">
+   603→            <p
+   604→              className={`text-sm truncate flex-1 ${
+   605→                !email.isRead
+   606→                  ? 'font-semibold text-[#1F1F1F] dark:text-white'
+   607→                  : 'text-[#444746] dark:text-gray-300'
+   608→              }`}
+   609→            >
+   610→              {email.subject || '(No subject)'}
+   611→            </p>
+   612→            {email.replyCount > 0 && (
+   613→              <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
+   614→                <MessageSquare className="w-2.5 h-2.5" />
+   615→                {email.replyCount}
+   616→              </span>
+   617→            )}
+   618→          </div>
+   619→          {/* Scheduled/Snoozed badge inline desktop */}
+   620→          {email.scheduledAt && (
+   621→            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 mb-0.5">
+   622→              <Clock className="w-2.5 h-2.5" />
+   623→              {format(new Date(email.scheduledAt), 'MMM d, h:mm a')}
+   624→            </Badge>
+   625→          )}
+   626→          {email.snoozedUntil && (
+   627→            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
+   628→              <CalendarDays className="w-2.5 h-2.5" />
+   629→              {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+   630→            </Badge>
+   631→          )}
+   632→          {emailLabels.length > 0 && (
+   633→            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+   634→              {emailLabels.slice(0, 3).map((label) => (
+   635→                <span
+   636→                  key={label.id}
+   637→                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-full leading-none"
+   638→                  style={{
+   639→                    backgroundColor: `${label.color}15`,
+   640→                    color: label.color,
+   641→                  }}
+   642→                >
+   643→                  <span
+   644→                    className="w-1.5 h-1.5 rounded-full shrink-0"
+   645→                    style={{ backgroundColor: label.color }}
+   646→                  />
+   647→                  {label.name}
+   648→                </span>
+   649→              ))}
+   650→              {emailLabels.length > 3 && (
+   651→                <span className="text-[10px] text-gray-400">+{emailLabels.length - 3}</span>
+   652→              )}
+   653→            </div>
+   654→          )}
+   655→          <div className="flex items-center gap-2">
+   656→            <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+   657→              {snippet}
+   658→            </p>
+   659→            {email.attachments && (
+   660→              <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+   661→            )}
+   662→          </div>
+   663→        </div>
+   664→
+   665→        {/* Three-dot menu - desktop */}
+   666→        <DropdownMenu>
+   667→          <DropdownMenuTrigger asChild>
+   668→            <button
+   669→              onClick={(e) => e.stopPropagation()}
+   670→              className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+   671→              aria-label="More actions"
+   672→            >
+   673→              <MoreVertical className="w-4 h-4" />
+   674→            </button>
+   675→          </DropdownMenuTrigger>
+   676→          <DropdownMenuContent align="end" className="w-48">
+   677→            <DropdownMenuItem onClick={handleMenuReply} className="gap-2 cursor-pointer">
+   678→              <Reply className="w-4 h-4" /> Reply
+   679→            </DropdownMenuItem>
+   680→            <DropdownMenuItem onClick={handleMenuReplyAll} className="gap-2 cursor-pointer">
+   681→              <ReplyAll className="w-4 h-4" /> Reply to all
+   682→            </DropdownMenuItem>
+   683→            <DropdownMenuItem onClick={handleMenuForward} className="gap-2 cursor-pointer">
+   684→              <Forward className="w-4 h-4" /> Forward
+   685→            </DropdownMenuItem>
+   686→            <DropdownMenuSeparator />
+   687→            <DropdownMenuItem onClick={handleMenuSnooze} className="gap-2 cursor-pointer">
+   688→              <Clock className="w-4 h-4" /> Snooze
+   689→            </DropdownMenuItem>
+   690→            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => {
+   691→              e.stopPropagation()
+   692→              toast.info('Label feature coming soon')
+   693→            }}>
+   694→              <Tag className="w-4 h-4" /> Label
+   695→            </DropdownMenuItem>
+   696→            <DropdownMenuSeparator />
+   697→            <DropdownMenuItem onClick={handleMenuArchive} className="gap-2 cursor-pointer">
+   698→              {isArchive ? <><ArchiveRestore className="w-4 h-4" /> Unarchive</> : <><Archive className="w-4 h-4" /> Archive</>}
+   699→            </DropdownMenuItem>
+   700→            <DropdownMenuItem onClick={handleMenuReport} className="gap-2 cursor-pointer">
+   701→              <Flag className="w-4 h-4" /> Report
+   702→            </DropdownMenuItem>
+   703→            <DropdownMenuItem onClick={handleMenuDelete} variant="destructive" className="gap-2 cursor-pointer">
+   704→              <Trash2 className="w-4 h-4" /> Delete
+   705→            </DropdownMenuItem>
+   706→          </DropdownMenuContent>
+   707→        </DropdownMenu>
+   708→
+   709→        {/* Star toggle - desktop */}
+   710→        <button
+   711→          onClick={handleStar}
+   712→          className={`shrink-0 p-1.5 rounded-full transition-colors ${
+   713→            email.isStarred
+   714→              ? 'text-amber-500'
+   715→              : 'text-gray-300 dark:text-gray-600 hover:text-amber-400'
+   716→          }`}
+   717→          aria-label={email.isStarred ? 'Unstar email' : 'Star email'}
+   718→        >
+   719→          <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
+   720→        </button>
+   721→        {/* Scheduled/Snoozed badge desktop */}
+   722→        {email.scheduledAt && (
+   723→          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4] gap-1 shrink-0">
+   724→            <Clock className="w-2.5 h-2.5" />
+   725→          </Badge>
+   726→        )}
+   727→        {email.snoozedUntil && (
+   728→          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
+   729→            <CalendarDays className="w-2.5 h-2.5" />
+   730→          </Badge>
+   731→        )}
+   732→      </div>
+   733→    </motion.div>
+   734→  )
+   735→}
+   736→

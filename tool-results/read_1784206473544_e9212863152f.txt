@@ -1,0 +1,1501 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
+     7→  Paperclip, Forward, FileText, Download, Tag, Check, Pencil,
+     8→  Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
+     9→  ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase
+    10→} from 'lucide-react'
+    11→import { formatDistanceToNow, format } from 'date-fns'
+    12→import { toast } from 'sonner'
+    13→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    14→import { Button } from '@/components/ui/button'
+    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→import { Badge } from '@/components/ui/badge'
+    17→import { Input } from '@/components/ui/input'
+    18→import { EmailDetailSkeleton } from '@/components/shared/loading-skeleton'
+    19→import {
+    20→  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+    21→} from '@/components/ui/tooltip'
+    22→import {
+    23→  DropdownMenu,
+    24→  DropdownMenuContent,
+    25→  DropdownMenuItem,
+    26→  DropdownMenuSeparator,
+    27→  DropdownMenuTrigger,
+    28→  DropdownMenuLabel,
+    29→  DropdownMenuSub,
+    30→  DropdownMenuSubTrigger,
+    31→  DropdownMenuSubContent,
+    32→} from '@/components/ui/dropdown-menu'
+    33→import {
+    34→  AlertDialog,
+    35→  AlertDialogAction,
+    36→  AlertDialogCancel,
+    37→  AlertDialogContent,
+    38→  AlertDialogDescription,
+    39→  AlertDialogFooter,
+    40→  AlertDialogHeader,
+    41→  AlertDialogTitle,
+    42→} from '@/components/ui/alert-dialog'
+    43→import { Separator } from '@/components/ui/separator'
+    44→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    45→import { Calendar } from '@/components/ui/calendar'
+    46→import { useAppStore, type EmailWithSender, type Label } from '@/store/use-app-store'
+    47→
+    48→/* ─── Helpers ─── */
+    49→
+    50→function isImageFile(name: string) {
+    51→  return /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i.test(name)
+    52→}
+    53→
+    54→function formatFileSize(bytes?: string | number) {
+    55→  if (!bytes) return ''
+    56→  const n = typeof bytes === 'string' ? parseInt(bytes, 10) : bytes
+    57→  if (isNaN(n)) return bytes
+    58→  if (n < 1024) return `${n} B`
+    59→  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+    60→  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+    61→}
+    62→
+    63→function getInitials(user: { firstName?: string; lastName?: string } | null | undefined, fallback = 'U') {
+    64→  if (!user) return fallback
+    65→  return `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase() || fallback
+    66→}
+    67→
+    68→/* ─── Gmail-style Thread Reply (flat, no box) ─── */
+    69→
+    70→function ThreadMessage({
+    71→  message,
+    72→  isExpanded,
+    73→  onToggle,
+    74→}: {
+    75→  message: EmailWithSender
+    76→  isExpanded: boolean
+    77→  onToggle: () => void
+    78→}) {
+    79→  const initials = getInitials(message.sender)
+    80→  const name = message.sender
+    81→    ? `${message.sender.firstName} ${message.sender.lastName}`
+    82→    : 'Unknown'
+    83→  const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
+    84→    try { return message.attachments ? JSON.parse(message.attachments) : [] }
+    85→    catch { return [] }
+    86→  })()
+    87→
+    88→  return (
+    89→    <>
+    90→      {/* Clickable header row */}
+    91→      <button
+    92→        type="button"
+    93→        onClick={onToggle}
+    94→        className="w-full flex items-center gap-2.5 py-2 text-left cursor-pointer group"
+    95→      >
+    96→        <Avatar className="w-8 h-8 shrink-0">
+    97→          <AvatarImage src={message.sender?.avatar || undefined} />
+    98→          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
+    99→        </Avatar>
+   100→        <div className="flex-1 min-w-0">
+   101→          <div className="flex items-center gap-2">
+   102→            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{name}</span>
+   103→            <span className="text-xs text-gray-400">
+   104→              {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
+   105→            </span>
+   106→          </div>
+   107→          {!isExpanded && (
+   108→            <p className="text-xs text-gray-500 truncate mt-0.5 ml-9">
+   109→              {message.body?.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').substring(0, 120) || '...'}
+   110→            </p>
+   111→          )}
+   112→        </div>
+   113→        <div className="shrink-0 text-gray-400">
+   114→          {isExpanded ? (
+   115→            <ChevronUp className="w-4 h-4" />
+   116→          ) : (
+   117→            <ChevronRight className="w-4 h-4" />
+   118→          )}
+   119→        </div>
+   120→      </button>
+   121→
+   122→      {/* Expandable body */}
+   123→      <AnimatePresence initial={false}>
+   124→        {isExpanded && (
+   125→          <motion.div
+   126→            initial={{ height: 0, opacity: 0 }}
+   127→            animate={{ height: 'auto', opacity: 1 }}
+   128→            exit={{ height: 0, opacity: 0 }}
+   129→            transition={{ duration: 0.2 }}
+   130→            className="overflow-hidden"
+   131→          >
+   132→            <div className="pb-3">
+   133→              <div
+   134→                className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+   135→                  [&_p]:my-0.5 [&>*:first-child]:mt-0
+   136→                  [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+   137→                  [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+   138→                  [&_img]:max-w-full [&_img]:rounded-lg
+   139→                  [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+   140→                  [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+   141→                  [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+   142→                  [&_table]:border-collapse [&_table]:w-full
+   143→                  [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+   144→                  [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+   145→                dangerouslySetInnerHTML={{ __html: message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>' }}
+   146→              />
+   147→              {attachments.length > 0 && (
+   148→                <div className="mt-3"><AttachmentGallery attachments={attachments} /></div>
+   149→              )}
+   150→            </div>
+   151→          </motion.div>
+   152→        )}
+   153→      </AnimatePresence>
+   154→    </>
+   155→  )
+   156→}
+   157→
+   158→/* ─── Attachment Gallery ─── */
+   159→
+   160→function AttachmentGallery({ attachments }: { attachments: Array<{ name: string; url: string; size?: string | number; data?: string }> }) {
+   161→  const images = attachments.filter((a) => isImageFile(a.name))
+   162→  const docs = attachments.filter((a) => !isImageFile(a.name))
+   163→
+   164→  return (
+   165→    <div className="space-y-3">
+   166→      <div className="flex items-center gap-2">
+   167→        <Paperclip className="w-4 h-4 text-gray-500" />
+   168→        <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+   169→          {attachments.length} attachment{attachments.length > 1 ? 's' : ''}
+   170→        </span>
+   171→      </div>
+   172→      {images.length > 0 && (
+   173→        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+   174→          {images.map((att, idx) => (
+   175→            <a key={idx} href={att.data || att.url} target="_blank" rel="noopener noreferrer"
+   176→              className="group relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-square flex items-center justify-center">
+   177→              <img src={att.data || att.url} alt={att.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+   178→              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+   179→              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+   180→                <p className="text-[10px] text-white truncate">{att.name}</p>
+   181→              </div>
+   182→            </a>
+   183→          ))}
+   184→        </div>
+   185→      )}
+   186→      {docs.length > 0 && (
+   187→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+   188→          {docs.map((att, idx) => (
+   189→            <a key={idx} href={att.data || att.url} target="_blank" rel="noopener noreferrer"
+   190→              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-[#4285F4]/30 hover:bg-[#D3E3FD]/30 dark:hover:bg-[#4285F4]/5 transition-colors group">
+   191→              <div className="w-10 h-10 rounded-lg bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center shrink-0">
+   192→                <FileText className="w-5 h-5 text-[#4285F4]" />
+   193→              </div>
+   194→              <div className="flex-1 min-w-0">
+   195→                <p className="text-sm font-medium truncate text-[#1F1F1F] dark:text-white group-hover:text-[#4285F4] transition-colors">{att.name}</p>
+   196→                {att.size && <p className="text-xs text-gray-500">{formatFileSize(att.size)}</p>}
+   197→              </div>
+   198→              <Download className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+   199→            </a>
+   200→          ))}
+   201→        </div>
+   202→      )}
+   203→    </div>
+   204→  )
+   205→}
+   206→
+   207→/* ─── Label Manager Popover ─── */
+   208→
+   209→function LabelManager({ emailId }: { emailId: string }) {
+   210→  const { labels, emailLabelsMap, setEmailLabels, setLabels, addLabel } = useAppStore()
+   211→  const [showCreate, setShowCreate] = useState(false)
+   212→  const [newName, setNewName] = useState('')
+   213→  const [newColor, setNewColor] = useState('#4285F4')
+   214→  const [isAdding, setIsAdding] = useState<string | null>(null)
+   215→  const [isRemoving, setIsRemoving] = useState<string | null>(null)
+   216→
+   217→  const currentLabels = emailLabelsMap[emailId] || []
+   218→  const appliedIds = new Set(currentLabels.map((l) => l.id))
+   219→
+   220→  const handleToggleLabel = async (label: Label) => {
+   221→    const isApplied = appliedIds.has(label.id)
+   222→
+   223→    if (isApplied) {
+   224→      // Remove label from email
+   225→      setIsRemoving(label.id)
+   226→      try {
+   227→        const res = await fetch(`/api/emails/${emailId}/labels`, {
+   228→          method: 'DELETE',
+   229→          headers: { 'Content-Type': 'application/json' },
+   230→          body: JSON.stringify({ labelIds: [label.id] }),
+   231→        })
+   232→        const data = await res.json()
+   233→        if (data.success) {
+   234→          setEmailLabels(emailId, data.data)
+   235→        }
+   236→      } catch {
+   237→        toast.error('Failed to remove label')
+   238→      } finally {
+   239→        setIsRemoving(null)
+   240→      }
+   241→    } else {
+   242→      // Add label to email
+   243→      setIsAdding(label.id)
+   244→      try {
+   245→        const res = await fetch(`/api/emails/${emailId}/labels`, {
+   246→          method: 'POST',
+   247→          headers: { 'Content-Type': 'application/json' },
+   248→          body: JSON.stringify({ labelIds: [label.id] }),
+   249→        })
+   250→        const data = await res.json()
+   251→        if (data.success) {
+   252→          setEmailLabels(emailId, data.data)
+   253→        }
+   254→      } catch {
+   255→        toast.error('Failed to add label')
+   256→      } finally {
+   257→        setIsAdding(null)
+   258→      }
+   259→    }
+   260→  }
+   261→
+   262→  const handleCreateLabel = async () => {
+   263→    const name = newName.trim()
+   264→    if (!name) return
+   265→
+   266→    try {
+   267→      const res = await fetch('/api/labels', {
+   268→        method: 'POST',
+   269→        headers: { 'Content-Type': 'application/json' },
+   270→        body: JSON.stringify({ name, color: newColor }),
+   271→      })
+   272→      const data = await res.json()
+   273→      if (data.success) {
+   274→        addLabel(data.data)
+   275→        setNewName('')
+   276→        setNewColor('#4285F4')
+   277→        setShowCreate(false)
+   278→        toast.success('Label created')
+   279→      } else {
+   280→        toast.error(data.error || 'Failed to create label')
+   281→      }
+   282→    } catch {
+   283→      toast.error('Failed to create label')
+   284→    }
+   285→  }
+   286→
+   287→  return (
+   288→    <DropdownMenuContent align="end" className="w-56 p-0">
+   289→      <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+   290→        Labels
+   291→      </DropdownMenuLabel>
+   292→      <DropdownMenuSeparator />
+   293→      <div className="max-h-48 overflow-y-auto">
+   294→        {labels.map((label) => {
+   295→          const isApplied = appliedIds.has(label.id)
+   296→          const isLoading = isAdding === label.id || isRemoving === label.id
+   297→          return (
+   298→            <DropdownMenuItem
+   299→              key={label.id}
+   300→              onClick={() => handleToggleLabel(label)}
+   301→              disabled={isLoading}
+   302→              className="flex items-center gap-2.5 px-3 py-2 cursor-pointer"
+   303→            >
+   304→              {isLoading ? (
+   305→                <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+   306→              ) : isApplied ? (
+   307→                <div
+   308→                  className="w-4 h-4 rounded-sm flex items-center justify-center shrink-0"
+   309→                  style={{ backgroundColor: label.color }}
+   310→                >
+   311→                  <Check className="w-3 h-3 text-white" />
+   312→                </div>
+   313→              ) : (
+   314→                <div
+   315→                  className="w-4 h-4 rounded-sm border-2 shrink-0"
+   316→                  style={{ borderColor: label.color }}
+   317→                />
+   318→              )}
+   319→              <span className="flex-1 text-sm truncate">{label.name}</span>
+   320→            </DropdownMenuItem>
+   321→          )
+   322→        })}
+   323→        {labels.length === 0 && (
+   324→          <div className="px-3 py-4 text-center text-sm text-gray-400">
+   325→            No labels yet
+   326→          </div>
+   327→        )}
+   328→      </div>
+   329→      <DropdownMenuSeparator />
+   330→      <div className="p-2">
+   331→        {!showCreate ? (
+   332→          <button
+   333→            onClick={() => setShowCreate(true)}
+   334→            className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-[#4285F4] hover:bg-[#D3E3FD]/50 dark:hover:bg-[#4285F4]/10 rounded-lg transition-colors"
+   335→          >
+   336→            <Plus className="w-3.5 h-3.5" />
+   337→            Create new label
+   338→          </button>
+   339→        ) : (
+   340→          <div className="space-y-2 p-1">
+   341→            <Input
+   342→              value={newName}
+   343→              onChange={(e) => setNewName(e.target.value)}
+   344→              onKeyDown={(e) => {
+   345→                if (e.key === 'Enter') handleCreateLabel()
+   346→                if (e.key === 'Escape') setShowCreate(false)
+   347→              }}
+   348→              placeholder="Label name"
+   349→              className="h-7 text-xs"
+   350→              autoFocus
+   351→            />
+   352→            <div className="flex items-center gap-1.5">
+   353→              {['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#E91E63'].map((c) => (
+   354→                <button
+   355→                  key={c}
+   356→                  type="button"
+   357→                  onClick={() => setNewColor(c)}
+   358→                  className={`w-4 h-4 rounded-full transition-transform ${newColor === c ? 'scale-125 ring-1 ring-offset-1 ring-gray-400' : ''}`}
+   359→                  style={{ backgroundColor: c }}
+   360→                />
+   361→              ))}
+   362→            </div>
+   363→            <div className="flex gap-1">
+   364→              <button
+   365→                onClick={handleCreateLabel}
+   366→                className="flex-1 text-xs text-[#4285F4] font-medium hover:bg-[#D3E3FD]/50 rounded-md py-1 transition-colors"
+   367→              >
+   368→                Create
+   369→              </button>
+   370→              <button
+   371→                onClick={() => setShowCreate(false)}
+   372→                className="text-xs text-gray-500 hover:bg-gray-100 rounded-md px-2 py-1 transition-colors"
+   373→              >
+   374→                Cancel
+   375→              </button>
+   376→            </div>
+   377→          </div>
+   378→        )}
+   379→      </div>
+   380→    </DropdownMenuContent>
+   381→  )
+   382→}
+   383→
+   384→/* ═══════════════════════════════════════════
+   385→   Main EmailDetail Component
+   386→   ═══════════════════════════════════════════ */
+   387→
+   388→export function EmailDetail() {
+   389→  const {
+   390→    selectedEmailId,
+   391→    setEmailDetailOpen,
+   392→    setSelectedEmailId,
+   393→    removeEmail,
+   394→    updateEmail,
+   395→    setReplyToEmail,
+   396→    emailLabelsMap,
+   397→    setEmailLabels,
+   398→    currentFolder,
+   399→    setEditDraftEmail,
+   400→  } = useAppStore()
+   401→
+   402→  const [email, setEmail] = useState<EmailWithSender | null>(null)
+   403→  const [thread, setThread] = useState<EmailWithSender[]>([])
+   404→  const [loading, setLoading] = useState(false)
+   405→  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
+   406→  const [showInfoBox, setShowInfoBox] = useState(false)
+   407→
+   408→  /* ─── Fetch email ─── */
+   409→  const fetchEmail = useCallback(async () => {
+   410→    if (!selectedEmailId) return
+   411→    setLoading(true)
+   412→    setShowInfoBox(false)
+   413→    try {
+   414→      const res = await fetch(`/api/emails/${selectedEmailId}`)
+   415→      const data = await res.json()
+   416→      if (res.ok) {
+   417→        setEmail(data.email)
+   418→        setThread(data.thread || [])
+   419→        if (!data.email.isRead) {
+   420→          updateEmail(data.email.id, { isRead: true })
+   421→          fetch(`/api/emails/${selectedEmailId}`, {
+   422→            method: 'PUT',
+   423→            headers: { 'Content-Type': 'application/json' },
+   424→            body: JSON.stringify({ isRead: true }),
+   425→          }).catch(() => {})
+   426→        }
+   427→      }
+   428→    } catch {
+   429→      toast.error('Failed to load email')
+   430→    } finally {
+   431→      setLoading(false)
+   432→    }
+   433→  }, [selectedEmailId, updateEmail])
+   434→
+   435→  useEffect(() => {
+   436→    if (selectedEmailId) {
+   437→      fetchEmail()
+   438→    } else {
+   439→      setEmail(null)
+   440→      setThread([])
+   441→    }
+   442→  }, [selectedEmailId, fetchEmail])
+   443→
+   444→  // Auto-expand latest message in thread when email loads
+   445→  useEffect(() => {
+   446→    if (thread.length > 0) {
+   447→      const latestId = thread[thread.length - 1].id
+   448→      setExpandedReplies(new Set([latestId]))
+   449→    } else {
+   450→      setExpandedReplies(new Set())
+   451→    }
+   452→  }, [email?.id, thread])
+   453→
+   454→  const toggleReply = useCallback((replyId: string) => {
+   455→    setExpandedReplies((prev) => {
+   456→      const next = new Set(prev)
+   457→      if (next.has(replyId)) {
+   458→        next.delete(replyId)
+   459→      } else {
+   460→        next.add(replyId)
+   461→      }
+   462→      return next
+   463→    })
+   464→  }, [])
+   465→
+   466→  /* ─── Fetch email labels ─── */
+   467→  useEffect(() => {
+   468→    if (!selectedEmailId) return
+   469→    if (emailLabelsMap[selectedEmailId]) return
+   470→
+   471→    fetch(`/api/emails/${selectedEmailId}/labels`)
+   472→      .then((res) => res.json())
+   473→      .then((data) => {
+   474→        if (data.success) {
+   475→          setEmailLabels(selectedEmailId, data.data)
+   476→        }
+   477→      })
+   478→      .catch(() => {})
+   479→  }, [selectedEmailId, emailLabelsMap, setEmailLabels])
+   480→
+   481→  /* ─── Back navigation ─── */
+   482→  const handleBack = useCallback(() => {
+   483→    setSelectedEmailId(null)
+   484→    setEmailDetailOpen(false)
+   485→  }, [setSelectedEmailId, setEmailDetailOpen])
+   486→
+   487→  useEffect(() => {
+   488→    const onKeyDown = (e: KeyboardEvent) => {
+   489→      if (e.key === 'Escape' && selectedEmailId) {
+   490→        e.preventDefault()
+   491→        handleBack()
+   492→      }
+   493→    }
+   494→    window.addEventListener('keydown', onKeyDown)
+   495→    return () => window.removeEventListener('keydown', onKeyDown)
+   496→  }, [selectedEmailId, handleBack])
+   497→
+   498→  /* ─── Star toggle ─── */
+   499→  const handleStar = async () => {
+   500→    if (!email) return
+   501→    const v = !email.isStarred
+   502→    updateEmail(email.id, { isStarred: v })
+   503→    setEmail({ ...email, isStarred: v })
+   504→    try {
+   505→      await fetch(`/api/emails/${email.id}`, {
+   506→        method: 'PUT',
+   507→        headers: { 'Content-Type': 'application/json' },
+   508→        body: JSON.stringify({ isStarred: v }),
+   509→      })
+   510→    } catch {
+   511→      toast.error('Failed to update')
+   512→    }
+   513→  }
+   514→
+   515→  /* ─── Archive ─── */
+   516→  const handleArchive = async () => {
+   517→    if (!email) return
+   518→    removeEmail(email.id)
+   519→    handleBack()
+   520→    try {
+   521→      await fetch(`/api/emails/${email.id}`, {
+   522→        method: 'PUT',
+   523→        headers: { 'Content-Type': 'application/json' },
+   524→        body: JSON.stringify({ isArchived: true }),
+   525→      })
+   526→      toast.success('Email archived')
+   527→    } catch {
+   528→      toast.error('Failed to archive')
+   529→    }
+   530→  }
+   531→
+   532→  /* ─── Unarchive ─── */
+   533→  const handleUnarchive = async () => {
+   534→    if (!email) return
+   535→    removeEmail(email.id)
+   536→    handleBack()
+   537→    try {
+   538→      await fetch(`/api/emails/${email.id}`, {
+   539→        method: 'PUT',
+   540→        headers: { 'Content-Type': 'application/json' },
+   541→        body: JSON.stringify({ isArchived: false }),
+   542→      })
+   543→      toast.success('Moved to inbox')
+   544→    } catch {
+   545→      toast.error('Failed to unarchive')
+   546→    }
+   547→  }
+   548→
+   549→  /* ─── Delete ─── */
+   550→  const handleDelete = async () => {
+   551→    if (!email) return
+   552→    if (currentFolder === 'trash') {
+   553→      setShowDeleteConfirm(true)
+   554→      return
+   555→    }
+   556→    removeEmail(email.id)
+   557→    handleBack()
+   558→    try {
+   559→      await fetch(`/api/emails/${email.id}`, { method: 'DELETE' })
+   560→      toast.success('Email deleted')
+   561→    } catch {
+   562→      toast.error('Failed to delete')
+   563→    }
+   564→  }
+   565→
+   566→  const confirmDelete = async () => {
+   567→    if (!email) return
+   568→    setShowDeleteConfirm(false)
+   569→    removeEmail(email.id)
+   570→    handleBack()
+   571→    try {
+   572→      await fetch(`/api/emails/${email.id}`, { method: 'DELETE' })
+   573→      toast.success('Email permanently deleted')
+   574→    } catch {
+   575→      toast.error('Failed to delete')
+   576→    }
+   577→  }
+   578→
+   579→  const handleReportSpam = async () => {
+   580→    if (!email) return
+   581→    try {
+   582→      const res = await fetch(`/api/emails/${email.id}/report-spam`, { method: 'POST' })
+   583→      const json = await res.json()
+   584→      if (res.ok) {
+   585→        removeEmail(email.id)
+   586→        handleBack()
+   587→        toast.success('Reported as spam')
+   588→      } else {
+   589→        toast.error(json.error || 'Failed to report')
+   590→      }
+   591→    } catch {
+   592→      toast.error('Failed to report spam')
+   593→    }
+   594→  }
+   595→
+   596→  /* ─── Restore (trash → inbox) ─── */
+   597→  const handleRestore = async () => {
+   598→    if (!email) return
+   599→    removeEmail(email.id)
+   600→    handleBack()
+   601→    try {
+   602→      await fetch(`/api/emails/${email.id}`, {
+   603→        method: 'PUT',
+   604→        headers: { 'Content-Type': 'application/json' },
+   605→        body: JSON.stringify({ folder: 'inbox', isArchived: false }),
+   606→      })
+   607→      toast.success('Email restored to inbox')
+   608→    } catch {
+   609→      toast.error('Failed to restore')
+   610→    }
+   611→  }
+   612→
+   613→  /* ─── Edit Draft ─── */
+   614→  const handleEditDraft = useCallback(() => {
+   615→    if (!email) return
+   616→    setEditDraftEmail(email)
+   617→    setEmailDetailOpen(false)
+   618→    setSelectedEmailId(null)
+   619→  }, [email, setEditDraftEmail, setEmailDetailOpen, setSelectedEmailId])
+   620→
+   621→  /* ─── Snooze ─── */
+   622→  const [showSnoozePopover, setShowSnoozePopover] = useState(false)
+   623→  const [snoozeDate, setSnoozeDate] = useState<Date | undefined>(undefined)
+   624→  const [snoozeHour, setSnoozeHour] = useState('9')
+   625→  const [snoozeMinute, setSnoozeMinute] = useState('00')
+   626→  const [snoozeAmPm, setSnoozeAmPm] = useState<'AM' | 'PM'>('AM')
+   627→  const [showCustomSnooze, setShowCustomSnooze] = useState(false)
+   628→  const [showSnoozeModal, setShowSnoozeModal] = useState(false)
+   629→  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+   630→
+   631→  const getLaterToday = () => {
+   632→    const d = new Date()
+   633→    d.setHours(17, 0, 0, 0)
+   634→    if (d <= new Date()) d.setDate(d.getDate() + 1)
+   635→    return d
+   636→  }
+   637→  const getTomorrow = () => {
+   638→    const d = new Date()
+   639→    d.setDate(d.getDate() + 1)
+   640→    d.setHours(9, 0, 0, 0)
+   641→    return d
+   642→  }
+   643→  const getNextWeek = () => {
+   644→    const d = new Date()
+   645→    d.setDate(d.getDate() + 7)
+   646→    d.setHours(9, 0, 0, 0)
+   647→    return d
+   648→  }
+   649→  const getLaterThisWeek = () => {
+   650→    const d = new Date()
+   651→    const dayOfWeek = d.getDay()
+   652→    const daysUntilMon = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
+   653→    d.setDate(d.getDate() + daysUntilMon)
+   654→    d.setHours(8, 0, 0, 0)
+   655→    return d
+   656→  }
+   657→  const getThisWeekend = () => {
+   658→    const d = new Date()
+   659→    const dayOfWeek = d.getDay()
+   660→    const daysUntilSat = dayOfWeek === 0 ? 6 : (6 - dayOfWeek)
+   661→    d.setDate(d.getDate() + daysUntilSat)
+   662→    d.setHours(8, 0, 0, 0)
+   663→    return d
+   664→  }
+   665→
+   666→  const handleSnooze = async (date: Date) => {
+   667→    if (!email) return
+   668→    try {
+   669→      const res = await fetch(`/api/emails/${email.id}/snooze`, {
+   670→        method: 'POST',
+   671→        headers: { 'Content-Type': 'application/json' },
+   672→        body: JSON.stringify({ snoozeUntil: date.toISOString() }),
+   673→      })
+   674→      const data = await res.json()
+   675→      if (data.success) {
+   676→        removeEmail(email.id)
+   677→        handleBack()
+   678→        toast.success(`Snoozed until ${date.toLocaleString()}`)
+   679→      } else {
+   680→        toast.error(data.error || 'Failed to snooze')
+   681→      }
+   682→    } catch {
+   683→      toast.error('Failed to snooze')
+   684→    }
+   685→  }
+   686→
+   687→  const handleCustomSnooze = () => {
+   688→    if (!snoozeDate) return
+   689→    const hr = parseInt(snoozeHour) || 0
+   690→    let hours = snoozeAmPm === 'PM' && hr !== 12 ? hr + 12 : snoozeAmPm === 'AM' && hr === 12 ? 0 : hr
+   691→    const minutes = parseInt(snoozeMinute) || 0
+   692→    const d = new Date(snoozeDate)
+   693→    d.setHours(hours, minutes, 0, 0)
+   694→    if (d <= new Date()) {
+   695→      toast.error('Please select a future date and time')
+   696→      return
+   697→    }
+   698→    handleSnooze(d)
+   699→  }
+   700→
+   701→  /* ─── Unsnooze ─── */
+   702→  const handleUnsnooze = async () => {
+   703→    if (!email) return
+   704→    removeEmail(email.id)
+   705→    handleBack()
+   706→    try {
+   707→      await fetch(`/api/emails/${email.id}/snooze`, { method: 'DELETE' })
+   708→      toast.success('Email unsnoozed')
+   709→    } catch {
+   710→      toast.error('Failed to unsnooze')
+   711→    }
+   712→  }
+   713→
+   714→  /* ─── Gmail-style Reply / Reply All / Forward — opens compose modal ─── */
+   715→  const handleReply = () => {
+   716→    if (!email) return
+   717→    setReplyToEmail({ ...email }, 'reply')
+   718→  }
+   719→
+   720→  const handleReplyAll = () => {
+   721→    if (!email) return
+   722→    setReplyToEmail({ ...email }, 'replyAll')
+   723→  }
+   724→
+   725→  const handleForward = () => {
+   726→    if (!email) return
+   727→    setReplyToEmail({ ...email }, 'forward')
+   728→  }
+   729→
+   730→  /* ─── Empty state ─── */
+   731→  if (!selectedEmailId) {
+   732→    return (
+   733→      <div className="flex-1 hidden md:flex items-center justify-center bg-gray-50 dark:bg-gray-900/50 h-full md:border-l md:border-gray-100 md:dark:border-gray-800">
+   734→        <div className="text-center px-4">
+   735→          <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+   736→            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+   737→              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+   738→            </svg>
+   739→          </div>
+   740→          <h3 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">Select an email</h3>
+   741→          <p className="text-sm text-gray-500">Choose an email to read</p>
+   742→        </div>
+   743→      </div>
+   744→    )
+   745→  }
+   746→
+   747→  if (loading) return <EmailDetailSkeleton />
+   748→  if (!email) return null
+   749→
+   750→  const replies = email.replies || []
+   751→  const currentEmailLabels = emailLabelsMap[email.id] || []
+   752→
+   753→  // Use thread array if available (full conversation), otherwise fall back to email + replies
+   754→  const threadMessages = thread.length > 0 ? thread : [email, ...replies]
+   755→  const selectedId = email?.id
+   756→
+   757→  return (
+   758→    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 h-full pb-14 md:pb-0 md:border-l md:border-gray-100 md:dark:border-gray-800">
+   759→      {/* ─── Toolbar ─── */}
+   760→      <div className="flex items-center justify-between pl-3 sm:pl-4 h-12 border-b border-gray-100 dark:border-gray-800 shrink-0">
+   761→        <div className="flex items-center gap-1">
+   762→          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleBack}>
+   763→            <ArrowLeft className="w-4 h-4" />
+   764→          </Button>
+   765→          <span className="sr-only sm:not-sr-only text-sm text-gray-500 cursor-pointer select-none" onClick={handleBack}>
+   766→            Back
+   767→          </span>
+   768→        </div>
+   769→        <div className="flex items-center gap-0.5 ml-auto">
+   770→          <TooltipProvider delayDuration={300}>
+   771→            {currentFolder === 'trash' ? (
+   772→              <>
+   773→                <Tooltip>
+   774→                  <TooltipTrigger asChild>
+   775→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleRestore}>
+   776→                      <ArchiveRestore className="w-4 h-4" />
+   777→                    </Button>
+   778→                  </TooltipTrigger>
+   779→                  <TooltipContent side="bottom">Restore</TooltipContent>
+   780→                </Tooltip>
+   781→                <Tooltip>
+   782→                  <TooltipTrigger asChild>
+   783→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+   784→                      <Trash2 className="w-4 h-4" />
+   785→                    </Button>
+   786→                  </TooltipTrigger>
+   787→                  <TooltipContent side="bottom">Delete</TooltipContent>
+   788→                </Tooltip>
+   789→              </>
+   790→            ) : currentFolder === 'snoozed' ? (
+   791→              <>
+   792→                <Tooltip>
+   793→                  <TooltipTrigger asChild>
+   794→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleUnsnooze}>
+   795→                      <AlarmClockOff className="w-4 h-4" />
+   796→                    </Button>
+   797→                  </TooltipTrigger>
+   798→                  <TooltipContent side="bottom">Unsnooze</TooltipContent>
+   799→                </Tooltip>
+   800→                <Tooltip>
+   801→                  <TooltipTrigger asChild>
+   802→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+   803→                      <Trash2 className="w-4 h-4" />
+   804→                    </Button>
+   805→                  </TooltipTrigger>
+   806→                  <TooltipContent side="bottom">Delete</TooltipContent>
+   807→                </Tooltip>
+   808→              </>
+   809→            ) : currentFolder === 'archive' ? (
+   810→              <>
+   811→                <Tooltip>
+   812→                  <TooltipTrigger asChild>
+   813→                    <Button variant="ghost" size="icon" className={`h-9 w-9 ${email.isStarred ? 'text-amber-500' : ''}`} onClick={handleStar}>
+   814→                      <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
+   815→                    </Button>
+   816→                  </TooltipTrigger>
+   817→                  <TooltipContent side="bottom">{email.isStarred ? 'Unstar (s)' : 'Star (s)'}</TooltipContent>
+   818→                </Tooltip>
+   819→                <Tooltip>
+   820→                  <TooltipTrigger asChild>
+   821→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleUnarchive}>
+   822→                      <ArchiveRestore className="w-4 h-4" />
+   823→                    </Button>
+   824→                  </TooltipTrigger>
+   825→                  <TooltipContent side="bottom">Unarchive</TooltipContent>
+   826→                </Tooltip>
+   827→                <Tooltip>
+   828→                  <TooltipTrigger asChild>
+   829→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+   830→                      <Trash2 className="w-4 h-4" />
+   831→                    </Button>
+   832→                  </TooltipTrigger>
+   833→                  <TooltipContent side="bottom">Delete (#)</TooltipContent>
+   834→                </Tooltip>
+   835→                {/* Three-dot menu - right side after trash */}
+   836→                <DropdownMenu>
+   837→                  <DropdownMenuTrigger asChild>
+   838→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+   839→                      <MoreVertical className="w-4 h-4" />
+   840→                    </Button>
+   841→                  </DropdownMenuTrigger>
+   842→                  <DropdownMenuContent align="end" className="w-52">
+   843→                    <DropdownMenuItem onClick={handleReply} className="gap-2.5 cursor-pointer">
+   844→                      <Reply className="w-4 h-4" /> Reply
+   845→                    </DropdownMenuItem>
+   846→                    <DropdownMenuItem onClick={handleReplyAll} className="gap-2.5 cursor-pointer">
+   847→                      <ReplyAll className="w-4 h-4" /> Reply to all
+   848→                    </DropdownMenuItem>
+   849→                    <DropdownMenuItem onClick={handleForward} className="gap-2.5 cursor-pointer">
+   850→                      <Forward className="w-4 h-4" /> Forward
+   851→                    </DropdownMenuItem>
+   852→                    <DropdownMenuSeparator />
+   853→                    <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
+   854→                      <Clock className="w-4 h-4" /> Snooze
+   855→                    </DropdownMenuItem>
+   856→                    <DropdownMenuSub>
+   857→                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+   858→                        <Tag className="w-4 h-4" /> Label
+   859→                      </DropdownMenuSubTrigger>
+   860→                      <DropdownMenuSubContent className="w-56 p-2">
+   861→                        <LabelManager emailId={email.id} />
+   862→                      </DropdownMenuSubContent>
+   863→                    </DropdownMenuSub>
+   864→                    <DropdownMenuSeparator />
+   865→                    <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
+   866→                      <Flag className="w-4 h-4" /> Report
+   867→                    </DropdownMenuItem>
+   868→                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
+   869→                      <Trash2 className="w-4 h-4" /> Delete
+   870→                    </DropdownMenuItem>
+   871→                  </DropdownMenuContent>
+   872→                </DropdownMenu>
+   873→              </>
+   874→            ) : currentFolder === 'drafts' ? (
+   875→              <>
+   876→                <Tooltip>
+   877→                  <TooltipTrigger asChild>
+   878→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-[#4285F4]" onClick={handleEditDraft}>
+   879→                      <Pencil className="w-4 h-4" />
+   880→                    </Button>
+   881→                  </TooltipTrigger>
+   882→                  <TooltipContent side="bottom">Edit Draft</TooltipContent>
+   883→                </Tooltip>
+   884→                <Tooltip>
+   885→                  <TooltipTrigger asChild>
+   886→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+   887→                      <Trash2 className="w-4 h-4" />
+   888→                    </Button>
+   889→                  </TooltipTrigger>
+   890→                  <TooltipContent side="bottom">Delete (#)</TooltipContent>
+   891→                </Tooltip>
+   892→              </>
+   893→            ) : (
+   894→              <>
+   895→                <Tooltip>
+   896→                  <TooltipTrigger asChild>
+   897→                    <Button variant="ghost" size="icon" className={`h-9 w-9 ${email.isStarred ? 'text-amber-500' : ''}`} onClick={handleStar}>
+   898→                      <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
+   899→                    </Button>
+   900→                  </TooltipTrigger>
+   901→                  <TooltipContent side="bottom">{email.isStarred ? 'Unstar (s)' : 'Star (s)'}</TooltipContent>
+   902→                </Tooltip>
+   903→                <Tooltip>
+   904→                  <TooltipTrigger asChild>
+   905→                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleArchive}>
+   906→                      <Archive className="w-4 h-4" />
+   907→                    </Button>
+   908→                  </TooltipTrigger>
+   909→                  <TooltipContent side="bottom">Archive (e)</TooltipContent>
+   910→                </Tooltip>
+   911→                <Tooltip>
+   912→                  <TooltipTrigger asChild>
+   913→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-red-500" onClick={handleDelete}>
+   914→                      <Trash2 className="w-4 h-4" />
+   915→                    </Button>
+   916→                  </TooltipTrigger>
+   917→                  <TooltipContent side="bottom">Delete (#)</TooltipContent>
+   918→                </Tooltip>
+   919→                {/* Three-dot menu - right side after trash */}
+   920→                <DropdownMenu>
+   921→                  <DropdownMenuTrigger asChild>
+   922→                    <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+   923→                      <MoreVertical className="w-4 h-4" />
+   924→                    </Button>
+   925→                  </DropdownMenuTrigger>
+   926→                  <DropdownMenuContent align="end" className="w-52">
+   927→                    <DropdownMenuItem onClick={handleReply} className="gap-2.5 cursor-pointer">
+   928→                      <Reply className="w-4 h-4" /> Reply
+   929→                    </DropdownMenuItem>
+   930→                    <DropdownMenuItem onClick={handleReplyAll} className="gap-2.5 cursor-pointer">
+   931→                      <ReplyAll className="w-4 h-4" /> Reply to all
+   932→                    </DropdownMenuItem>
+   933→                    <DropdownMenuItem onClick={handleForward} className="gap-2.5 cursor-pointer">
+   934→                      <Forward className="w-4 h-4" /> Forward
+   935→                    </DropdownMenuItem>
+   936→                    <DropdownMenuSeparator />
+   937→                    <DropdownMenuItem onClick={() => { setShowSnoozeModal(true) }} className="gap-2.5 cursor-pointer">
+   938→                      <Clock className="w-4 h-4" /> Snooze
+   939→                    </DropdownMenuItem>
+   940→                    <DropdownMenuSub>
+   941→                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+   942→                        <Tag className="w-4 h-4" /> Label
+   943→                      </DropdownMenuSubTrigger>
+   944→                      <DropdownMenuSubContent className="w-56 p-2">
+   945→                        <LabelManager emailId={email.id} />
+   946→                      </DropdownMenuSubContent>
+   947→                    </DropdownMenuSub>
+   948→                    <DropdownMenuSeparator />
+   949→                    <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
+   950→                      <Archive className="w-4 h-4" /> Archive
+   951→                    </DropdownMenuItem>
+   952→                    <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
+   953→                      <Flag className="w-4 h-4" /> Report
+   954→                    </DropdownMenuItem>
+   955→                    <DropdownMenuItem onClick={handleDelete} variant="destructive" className="gap-2.5 cursor-pointer">
+   956→                      <Trash2 className="w-4 h-4" /> Delete
+   957→                    </DropdownMenuItem>
+   958→                  </DropdownMenuContent>
+   959→                </DropdownMenu>
+   960→              </>
+   961→            )}
+   962→          </TooltipProvider>
+   963→        </div>
+   964→      </div>
+   965→
+   966→      {/* ─── Scrollable Content ─── */}
+   967→      <div className="flex-1 overflow-y-auto overscroll-contain gpu-scroll">
+   968→        <div className="px-3 sm:px-5 py-3">
+   969→          <h1 className="text-base sm:text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1 leading-tight">
+   970→            {email.subject || '(No subject)'}
+   971→          </h1>
+   972→
+   973→          {/* Label chips */}
+   974→          {currentEmailLabels.length > 0 && (
+   975→            <div className="flex flex-wrap gap-1.5 mb-2">
+   976→              {currentEmailLabels.map((label) => (
+   977→                <Badge
+   978→                  key={label.id}
+   979→                  variant="secondary"
+   980→                  className="text-xs font-medium px-2 py-0.5 border-0 gap-1"
+   981→                  style={{
+   982→                    backgroundColor: `${label.color}18`,
+   983→                    color: label.color,
+   984→                  }}
+   985→                >
+   986→                  <span
+   987→                    className="w-2 h-2 rounded-full shrink-0"
+   988→                    style={{ backgroundColor: label.color }}
+   989→                  />
+   990→                  {label.name}
+   991→                </Badge>
+   992→              ))}
+   993→            </div>
+   994→          )}
+   995→
+   996→          {/* ─── Thread: Full conversation (Gmail-style, flat) ─── */}
+   997→          <div className="mb-4">
+   998→            {threadMessages.map((msg, idx) => {
+   999→              const isSelected = msg.id === selectedId
+  1000→              // The selected (current) email is always fully shown, others are collapsible
+  1001→              const isExpanded = isSelected || expandedReplies.has(msg.id)
+  1002→
+  1003→              return (
+  1004→                <div key={msg.id}>
+  1005→                  {idx > 0 && <div className="border-t border-gray-100 dark:border-gray-800" />}
+  1006→                  {isSelected ? (
+  1007→                    /* Selected email — always fully shown */
+  1008→                    <div className="py-1">
+  1009→                      <div className="flex items-center gap-2.5 mb-1">
+  1010→                        <Avatar className="w-8 h-8 shrink-0">
+  1011→                          <AvatarImage src={msg.sender?.avatar || undefined} />
+  1012→                          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">
+  1013→                            {getInitials(msg.sender)}
+  1014→                          </AvatarFallback>
+  1015→                        </Avatar>
+  1016→                        <div className="flex-1 min-w-0">
+  1017→                          <div className="flex items-center gap-2 flex-wrap">
+  1018→                            <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
+  1019→                              {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'}
+  1020→                            </span>
+  1021→                            <button
+  1022→                              onClick={() => setShowInfoBox(!showInfoBox)}
+  1023→                              className="flex items-center gap-1 shrink-0 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
+  1024→                            >
+  1025→                              <span>to me</span>
+  1026→                              <motion.span
+  1027→                                animate={{ rotate: showInfoBox ? 180 : 0 }}
+  1028→                                transition={{ duration: 0.2 }}
+  1029→                              >
+  1030→                                <ChevronDown className="w-3 h-3" />
+  1031→                              </motion.span>
+  1032→                            </button>
+  1033→                          </div>
+  1034→                        </div>
+  1035→                        <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+  1036→                          {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+  1037→                        </div>
+  1038→                      </div>
+  1039→
+  1040→                      {/* ─── Gmail-style inline info box ─── */}
+  1041→                      <AnimatePresence>
+  1042→                        {showInfoBox && (() => {
+  1043→                          const senderEm = msg.sender?.email || msg.recipientEmail || ''
+  1044→                          const recipEm = msg.recipient?.email || msg.recipientEmail || ''
+  1045→                          const ccData: string[] = (() => { try { const cc = (msg as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
+  1046→                          const bccData: string[] = (() => { try { const bcc = (msg as unknown as Record<string, unknown>).bcc; if (!bcc) return []; if (Array.isArray(bcc)) return bcc; if (typeof bcc === 'string') return bcc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
+  1047→
+  1048→                          return (
+  1049→                            <motion.div
+  1050→                              initial={{ opacity: 0, height: 0 }}
+  1051→                              animate={{ opacity: 1, height: 'auto' }}
+  1052→                              exit={{ opacity: 0, height: 0 }}
+  1053→                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+  1054→                              className="overflow-hidden"
+  1055→                            >
+  1056→                              <div className="mx-10 rounded-xl border border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900/80 p-3 sm:p-3.5 space-y-2.5 mb-2">
+  1057→                                {/* From */}
+  1058→                                <div className="flex items-start gap-3">
+  1059→                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">From</span>
+  1060→                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+  1061→                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+  1062→                                      <Mail className="w-3 h-3 text-gray-500" />
+  1063→                                    </div>
+  1064→                                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{senderEm}</p>
+  1065→                                    <button
+  1066→                                      onClick={() => { navigator.clipboard.writeText(senderEm); toast.success('Email copied') }}
+  1067→                                      className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+  1068→                                      title="Copy email"
+  1069→                                    >
+  1070→                                      <Copy className="w-3 h-3" />
+  1071→                                    </button>
+  1072→                                  </div>
+  1073→                                </div>
+  1074→
+  1075→                                {/* To */}
+  1076→                                <div className="flex items-start gap-3">
+  1077→                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">To</span>
+  1078→                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+  1079→                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+  1080→                                      <Mail className="w-3 h-3 text-gray-500" />
+  1081→                                    </div>
+  1082→                                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{recipEm}</p>
+  1083→                                    <button
+  1084→                                      onClick={() => { navigator.clipboard.writeText(recipEm); toast.success('Email copied') }}
+  1085→                                      className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+  1086→                                      title="Copy email"
+  1087→                                    >
+  1088→                                      <Copy className="w-3 h-3" />
+  1089→                                    </button>
+  1090→                                  </div>
+  1091→                                </div>
+  1092→
+  1093→                                {/* CC */}
+  1094→                                {ccData.length > 0 && (
+  1095→                                  <div className="flex items-start gap-3">
+  1096→                                    <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">CC</span>
+  1097→                                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+  1098→                                      <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+  1099→                                        <Mail className="w-3 h-3 text-gray-500" />
+  1100→                                      </div>
+  1101→                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{ccData.join(', ')}</p>
+  1102→                                      <button
+  1103→                                        onClick={() => { navigator.clipboard.writeText(ccData.join(', ')); toast.success('CC emails copied') }}
+  1104→                                        className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+  1105→                                        title="Copy emails"
+  1106→                                      >
+  1107→                                        <Copy className="w-3 h-3" />
+  1108→                                      </button>
+  1109→                                    </div>
+  1110→                                  </div>
+  1111→                                )}
+  1112→
+  1113→                                {/* BCC */}
+  1114→                                {bccData.length > 0 && (
+  1115→                                  <div className="flex items-start gap-3">
+  1116→                                    <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">BCC</span>
+  1117→                                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+  1118→                                      <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+  1119→                                        <Mail className="w-3 h-3 text-gray-500" />
+  1120→                                      </div>
+  1121→                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{bccData.join(', ')}</p>
+  1122→                                      <button
+  1123→                                        onClick={() => { navigator.clipboard.writeText(bccData.join(', ')); toast.success('BCC emails copied') }}
+  1124→                                        className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+  1125→                                        title="Copy emails"
+  1126→                                      >
+  1127→                                        <Copy className="w-3 h-3" />
+  1128→                                      </button>
+  1129→                                    </div>
+  1130→                                  </div>
+  1131→                                )}
+  1132→
+  1133→                                {/* Date */}
+  1134→                                <div className="flex items-start gap-3">
+  1135→                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">Date</span>
+  1136→                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+  1137→                                    <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+  1138→                                      <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+  1139→                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+  1140→                                      </svg>
+  1141→                                    </div>
+  1142→                                    <p className="text-sm text-[#1F1F1F] dark:text-white">{format(new Date(msg.createdAt), 'd MMM yyyy, h:mm a')}</p>
+  1143→                                  </div>
+  1144→                                </div>
+  1145→
+  1146→                                {/* Encryption */}
+  1147→                                <div className="flex items-start gap-3">
+  1148→                                  <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right"></span>
+  1149→                                  <div className="flex items-center gap-1.5">
+  1150→                                    <Lock className="w-3 h-3 text-gray-400" />
+  1151→                                    <span className="text-xs text-gray-500">Standard encryption (TLS).</span>
+  1152→                                  </div>
+  1153→                                </div>
+  1154→                              </div>
+  1155→                            </motion.div>
+  1156→                          )
+  1157→                        })()}
+  1158→                      </AnimatePresence>
+  1159→
+  1160→                      <div>
+  1161→                        <div
+  1162→                          className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+  1163→                            [&_p]:my-0.5 [&>*:first-child]:mt-0
+  1164→                            [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+  1165→                            [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+  1166→                            [&_img]:max-w-full [&_img]:rounded-lg
+  1167→                            [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+  1168→                            [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+  1169→                            [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+  1170→                            [&_table]:border-collapse [&_table]:w-full
+  1171→                            [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+  1172→                            [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+  1173→                          dangerouslySetInnerHTML={{
+  1174→                            __html: msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
+  1175→                          }}
+  1176→                        />
+  1177→                        {(() => {
+  1178→                          try {
+  1179→                            const atts = msg.attachments ? JSON.parse(msg.attachments) : []
+  1180→                            if (atts.length > 0) return <div className="mt-3"><AttachmentGallery attachments={atts} /></div>
+  1181→                          } catch {}
+  1182→                          return null
+  1183→                        })()}
+  1184→                      </div>
+  1185→                    </div>
+  1186→                  ) : (
+  1187→                    /* Other thread messages — collapsible */
+  1188→                    <ThreadMessage
+  1189→                      message={msg}
+  1190→                      isExpanded={isExpanded}
+  1191→                      onToggle={() => toggleReply(msg.id)}
+  1192→                    />
+  1193→                  )}
+  1194→                </div>
+  1195→              )
+  1196→            })}
+  1197→          </div>
+  1198→          {/* ─── Reply / Restore / Forward Bar (inside scrollable content) ─── */}
+  1199→          <div className="border-t border-gray-200 dark:border-gray-800 px-2 sm:px-4 py-2 mt-1">
+  1200→            {currentFolder === 'trash' ? (
+  1201→              <div className="flex items-center gap-2">
+  1202→                <Button
+  1203→                  variant="outline"
+  1204→                  size="sm"
+  1205→                  className="h-9 gap-1.5 text-sm font-medium text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+  1206→                  onClick={handleRestore}
+  1207→                >
+  1208→                  <ArchiveRestore className="w-4 h-4" />
+  1209→                  Restore
+  1210→                </Button>
+  1211→                <Button
+  1212→                  variant="outline"
+  1213→                  size="sm"
+  1214→                  className="h-9 gap-1.5 text-sm font-medium text-red-500 border-red-200 hover:bg-red-50"
+  1215→                  onClick={handleDelete}
+  1216→                >
+  1217→                  <Trash2 className="w-4 h-4" />
+  1218→                  Delete
+  1219→                </Button>
+  1220→              </div>
+  1221→            ) : currentFolder === 'snoozed' ? (
+  1222→              <div className="flex items-center gap-2">
+  1223→                <Button
+  1224→                  variant="outline"
+  1225→                  size="sm"
+  1226→                  className="h-9 gap-1.5 text-sm font-medium text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+  1227→                  onClick={handleUnsnooze}
+  1228→                >
+  1229→                  <AlarmClockOff className="w-4 h-4" />
+  1230→                  Unsnooze
+  1231→                </Button>
+  1232→                <Button
+  1233→                  variant="outline"
+  1234→                  size="sm"
+  1235→                  className="h-9 gap-1.5 text-sm font-medium text-red-500 border-red-200 hover:bg-red-50"
+  1236→                  onClick={handleDelete}
+  1237→                >
+  1238→                  <Trash2 className="w-4 h-4" />
+  1239→                  Delete
+  1240→                </Button>
+  1241→              </div>
+  1242→            ) : currentFolder === 'archive' ? (
+  1243→              <div className="flex items-center gap-2">
+  1244→                <Button
+  1245→                  variant="outline"
+  1246→                  size="sm"
+  1247→                  className="h-9 gap-1.5 text-sm font-medium text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+  1248→                  onClick={handleUnarchive}
+  1249→                >
+  1250→                  <ArchiveRestore className="w-4 h-4" />
+  1251→                  Unarchive
+  1252→                </Button>
+  1253→                <Button
+  1254→                  variant="outline"
+  1255→                  size="sm"
+  1256→                  className="h-9 gap-1.5 text-sm font-medium text-red-500 border-red-200 hover:bg-red-50"
+  1257→                  onClick={handleDelete}
+  1258→                >
+  1259→                  <Trash2 className="w-4 h-4" />
+  1260→                  Delete
+  1261→                </Button>
+  1262→              </div>
+  1263→            ) : currentFolder === 'drafts' ? (
+  1264→              <div className="flex items-center justify-center gap-2">
+  1265→                <Button
+  1266→                  variant="outline"
+  1267→                  size="sm"
+  1268→                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px] text-[#4285F4] border-[#4285F4]/30 hover:bg-[#D3E3FD]/50"
+  1269→                  onClick={handleEditDraft}
+  1270→                >
+  1271→                  <Pencil className="w-4 h-4" />
+  1272→                  Edit
+  1273→                </Button>
+  1274→                <Button
+  1275→                  variant="outline"
+  1276→                  size="sm"
+  1277→                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px] text-red-500 border-red-200 hover:bg-red-50"
+  1278→                  onClick={handleDelete}
+  1279→                >
+  1280→                  <Trash2 className="w-4 h-4" />
+  1281→                  Delete
+  1282→                </Button>
+  1283→              </div>
+  1284→            ) : (
+  1285→              <div className="flex items-center justify-center gap-2">
+  1286→                <Button
+  1287→                  variant="outline"
+  1288→                  size="sm"
+  1289→                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px]"
+  1290→                  onClick={handleReply}
+  1291→                >
+  1292→                  <Reply className="w-4 h-4" />
+  1293→                  Reply
+  1294→                </Button>
+  1295→                <Button
+  1296→                  variant="outline"
+  1297→                  size="sm"
+  1298→                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px]"
+  1299→                  onClick={handleReplyAll}
+  1300→                >
+  1301→                  <ReplyAll className="w-4 h-4" />
+  1302→                  Reply All
+  1303→                </Button>
+  1304→                <Button
+  1305→                  variant="outline"
+  1306→                  size="sm"
+  1307→                  className="h-9 gap-1.5 text-sm font-medium flex-1 max-w-[140px]"
+  1308→                  onClick={handleForward}
+  1309→                >
+  1310→                  <Forward className="w-4 h-4" />
+  1311→                  Forward
+  1312→                </Button>
+  1313→              </div>
+  1314→            )}
+  1315→          </div>
+  1316→        </div>
+  1317→      </div>
+  1318→
+  1319→      {/* Delete Confirmation Dialog */}
+  1320→      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+  1321→        <AlertDialogContent>
+  1322→          <AlertDialogHeader>
+  1323→            <AlertDialogTitle>Permanently delete email?</AlertDialogTitle>
+  1324→            <AlertDialogDescription>
+  1325→              This action cannot be undone. This email will be permanently removed from Trash.
+  1326→            </AlertDialogDescription>
+  1327→          </AlertDialogHeader>
+  1328→          <AlertDialogFooter>
+  1329→            <AlertDialogCancel>Cancel</AlertDialogCancel>
+  1330→            <AlertDialogAction onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
+  1331→          </AlertDialogFooter>
+  1332→        </AlertDialogContent>
+  1333→      </AlertDialog>
+  1334→
+  1335→      {/* ─── Snooze Modal (Schedule-style) ─── */}
+  1336→      <AnimatePresence>
+  1337→        {showSnoozeModal && !showCustomSnooze && (
+  1338→          <motion.div
+  1339→            initial={{ opacity: 0 }}
+  1340→            animate={{ opacity: 1 }}
+  1341→            exit={{ opacity: 0 }}
+  1342→            transition={{ duration: 0.15 }}
+  1343→            className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+  1344→            onClick={() => setShowSnoozeModal(false)}
+  1345→          >
+  1346→            <motion.div
+  1347→              initial={{ scale: 0.95, opacity: 0 }}
+  1348→              animate={{ scale: 1, opacity: 1 }}
+  1349→              exit={{ scale: 0.95, opacity: 0 }}
+  1350→              transition={{ duration: 0.15 }}
+  1351→              className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+  1352→              onClick={(e) => e.stopPropagation()}
+  1353→            >
+  1354→              <div className="grid grid-cols-2 gap-2.5">
+  1355→                <button
+  1356→                  type="button"
+  1357→                  onClick={() => handleSnooze(getLaterToday())}
+  1358→                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1359→                >
+  1360→                  <Sunset className="w-5 h-5 text-[#FBBC05]" />
+  1361→                  <div className="text-center">
+  1362→                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Later today</p>
+  1363→                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getLaterToday(), 'd MMM, h:mm a')}</p>
+  1364→                  </div>
+  1365→                </button>
+  1366→                <button
+  1367→                  type="button"
+  1368→                  onClick={() => handleSnooze(getTomorrow())}
+  1369→                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1370→                >
+  1371→                  <Sun className="w-5 h-5 text-[#FBBC05]" />
+  1372→                  <div className="text-center">
+  1373→                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow</p>
+  1374→                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrow(), 'd MMM, h:mm a')}</p>
+  1375→                  </div>
+  1376→                </button>
+  1377→                <button
+  1378→                  type="button"
+  1379→                  onClick={() => handleSnooze(getLaterThisWeek())}
+  1380→                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1381→                >
+  1382→                  <Briefcase className="w-5 h-5 text-[#FBBC05]" />
+  1383→                  <div className="text-center">
+  1384→                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Later this week</p>
+  1385→                    <p className="text-[11px] text-gray-400 mt-0.5">{format(getLaterThisWeek(), 'd MMM, h:mm a')}</p>
+  1386→                  </div>
+  1387→                </button>
+  1388→                <button
+  1389→                  type="button"
+  1390→                  onClick={() => setShowCustomSnooze(true)}
+  1391→                  className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1392→                >
+  1393→                  <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
+  1394→                  <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
+  1395→                </button>
+  1396→              </div>
+  1397→              <p className="text-center text-[11px] text-gray-400 mt-3">
+  1398→                All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
+  1399→              </p>
+  1400→            </motion.div>
+  1401→          </motion.div>
+  1402→        )}
+  1403→      </AnimatePresence>
+  1404→
+  1405→      {/* Snooze Custom date/time picker modal */}
+  1406→      <AnimatePresence>
+  1407→        {showSnoozeModal && showCustomSnooze && (
+  1408→          <motion.div
+  1409→            initial={{ opacity: 0 }}
+  1410→            animate={{ opacity: 1 }}
+  1411→            exit={{ opacity: 0 }}
+  1412→            transition={{ duration: 0.15 }}
+  1413→            className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+  1414→            onClick={() => { setShowCustomSnooze(false); setShowSnoozeModal(false) }}
+  1415→          >
+  1416→            <motion.div
+  1417→              initial={{ scale: 0.95, opacity: 0 }}
+  1418→              animate={{ scale: 1, opacity: 1 }}
+  1419→              exit={{ scale: 0.95, opacity: 0 }}
+  1420→              transition={{ duration: 0.15 }}
+  1421→              className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+  1422→              onClick={(e) => e.stopPropagation()}
+  1423→            >
+  1424→              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
+  1425→              <div className="[&_[data-slot=calendar]]:w-full [&_[data-slot=calendar]]:mx-auto [&_[data-slot=calendar]]:p-1.5" style={{ '--cell-size': '1.6rem' } as React.CSSProperties}>
+  1426→                <Calendar
+  1427→                  mode="single"
+  1428→                  selected={snoozeDate}
+  1429→                  onSelect={setSnoozeDate}
+  1430→                  disabled={{ before: new Date() }}
+  1431→                  classNames={{
+  1432→                    root: 'w-full',
+  1433→                    table: 'w-full border-collapse',
+  1434→                    weekday: 'text-[10px] flex-1',
+  1435→                    day: 'flex-1 p-0 aspect-square',
+  1436→                    today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md data-[selected=true]:rounded-none',
+  1437→                  }}
+  1438→                  modifiersClassNames={{
+  1439→                    selected: 'bg-[#4285F4] text-white rounded-md',
+  1440→                    today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+  1441→                  }}
+  1442→                />
+  1443→              </div>
+  1444→              <div className="flex items-center gap-1.5 mt-3">
+  1445→                <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
+  1446→                <input
+  1447→                  type="text"
+  1448→                  inputMode="numeric"
+  1449→                  maxLength={2}
+  1450→                  value={snoozeHour}
+  1451→                  onChange={(e) => setSnoozeHour(e.target.value.replace(/[^1-9]/g, '').slice(0, 2))}
+  1452→                  placeholder="9"
+  1453→                  className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+  1454→                />
+  1455→                <span className="text-sm text-gray-400">:</span>
+  1456→                <input
+  1457→                  type="text"
+  1458→                  inputMode="numeric"
+  1459→                  maxLength={2}
+  1460→                  value={snoozeMinute}
+  1461→                  onChange={(e) => setSnoozeMinute(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+  1462→                  placeholder="00"
+  1463→                  className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+  1464→                />
+  1465→                <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+  1466→                  <button
+  1467→                    type="button"
+  1468→                    onClick={() => setSnoozeAmPm('AM')}
+  1469→                    className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${snoozeAmPm === 'AM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+  1470→                  >AM</button>
+  1471→                  <button
+  1472→                    type="button"
+  1473→                    onClick={() => setSnoozeAmPm('PM')}
+  1474→                    className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${snoozeAmPm === 'PM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+  1475→                  >PM</button>
+  1476→                </div>
+  1477→              </div>
+  1478→              <div className="flex justify-end gap-2 mt-4">
+  1479→                <button
+  1480→                  type="button"
+  1481→                  onClick={() => { setShowCustomSnooze(false); setShowSnoozeModal(false) }}
+  1482→                  className="h-8 px-3 text-xs font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+  1483→                >Cancel</button>
+  1484→                <button
+  1485→                  type="button"
+  1486→                  onClick={handleCustomSnooze}
+  1487→                  disabled={!snoozeDate}
+  1488→                  className="h-8 px-3 text-xs font-medium rounded-lg bg-[#4285F4] hover:bg-[#1a73e8] text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+  1489→                >
+  1490→                  <Check className="w-3 h-3 inline mr-1 -mt-0.5" />
+  1491→                  Snooze
+  1492→                </button>
+  1493→              </div>
+  1494→            </motion.div>
+  1495→          </motion.div>
+  1496→        )}
+  1497→      </AnimatePresence>
+  1498→    </div>
+  1499→  )
+  1500→}
+  1501→

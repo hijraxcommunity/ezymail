@@ -1,0 +1,1037 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useRef } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Building2, Phone, Globe, Briefcase } from 'lucide-react'
+     6→import { useForm } from 'react-hook-form'
+     7→import { zodResolver } from '@hookform/resolvers/zod'
+     8→import { z } from 'zod'
+     9→import { toast } from 'sonner'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Input } from '@/components/ui/input'
+    12→import { Checkbox } from '@/components/ui/checkbox'
+    13→import { useAppStore } from '@/store/use-app-store'
+    14→
+    15→const MONTHS = [
+    16→  'January', 'February', 'March', 'April', 'May', 'June',
+    17→  'July', 'August', 'September', 'October', 'November', 'December'
+    18→]
+    19→
+    20→function generateDays(month: number, year: number) {
+    21→  if (!month || !year) return Array.from({ length: 31 }, (_, i) => i + 1)
+    22→  const daysInMonth = new Date(year, month, 0).getDate()
+    23→  return Array.from({ length: daysInMonth }, (_, i) => i + 1)
+    24→}
+    25→
+    26→function generateYears() {
+    27→  const currentYear = new Date().getFullYear()
+    28→  return Array.from({ length: 100 }, (_, i) => currentYear - 13 - i)
+    29→}
+    30→
+    31→function getPasswordStrength(password: string) {
+    32→  if (!password) return { score: 0, label: '', color: '' }
+    33→  let score = 0
+    34→  if (password.length >= 8) score++
+    35→  if (/[a-z]/.test(password)) score++
+    36→  if (/[A-Z]/.test(password)) score++
+    37→  if (/[0-9]/.test(password)) score++
+    38→  if (/[^a-zA-Z0-9]/.test(password)) score++
+    39→  if (score <= 2) return { score, label: 'Weak', color: 'bg-red-500' }
+    40→  if (score <= 3) return { score, label: 'Medium', color: 'bg-amber-500' }
+    41→  return { score, label: 'Strong', color: 'bg-emerald-500' }
+    42→}
+    43→
+    44→const nameSchema = z.object({
+    45→  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+    46→  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+    47→})
+    48→
+    49→const passwordSchema = z.object({
+    50→  password: z.string()
+    51→    .min(8, 'Password must be at least 8 characters')
+    52→    .regex(/[A-Z]/, 'Must contain an uppercase letter')
+    53→    .regex(/[a-z]/, 'Must contain a lowercase letter')
+    54→    .regex(/[0-9]/, 'Must contain a number'),
+    55→  confirmPassword: z.string(),
+    56→}).refine(data => data.password === data.confirmPassword, {
+    57→  message: 'Passwords do not match',
+    58→  path: ['confirmPassword'],
+    59→})
+    60→
+    61→type NameValues = z.infer<typeof nameSchema>
+    62→type PasswordValues = z.infer<typeof passwordSchema>
+    63→
+    64→const STEPS = [
+    65→  { id: 1, label: 'Name', icon: User },
+    66→  { id: 2, label: 'Birthday', icon: Calendar },
+    67→  { id: 3, label: 'Password', icon: Lock },
+    68→  { id: 4, label: 'Review', icon: Shield },
+    69→]
+    70→
+    71→const BUSINESS_STEPS = [
+    72→  { id: 1, label: 'Business', icon: Building2 },
+    73→  { id: 2, label: 'Contact', icon: Phone },
+    74→  { id: 3, label: 'Password', icon: Lock },
+    75→  { id: 4, label: 'Review', icon: Shield },
+    76→]
+    77→
+    78→// ─── Illustration Side ────────────────────────────────────────────────────
+    79→
+    80→function IllustrationSide() {
+    81→  return (
+    82→    <div
+    83→      className="hidden md:flex md:w-1/2 relative overflow-hidden flex-col items-center justify-center"
+    84→      style={{ background: 'linear-gradient(160deg, #5493EA 0%, #3C92B4 25%, #3A979F 50%, #37A175 75%, #40AA6B 100%)' }}
+    85→    >
+    86→      {/* Decorative blue curved wave shapes */}
+    87→      <svg className="absolute top-[12%] left-[-5%] opacity-30" width="500" height="300" viewBox="0 0 500 300">
+    88→        <path d="M0 150 Q125 50 250 120 Q375 190 500 100 L500 300 L0 300 Z" fill="#6DB9FD" />
+    89→      </svg>
+    90→      <svg className="absolute top-[20%] left-[-5%] opacity-20" width="500" height="300" viewBox="0 0 500 300">
+    91→        <path d="M0 180 Q150 80 300 150 Q400 200 500 130 L500 300 L0 300 Z" fill="white" />
+    92→      </svg>
+    93→
+    94→      {/* Shield + checkmark illustration */}
+    95→      <div className="relative z-10 mb-10">
+    96→        <div className="w-36 h-36 rounded-full bg-white/15 flex items-center justify-center">
+    97→          <svg className="w-20 h-20 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
+    98→            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+    99→            <path d="m9 12 2 2 4-4" />
+   100→          </svg>
+   101→        </div>
+   102→      </div>
+   103→
+   104→      <div className="relative z-10 text-center max-w-xs">
+   105→        <h2 className="text-3xl font-bold text-white mb-3 leading-tight">
+   106→          Create your account
+   107→        </h2>
+   108→        <p className="text-[15px] text-white/80 leading-relaxed">
+   109→          Get your free @ezy.af email address in seconds.
+   110→        </p>
+   111→      </div>
+   112→
+   113→      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3">
+   114→        <div className="w-2 h-2 rounded-full bg-white/40" />
+   115→        <div className="w-2 h-2 rounded-full bg-white/25" />
+   116→        <div className="w-2 h-2 rounded-full bg-white/50" />
+   117→      </div>
+   118→    </div>
+   119→  )
+   120→}
+   121→
+   122→// ─── Register Form Component ───────────────────────────────────────────────
+   123→
+   124→export function RegisterForm() {
+   125→  const { setUser, setAuthView } = useAppStore()
+   126→  const [step, setStep] = useState(1)
+   127→  const [isLoading, setIsLoading] = useState(false)
+   128→  const [showPassword, setShowPassword] = useState(false)
+   129→  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+   130→  const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
+   131→
+   132→  // Business fields
+   133→  const [businessName, setBusinessName] = useState('')
+   134→  const [businessIndustry, setBusinessIndustry] = useState('')
+   135→  const [businessPhone, setBusinessPhone] = useState('')
+   136→  const [businessWebsite, setBusinessWebsite] = useState('')
+   137→  const [businessEmailUsername, setBusinessEmailUsername] = useState('')
+   138→  const [businessEmailStatus, setBusinessEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+   139→
+   140→  // Step 1: Name
+   141→  const [firstName, setFirstName] = useState('')
+   142→  const [lastName, setLastName] = useState('')
+   143→
+   144→  // Step 2: Birthday
+   145→  const [month, setMonth] = useState(0)
+   146→  const [day, setDay] = useState(0)
+   147→  const [year, setYear] = useState(0)
+   148→
+   149→  // Email: user-chosen username part (before @ezy.af)
+   150→  const [emailUsername, setEmailUsername] = useState('')
+   151→  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+   152→
+   153→  // Step 3: Password
+   154→  const [agreedToTerms, setAgreedToTerms] = useState(false)
+   155→
+   156→  // Forms (must be called before .watch())
+   157→  const nameForm = useForm<NameValues>({
+   158→    resolver: zodResolver(nameSchema),
+   159→    defaultValues: { firstName: '', lastName: '' },
+   160→  })
+   161→  const passwordForm = useForm<PasswordValues>({
+   162→    resolver: zodResolver(passwordSchema),
+   163→    defaultValues: { password: '', confirmPassword: '' },
+   164→  })
+   165→  const passwordValue = passwordForm.watch('password')
+   166→  const passwordStrength = getPasswordStrength(passwordValue || '')
+   167→
+   168→  // Build the full email from username + @ezy.af
+   169→  const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
+   170→  const businessFullEmail = businessEmailUsername.trim() ? `${businessEmailUsername.trim().toLowerCase()}@ezy.af` : ''
+   171→
+   172→  // Validate username (letters, numbers, dots, underscores, hyphens)
+   173→  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
+   174→  const isBusinessValidUsername = /^[a-zA-Z0-9._-]+$/.test(businessEmailUsername.trim()) && businessEmailUsername.trim().length > 0
+   175→
+   176→  // Check availability (debounced)
+   177→  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   178→  useEffect(() => {
+   179→    if (!fullEmail || !isValidUsername) {
+   180→      setEmailStatus('idle')
+   181→      return
+   182→    }
+   183→    setEmailStatus('checking')
+   184→    if (checkTimerRef.current) clearTimeout(checkTimerRef.current)
+   185→    checkTimerRef.current = setTimeout(async () => {
+   186→      try {
+   187→        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(fullEmail)}`)
+   188→        const data = await res.json()
+   189→        setEmailStatus(data.available ? 'available' : 'taken')
+   190→      } catch {
+   191→        setEmailStatus('idle')
+   192→      }
+   193→    }, 600)
+   194→    return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
+   195→  }, [fullEmail, isValidUsername])
+   196→
+   197→  // Check business email availability
+   198→  const businessCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   199→  useEffect(() => {
+   200→    if (!businessFullEmail || !isBusinessValidUsername) {
+   201→      setBusinessEmailStatus('idle')
+   202→      return
+   203→    }
+   204→    setBusinessEmailStatus('checking')
+   205→    if (businessCheckTimerRef.current) clearTimeout(businessCheckTimerRef.current)
+   206→    businessCheckTimerRef.current = setTimeout(async () => {
+   207→      try {
+   208→        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(businessFullEmail)}`)
+   209→        const data = await res.json()
+   210→        setBusinessEmailStatus(data.available ? 'available' : 'taken')
+   211→      } catch {
+   212→        setBusinessEmailStatus('idle')
+   213→      }
+   214→    }, 600)
+   215→    return () => { if (businessCheckTimerRef.current) clearTimeout(businessCheckTimerRef.current) }
+   216→  }, [businessFullEmail, isBusinessValidUsername])
+   217→
+   218→  const handleNameNext = () => {
+   219→    const fn = nameForm.getValues('firstName')
+   220→    const ln = nameForm.getValues('lastName')
+   221→    if (fn.length < 2 || ln.length < 2) {
+   222→      toast.error('Please enter your first and last name (min 2 chars each)')
+   223→      return
+   224→    }
+   225→    if (!fullEmail || !isValidUsername) {
+   226→      toast.error('Please enter a valid email username')
+   227→      return
+   228→    }
+   229→    if (emailStatus === 'taken') {
+   230→      toast.error('Your chosen email is taken. Please pick another one')
+   231→      return
+   232→    }
+   233→    setFirstName(fn)
+   234→    setLastName(ln)
+   235→    setStep(2)
+   236→  }
+   237→
+   238→  const handleDobNext = () => {
+   239→    if (!month || !day || !year) {
+   240→      toast.error('Please fill in your complete date of birth')
+   241→      return
+   242→    }
+   243→    const dob = new Date(year, month - 1, day)
+   244→    const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+   245→    if (age < 13) {
+   246→      toast.error('You must be at least 13 years old')
+   247→      return
+   248→    }
+   249→    setStep(3)
+   250→  }
+   251→
+   252→  const handlePasswordNext = () => {
+   253→    passwordForm.trigger().then(valid => {
+   254→      if (valid) setStep(4)
+   255→    })
+   256→  }
+   257→
+   258→  const handleBusinessInfoNext = () => {
+   259→    if (!businessName.trim()) {
+   260→      toast.error('Please enter your business name')
+   261→      return
+   262→    }
+   263→    setStep(2)
+   264→  }
+   265→
+   266→  const handleBusinessContactNext = () => {
+   267→    if (!businessFullEmail || !isBusinessValidUsername) {
+   268→      toast.error('Please enter a valid business email username')
+   269→      return
+   270→    }
+   271→    if (businessEmailStatus === 'taken') {
+   272→      toast.error('This email is already taken. Please choose another')
+   273→      return
+   274→    }
+   275→    setStep(3)
+   276→  }
+   277→
+   278→  const handleRegister = async () => {
+   279→    if (!agreedToTerms) {
+   280→      toast.error('You must agree to the terms and conditions')
+   281→      return
+   282→    }
+   283→    if (activeTab === 'personal') {
+   284→      if (!fullEmail || emailStatus === 'taken') {
+   285→        toast.error('Please choose an available email address')
+   286→        return
+   287→      }
+   288→    } else {
+   289→      if (!businessFullEmail || businessEmailStatus === 'taken') {
+   290→        toast.error('Please choose an available email address')
+   291→        return
+   292→      }
+   293→    }
+   294→    setIsLoading(true)
+   295→    try {
+   296→      const body = activeTab === 'personal'
+   297→        ? {
+   298→            firstName,
+   299→            lastName,
+   300→            dateOfBirth: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+   301→            email: fullEmail,
+   302→            password: passwordForm.getValues('password'),
+   303→          }
+   304→        : {
+   305→            firstName: businessName,
+   306→            lastName: '',
+   307→            dateOfBirth: '2000-01-01',
+   308→            email: businessFullEmail,
+   309→            password: passwordForm.getValues('password'),
+   310→            accountType: 'business',
+   311→            businessName,
+   312→            businessIndustry,
+   313→            businessPhone,
+   314→            businessWebsite,
+   315→          }
+   316→      const res = await fetch('/api/auth/register', {
+   317→        method: 'POST',
+   318→        headers: { 'Content-Type': 'application/json' },
+   319→        body: JSON.stringify(body),
+   320→      })
+   321→      const result = await res.json()
+   322→      if (!res.ok) {
+   323→        toast.error(result.error || 'Registration failed')
+   324→        return
+   325→      }
+   326→      toast.success('Account created successfully!')
+   327→      setUser(result.user)
+   328→    } catch {
+   329→      toast.error('Something went wrong. Please try again.')
+   330→    } finally {
+   331→      setIsLoading(false)
+   332→    }
+   333→  }
+   334→
+   335→  return (
+   336→    <div className="min-h-screen flex bg-[#F0F0F0]">
+   337→      {/* Left: Illustration */}
+   338→      <IllustrationSide />
+   339→
+   340→      {/* Right: Register form */}
+   341→      <div className="flex-1 md:w-1/2 flex flex-col min-h-screen md:min-h-0 justify-center items-center px-6 py-10 bg-white">
+   342→        <motion.div
+   343→          initial={{ opacity: 0, x: 20 }}
+   344→          animate={{ opacity: 1, x: 0 }}
+   345→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   346→          className="w-full max-w-[420px] flex-1 flex flex-col justify-center"
+   347→        >
+   348→          {/* Logo */}
+   349→          <div className="flex items-center gap-2 mb-4">
+   350→            <img src="/favicon-32.png" alt="EzyMail" className="w-9 h-9 rounded-lg" />
+   351→            <span className="text-xl font-bold text-[#1F1F1F]">
+   352→              <span className="text-[#4285F4]">Ezy</span>
+   353→              <span className="text-[#34A853]">Mail</span>
+   354→            </span>
+   355→          </div>
+   356→
+   357→          {/* Progress Steps */}
+   358→          <div className="flex items-center justify-between mb-5 px-2 sm:px-4">
+   359→            {(activeTab === 'personal' ? STEPS : BUSINESS_STEPS).map((s, i) => {
+   360→              const StepIcon = s.icon
+   361→              const isActive = step === s.id
+   362→              const isCompleted = step > s.id
+   363→              return (
+   364→                <div key={s.id} className="flex items-center">
+   365→                  <div className="flex flex-col items-center">
+   366→                    <div
+   367→                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+   368→                        isCompleted
+   369→                          ? 'bg-[#34A853] text-white'
+   370→                          : isActive
+   371→                          ? 'bg-[#4285F4] text-white shadow-lg shadow-[#4285F4]/30'
+   372→                          : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+   373→                      }`}
+   374→                    >
+   375→                      {isCompleted ? <Check className="w-4 h-4 sm:w-5 sm:h-5" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+   376→                    </div>
+   377→                    <span className={`text-[10px] sm:text-xs mt-1 font-medium ${
+   378→                      isActive ? 'text-[#4285F4]' : isCompleted ? 'text-[#34A853]' : 'text-gray-400'
+   379→                    }`}>
+   380→                      {s.label}
+   381→                    </span>
+   382→                  </div>
+   383→                  {i < STEPS.length - 1 && (
+   384→                    <div className={`w-6 sm:w-12 h-0.5 mx-1 sm:mx-2 transition-all duration-300 ${
+   385→                      step > s.id ? 'bg-[#34A853]' : 'bg-gray-200 dark:bg-gray-700'
+   386→                    }`} />
+   387→                  )}
+   388→                </div>
+   389→              )
+   390→            })}
+   391→          </div>
+   392→
+   393→          {/* Step Content */}
+   394→          <AnimatePresence mode="wait">
+   395→            {activeTab === 'business' ? (
+   396→              <>
+   397→                {/* BUSINESS STEP 1: Business Info */}
+   398→                {step === 1 && (
+   399→                  <motion.div
+   400→                    key="bstep1"
+   401→                    initial={{ opacity: 0, x: 20 }}
+   402→                    animate={{ opacity: 1, x: 0 }}
+   403→                    exit={{ opacity: 0, x: -20 }}
+   404→                    transition={{ duration: 0.25 }}
+   405→                  >
+   406→                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
+   407→                      Tell us about your business
+   408→                    </h2>
+   409→                    <p className="text-sm text-[#444746] mb-5">
+   410→                      Enter your company details to get started
+   411→                    </p>
+   412→                    <div className="space-y-4">
+   413→                      <div className="space-y-1.5">
+   414→                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+   415→                          <Building2 className="w-3.5 h-3.5 inline mr-1" />
+   416→                          Business name <span className="text-[#EA4335]">*</span>
+   417→                        </label>
+   418→                        <input
+   419→                          type="text"
+   420→                          placeholder="e.g. EzyTech Solutions"
+   421→                          value={businessName}
+   422→                          onChange={(e) => setBusinessName(e.target.value)}
+   423→                          autoFocus
+   424→                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+   425→                        />
+   426→                      </div>
+   427→                      <div className="space-y-1.5">
+   428→                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+   429→                          <Briefcase className="w-3.5 h-3.5 inline mr-1" />
+   430→                          Industry
+   431→                        </label>
+   432→                        <select
+   433→                          value={businessIndustry}
+   434→                          onChange={(e) => setBusinessIndustry(e.target.value)}
+   435→                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+   436→                        >
+   437→                          <option value="">Select your industry</option>
+   438→                          <option value="technology">Technology & IT</option>
+   439→                          <option value="finance">Finance & Banking</option>
+   440→                          <option value="healthcare">Healthcare & Medical</option>
+   441→                          <option value="education">Education</option>
+   442→                          <option value="retail">Retail & E-commerce</option>
+   443→                          <option value="manufacturing">Manufacturing</option>
+   444→                          <option value="marketing">Marketing & Advertising</option>
+   445→                          <option value="consulting">Consulting</option>
+   446→                          <option value="food">Food & Restaurant</option>
+   447→                          <option value="transport">Transport & Logistics</option>
+   448→                          <option value="real-estate">Real Estate</option>
+   449→                          <option value="other">Other</option>
+   450→                        </select>
+   451→                      </div>
+   452→                      <div className="space-y-1.5">
+   453→                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+   454→                          <Globe className="w-3.5 h-3.5 inline mr-1" />
+   455→                          Website
+   456→                        </label>
+   457→                        <input
+   458→                          type="text"
+   459→                          placeholder="https://yourcompany.com (optional)"
+   460→                          value={businessWebsite}
+   461→                          onChange={(e) => setBusinessWebsite(e.target.value)}
+   462→                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+   463→                        />
+   464→                      </div>
+   465→                    </div>
+   466→                  </motion.div>
+   467→                )}
+   468→
+   469→                {/* BUSINESS STEP 2: Contact Info + Email */}
+   470→                {step === 2 && (
+   471→                  <motion.div
+   472→                    key="bstep2"
+   473→                    initial={{ opacity: 0, x: 20 }}
+   474→                    animate={{ opacity: 1, x: 0 }}
+   475→                    exit={{ opacity: 0, x: -20 }}
+   476→                    transition={{ duration: 0.25 }}
+   477→                  >
+   478→                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
+   479→                      Business contact details
+   480→                    </h2>
+   481→                    <p className="text-sm text-[#444746] mb-5">
+   482→                      How can we reach your business?
+   483→                    </p>
+   484→                    <div className="space-y-4">
+   485→                      <div className="space-y-1.5">
+   486→                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+   487→                          <Phone className="w-3.5 h-3.5 inline mr-1" />
+   488→                          Business phone number
+   489→                        </label>
+   490→                        <input
+   491→                          type="tel"
+   492→                          placeholder="+93 7XX XXX XXX"
+   493→                          value={businessPhone}
+   494→                          onChange={(e) => setBusinessPhone(e.target.value)}
+   495→                          autoFocus
+   496→                          className="w-full h-11 px-4 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+   497→                        />
+   498→                      </div>
+   499→                      <div className="space-y-1.5">
+   500→                        <label className="text-[13px] font-medium text-[#1F1F1F]">
+   501→                          <Mail className="w-3.5 h-3.5 inline mr-1" />
+   502→                          Business email address <span className="text-[#EA4335]">*</span>
+   503→                        </label>
+   504→                        <div className="relative">
+   505→                          <input
+   506→                            type="text"
+   507→                            placeholder="yourbusiness"
+   508→                            value={businessEmailUsername}
+   509→                            onChange={(e) => { setBusinessEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setBusinessEmailStatus('idle') }}
+   510→                            className="w-full h-11 px-4 pr-20 rounded-lg border border-[#DADCE0] bg-[#F1F3F4] text-sm text-[#1F1F1F] placeholder:text-[#9AA0A6] focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white focus:outline-none transition-colors"
+   511→                          />
+   512→                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
+   513→                            @ezy.af
+   514→                          </span>
+   515→                        </div>
+   516→                        {businessFullEmail && isBusinessValidUsername && (
+   517→                          <div className="flex items-center gap-1.5 mt-1">
+   518→                            {businessEmailStatus === 'checking' && (
+   519→                              <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+   520→                            )}
+   521→                            {businessEmailStatus === 'available' && (
+   522→                              <>
+   523→                                <Check className="w-3.5 h-3.5 text-emerald-500" />
+   524→                                <span className="text-xs text-emerald-500 font-medium">{businessFullEmail} is available</span>
+   525→                              </>
+   526→                            )}
+   527→                            {businessEmailStatus === 'taken' && (
+   528→                              <>
+   529→                                <X className="w-3.5 h-3.5 text-red-500" />
+   530→                                <span className="text-xs text-red-500 font-medium">{businessFullEmail} is taken</span>
+   531→                              </>
+   532→                            )}
+   533→                          </div>
+   534→                        )}
+   535→                        <p className="text-[12px] text-[#5F6368] mt-1.5">
+   536→                          This will be your primary business email address
+   537→                        </p>
+   538→                      </div>
+   539→                    </div>
+   540→                  </motion.div>
+   541→                )}
+   542→
+   543→                {/* BUSINESS STEP 3 & 4: Same password and review — reuse existing steps */}
+   544→                {step === 3 && (
+   545→                  <motion.div
+   546→                    key="bstep3"
+   547→                    initial={{ opacity: 0, x: 20 }}
+   548→                    animate={{ opacity: 1, x: 0 }}
+   549→                    exit={{ opacity: 0, x: -20 }}
+   550→                    transition={{ duration: 0.25 }}
+   551→                  >
+   552→                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
+   553→                      Create a password
+   554→                    </h2>
+   555→                    <p className="text-sm text-[#444746] mb-5">
+   556→                      Use 8+ characters with uppercase, lowercase & numbers
+   557→                    </p>
+   558→                    <div className="space-y-4">
+   559→                      <div className="space-y-2">
+   560→                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
+   561→                        <div className="relative">
+   562→                          <Input
+   563→                            {...passwordForm.register('password')}
+   564→                            type={showPassword ? 'text' : 'password'}
+   565→                            placeholder="Create a strong password"
+   566→                            className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   567→                            autoFocus
+   568→                          />
+   569→                          <button
+   570→                            type="button"
+   571→                            onClick={() => setShowPassword(!showPassword)}
+   572→                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   573→                          >
+   574→                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   575→                          </button>
+   576→                        </div>
+   577→                        {passwordForm.formState.errors.password && (
+   578→                          <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
+   579→                        )}
+   580→                        {passwordValue && (
+   581→                          <div className="space-y-1">
+   582→                            <div className="flex gap-1">
+   583→                              {[1, 2, 3, 4, 5].map(i => (
+   584→                                <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+   585→                                  i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+   586→                                }`} />
+   587→                              ))}
+   588→                            </div>
+   589→                            <p className={`text-xs font-medium ${
+   590→                              passwordStrength.label === 'Weak' ? 'text-red-500' :
+   591→                              passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
+   592→                            }`}>{passwordStrength.label}</p>
+   593→                          </div>
+   594→                        )}
+   595→                      </div>
+   596→                      <div className="space-y-2">
+   597→                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
+   598→                        <div className="relative">
+   599→                          <Input
+   600→                            {...passwordForm.register('confirmPassword')}
+   601→                            type={showConfirmPassword ? 'text' : 'password'}
+   602→                            placeholder="Confirm your password"
+   603→                            className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#34A853] focus:ring-[#34A853]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   604→                          />
+   605→                          <button
+   606→                            type="button"
+   607→                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+   608→                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   609→                          >
+   610→                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   611→                          </button>
+   612→                        </div>
+   613→                        {passwordForm.formState.errors.confirmPassword && (
+   614→                          <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
+   615→                        )}
+   616→                      </div>
+   617→                    </div>
+   618→                  </motion.div>
+   619→                )}
+   620→                {step === 4 && (
+   621→                  <motion.div
+   622→                    key="bstep4"
+   623→                    initial={{ opacity: 0, x: 20 }}
+   624→                    animate={{ opacity: 1, x: 0 }}
+   625→                    exit={{ opacity: 0, x: -20 }}
+   626→                    transition={{ duration: 0.25 }}
+   627→                  >
+   628→                    <h2 className="text-lg font-semibold text-[#1F1F1F] mb-1">
+   629→                      Review your business account
+   630→                    </h2>
+   631→                    <p className="text-sm text-[#444746] mb-5">
+   632→                      Double check before creating your account
+   633→                    </p>
+   634→                    <div className="space-y-4 mb-6">
+   635→                      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
+   636→                        <div className="flex justify-between items-center">
+   637→                          <span className="text-sm text-gray-500">Business name</span>
+   638→                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{businessName}</span>
+   639→                        </div>
+   640→                        {businessIndustry && (
+   641→                          <div className="flex justify-between items-center">
+   642→                            <span className="text-sm text-gray-500">Industry</span>
+   643→                            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white capitalize">{businessIndustry.replace('-', ' ')}</span>
+   644→                          </div>
+   645→                        )}
+   646→                        {businessPhone && (
+   647→                          <div className="flex justify-between items-center">
+   648→                            <span className="text-sm text-gray-500">Phone</span>
+   649→                            <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{businessPhone}</span>
+   650→                          </div>
+   651→                        )}
+   652→                        <div className="flex justify-between items-center">
+   653→                          <span className="text-sm text-gray-500">Email</span>
+   654→                          <span className={`text-sm font-medium ${businessFullEmail && isBusinessValidUsername && businessEmailStatus !== 'taken' ? 'text-[#34A853]' : 'text-red-500'}`}>
+   655→                            {businessFullEmail || 'Not set'}
+   656→                          </span>
+   657→                        </div>
+   658→                        {businessWebsite && (
+   659→                          <div className="flex justify-between items-center">
+   660→                            <span className="text-sm text-gray-500">Website</span>
+   661→                            <span className="text-sm font-medium text-[#4285F4] break-all">{businessWebsite}</span>
+   662→                          </div>
+   663→                        )}
+   664→                      </div>
+   665→                      <div className="flex items-start gap-2">
+   666→                        <Checkbox
+   667→                          id="terms"
+   668→                          checked={agreedToTerms}
+   669→                          onCheckedChange={(c) => setAgreedToTerms(c === true)}
+   670→                          className="data-[state=checked]:bg-[#34A853] data-[state=checked]:border-[#34A853] mt-0.5"
+   671→                        />
+   672→                        <label htmlFor="terms" className="text-sm text-[#444746] cursor-pointer leading-relaxed">
+   673→                          I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
+   674→                        </label>
+   675→                      </div>
+   676→                    </div>
+   677→                  </motion.div>
+   678→                )}
+   679→              </>
+   680→            ) : (
+   681→              <>
+   682→            {/* STEP 1: Name + Email */}
+   683→            {step === 1 && (
+   684→              <motion.div
+   685→                key="step1"
+   686→                initial={{ opacity: 0, x: 20 }}
+   687→                animate={{ opacity: 1, x: 0 }}
+   688→                exit={{ opacity: 0, x: -20 }}
+   689→                transition={{ duration: 0.25 }}
+   690→              >
+   691→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   692→                  What&apos;s your name?
+   693→                </h2>
+   694→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   695→                  Choose your name and pick your email address
+   696→                </p>
+   697→                <div className="space-y-4">
+   698→                  <div className="space-y-2">
+   699→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
+   700→                    <Input
+   701→                      {...nameForm.register('firstName')}
+   702→                      placeholder="John"
+   703→                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   704→                      autoFocus
+   705→                    />
+   706→                    {nameForm.formState.errors.firstName && (
+   707→                      <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
+   708→                    )}
+   709→                  </div>
+   710→                  <div className="space-y-2">
+   711→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
+   712→                    <Input
+   713→                      {...nameForm.register('lastName')}
+   714→                      placeholder="Doe"
+   715→                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   716→                    />
+   717→                    {nameForm.formState.errors.lastName && (
+   718→                      <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
+   719→                    )}
+   720→                  </div>
+   721→
+   722→                  {/* EMAIL CHOOSER */}
+   723→                  <div className="space-y-2">
+   724→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+   725→                      <Mail className="w-3.5 h-3.5 inline mr-1" />
+   726→                      Email address
+   727→                    </label>
+   728→                    <div className="relative">
+   729→                      <Input
+   730→                        value={emailUsername}
+   731→                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
+   732→                        placeholder="yourname"
+   733→                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   734→                      />
+   735→                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
+   736→                        @ezy.af
+   737→                      </span>
+   738→                    </div>
+   739→                    {/* Status indicator */}
+   740→                    {fullEmail && isValidUsername && (
+   741→                      <div className="flex items-center gap-1.5">
+   742→                        {emailStatus === 'checking' && (
+   743→                          <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+   744→                        )}
+   745→                        {emailStatus === 'available' && (
+   746→                          <>
+   747→                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+   748→                            <span className="text-xs text-emerald-500 font-medium">{fullEmail} is available</span>
+   749→                          </>
+   750→                        )}
+   751→                        {emailStatus === 'taken' && (
+   752→                          <>
+   753→                            <X className="w-3.5 h-3.5 text-red-500" />
+   754→                            <span className="text-xs text-red-500 font-medium">{fullEmail} is taken</span>
+   755→                          </>
+   756→                        )}
+   757→                      </div>
+   758→                    )}
+   759→                  </div>
+   760→                </div>
+   761→              </motion.div>
+   762→            )}
+   763→
+   764→            {/* STEP 2: Birthday */}
+   765→            {step === 2 && (
+   766→              <motion.div
+   767→                key="step2"
+   768→                initial={{ opacity: 0, x: 20 }}
+   769→                animate={{ opacity: 1, x: 0 }}
+   770→                exit={{ opacity: 0, x: -20 }}
+   771→                transition={{ duration: 0.25 }}
+   772→              >
+   773→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   774→                  When&apos;s your birthday?
+   775→                </h2>
+   776→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   777→                  You must be 13 or older to use EzyMail
+   778→                </p>
+   779→                <div className="space-y-4">
+   780→                  <div className="space-y-2">
+   781→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
+   782→                    <select
+   783→                      value={month}
+   784→                      onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
+   785→                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   786→                    >
+   787→                      <option value={0}>Select month</option>
+   788→                      {MONTHS.map((m, i) => (
+   789→                        <option key={m} value={i + 1}>{m}</option>
+   790→                      ))}
+   791→                    </select>
+   792→                  </div>
+   793→                  <div className="grid grid-cols-2 gap-4">
+   794→                    <div className="space-y-2">
+   795→                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
+   796→                      <select
+   797→                        value={day}
+   798→                        onChange={(e) => setDay(Number(e.target.value))}
+   799→                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   800→                      >
+   801→                        <option value={0}>Day</option>
+   802→                        {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
+   803→                          <option key={d} value={d}>{d}</option>
+   804→                        ))}
+   805→                      </select>
+   806→                    </div>
+   807→                    <div className="space-y-2">
+   808→                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
+   809→                      <select
+   810→                        value={year}
+   811→                        onChange={(e) => setYear(Number(e.target.value))}
+   812→                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   813→                      >
+   814→                        <option value={0}>Year</option>
+   815→                        {generateYears().map(y => (
+   816→                          <option key={y} value={y}>{y}</option>
+   817→                        ))}
+   818→                      </select>
+   819→                    </div>
+   820→                  </div>
+   821→                </div>
+   822→              </motion.div>
+   823→            )}
+   824→
+   825→            {/* STEP 3: Password */}
+   826→            {step === 3 && (
+   827→              <motion.div
+   828→                key="step3"
+   829→                initial={{ opacity: 0, x: 20 }}
+   830→                animate={{ opacity: 1, x: 0 }}
+   831→                exit={{ opacity: 0, x: -20 }}
+   832→                transition={{ duration: 0.25 }}
+   833→              >
+   834→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   835→                  Create a password
+   836→                </h2>
+   837→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   838→                  Use 8+ characters with uppercase, lowercase & numbers
+   839→                </p>
+   840→                <div className="space-y-4">
+   841→                  <div className="space-y-2">
+   842→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
+   843→                    <div className="relative">
+   844→                      <Input
+   845→                        {...passwordForm.register('password')}
+   846→                        type={showPassword ? 'text' : 'password'}
+   847→                        placeholder="Create a strong password"
+   848→                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   849→                        autoFocus
+   850→                      />
+   851→                      <button
+   852→                        type="button"
+   853→                        onClick={() => setShowPassword(!showPassword)}
+   854→                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   855→                      >
+   856→                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   857→                      </button>
+   858→                    </div>
+   859→                    {passwordForm.formState.errors.password && (
+   860→                      <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
+   861→                    )}
+   862→                    {passwordValue && (
+   863→                      <div className="space-y-1">
+   864→                        <div className="flex gap-1">
+   865→                          {[1, 2, 3, 4, 5].map(i => (
+   866→                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+   867→                              i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+   868→                            }`} />
+   869→                          ))}
+   870→                        </div>
+   871→                        <p className={`text-xs font-medium ${
+   872→                          passwordStrength.label === 'Weak' ? 'text-red-500' :
+   873→                          passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
+   874→                        }`}>{passwordStrength.label}</p>
+   875→                      </div>
+   876→                    )}
+   877→                  </div>
+   878→                  <div className="space-y-2">
+   879→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
+   880→                    <div className="relative">
+   881→                      <Input
+   882→                        {...passwordForm.register('confirmPassword')}
+   883→                        type={showConfirmPassword ? 'text' : 'password'}
+   884→                        placeholder="Confirm your password"
+   885→                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:bg-white dark:focus:bg-gray-800 transition-colors"
+   886→                      />
+   887→                      <button
+   888→                        type="button"
+   889→                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+   890→                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   891→                      >
+   892→                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   893→                      </button>
+   894→                    </div>
+   895→                    {passwordForm.formState.errors.confirmPassword && (
+   896→                      <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
+   897→                    )}
+   898→                  </div>
+   899→                </div>
+   900→              </motion.div>
+   901→            )}
+   902→
+   903→            {/* STEP 4: Review */}
+   904→            {step === 4 && (
+   905→              <motion.div
+   906→                key="step4"
+   907→                initial={{ opacity: 0, x: 20 }}
+   908→                animate={{ opacity: 1, x: 0 }}
+   909→                exit={{ opacity: 0, x: -20 }}
+   910→                transition={{ duration: 0.25 }}
+   911→              >
+   912→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   913→                  Review your info
+   914→                </h2>
+   915→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   916→                  Double check before creating your account
+   917→                </p>
+   918→                <div className="space-y-4 mb-6">
+   919→                  <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
+   920→                    <div className="flex justify-between items-center">
+   921→                      <span className="text-sm text-gray-500">Name</span>
+   922→                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+   923→                        {firstName} {lastName}
+   924→                      </span>
+   925→                    </div>
+   926→                    <div className="flex justify-between items-center">
+   927→                      <span className="text-sm text-gray-500">Email</span>
+   928→                      <span className={`text-sm font-medium ${fullEmail && isValidUsername && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
+   929→                        {fullEmail || 'Not set'}
+   930→                      </span>
+   931→                    </div>
+   932→                    <div className="flex justify-between items-center">
+   933→                      <span className="text-sm text-gray-500">Birthday</span>
+   934→                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+   935→                        {MONTHS[month - 1]} {day}, {year}
+   936→                      </span>
+   937→                    </div>
+   938→                  </div>
+   939→                  <div className="flex items-start gap-2">
+   940→                    <Checkbox
+   941→                      id="terms"
+   942→                      checked={agreedToTerms}
+   943→                      onCheckedChange={(c) => setAgreedToTerms(c === true)}
+   944→                      className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4] mt-0.5"
+   945→                    />
+   946→                    <label htmlFor="terms" className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer leading-relaxed">
+   947→                      I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
+   948→                    </label>
+   949→                  </div>
+   950→                </div>
+   951→              </motion.div>
+   952→            )}
+   953→              </>
+   954→            )}
+   955→          </AnimatePresence>
+   956→
+   957→          {/* Navigation */}
+   958→          <div className="flex gap-3 mt-5">
+   959→            {step > 1 && (
+   960→              <Button type="button" variant="outline" onClick={() => setStep(step - 1)}
+   961→                className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700">
+   962→                <ArrowLeft className="w-4 h-4 mr-1.5" />
+   963→                <span className="hidden sm:inline">Back</span>
+   964→              </Button>
+   965→            )}
+   966→            {step < 4 ? (
+   967→              <Button type="button"
+   968→                onClick={() => {
+   969→                  if (activeTab === 'business') {
+   970→                    if (step === 1) handleBusinessInfoNext(); else if (step === 2) handleBusinessContactNext(); else if (step === 3) handlePasswordNext()
+   971→                  } else {
+   972→                    if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext()
+   973→                  }
+   974→                }}
+   975→                className={`h-11 rounded-xl flex-1 text-white font-medium ${activeTab === 'business' ? 'bg-[#34A853] hover:bg-[#2d9249]' : 'bg-[#4285F4] hover:bg-[#1a73e8]'}`}>
+   976→                Continue
+   977→                <ArrowRight className="w-4 h-4 ml-1.5" />
+   978→              </Button>
+   979→            ) : (
+   980→              <Button type="button" onClick={handleRegister} disabled={isLoading}
+   981→                className={`h-11 rounded-xl flex-1 text-white font-medium ${activeTab === 'business' ? 'bg-[#34A853] hover:bg-[#2d9249]' : 'bg-[#4285F4] hover:bg-[#1a73e8]'}`}>
+   982→                {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Create Account'}
+   983→              </Button>
+   984→            )}
+   985→          </div>
+   986→
+   987→          {/* Back to login */}
+   988→          <div className="text-center mt-5">
+   989→            <button onClick={() => setAuthView('login')}
+   990→              className="text-[13px] text-[#444746] hover:text-[#4285F4] transition-colors">
+   991→              Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
+   992→            </button>
+   993→          </div>
+   994→
+   995→          {/* Copyright */}
+   996→          <p className="text-center text-[11px] text-[#9AA0A6] mt-6">
+   997→            &copy; 2025 EzyMail. All rights reserved.
+   998→          </p>
+   999→        </motion.div>
+  1000→
+  1001→        {/* ── Bottom Tab Bar: Personal / Business ── */}
+  1002→        <div className="border-t border-[#E5E7EB] bg-white">
+  1003→          <div className="flex items-center justify-center gap-1 py-3 px-4">
+  1004→            {/* Personal tab - always visible */}
+  1005→            <button
+  1006→              type="button"
+  1007→              onClick={() => setActiveTab('personal')}
+  1008→              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+  1009→                activeTab === 'personal'
+  1010→                  ? 'bg-[#4285F4] text-white shadow-sm'
+  1011→                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
+  1012→              }`}
+  1013→            >
+  1014→              <User className="w-4 h-4" />
+  1015→              <span>Personal</span>
+  1016→            </button>
+  1017→
+  1018→            {/* Business tab - only visible on md+ screens (desktop/tablet) */}
+  1019→            <button
+  1020→              type="button"
+  1021→              onClick={() => setActiveTab('business')}
+  1022→              className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+  1023→                activeTab === 'business'
+  1024→                  ? 'bg-[#34A853] text-white shadow-sm'
+  1025→                  : 'text-[#5F6368] hover:bg-[#F1F3F4]'
+  1026→              }`}
+  1027→            >
+  1028→              <Building2 className="w-4 h-4" />
+  1029→              <span>Business</span>
+  1030→            </button>
+  1031→          </div>
+  1032→        </div>
+  1033→      </div>
+  1034→    </div>
+  1035→  )
+  1036→}
+  1037→

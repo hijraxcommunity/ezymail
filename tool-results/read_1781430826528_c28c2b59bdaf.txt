@@ -1,0 +1,577 @@
+   124→
+   125→  const fetchCampaigns = useCallback(async () => {
+   126→    try {
+   127→      const res = await fetch('/api/business/campaigns')
+   128→      if (res.ok) {
+   129→        const data = await res.json()
+   130→        setCampaigns(data.campaigns || [])
+   131→      } else {
+   132→        toast.error('Failed to load campaigns')
+   133→      }
+   134→    } catch (err) {
+   135→      console.error('Failed to fetch campaigns:', err)
+   136→      toast.error('Failed to load campaigns')
+   137→    } finally {
+   138→      setLoading(false)
+   139→    }
+   140→  }, [])
+   141→
+   142→  const fetchCustomers = useCallback(async () => {
+   143→    try {
+   144→      const res = await fetch('/api/business/customers')
+   145→      if (res.ok) {
+   146→        const data = await res.json()
+   147→        setCustomers(data.customers || [])
+   148→      }
+   149→    } catch (err) {
+   150→      console.error('Failed to fetch customers:', err)
+   151→    }
+   152→  }, [])
+   153→
+   154→  useEffect(() => {
+   155→    fetchCampaigns()
+   156→    fetchCustomers()
+   157→  }, [fetchCampaigns, fetchCustomers])
+   158→
+   159→  async function handleCreateCampaign() {
+   160→    if (!subject.trim()) {
+   161→      toast.error('Subject is required')
+   162→      return
+   163→    }
+   164→    if (!body.trim()) {
+   165→      toast.error('Body is required')
+   166→      return
+   167→    }
+   168→    if (selectedRecipients.size === 0) {
+   169→      toast.error('Select at least one recipient')
+   170→      return
+   171→    }
+   172→
+   173→    setCreating(true)
+   174→    try {
+   175→      const res = await fetch('/api/business/campaigns', {
+   176→        method: 'POST',
+   177→        headers: { 'Content-Type': 'application/json' },
+   178→        body: JSON.stringify({
+   179→          subject: subject.trim(),
+   180→          body: body.trim(),
+   181→          recipientCustomerIds: Array.from(selectedRecipients),
+   182→        }),
+   183→      })
+   184→
+   185→      if (res.ok) {
+   186→        const data = await res.json()
+   187→        toast.success(`Campaign "${data.campaign.subject}" created`)
+   188→        setSubject('')
+   189→        setBody('')
+   190→        setSelectedRecipients(new Set())
+   191→        setShowCreateForm(false)
+   192→        fetchCampaigns()
+   193→      } else {
+   194→        const data = await res.json()
+   195→        toast.error(data.error || 'Failed to create campaign')
+   196→      }
+   197→    } catch (err) {
+   198→      console.error('Failed to create campaign:', err)
+   199→      toast.error('Failed to create campaign')
+   200→    } finally {
+   201→      setCreating(false)
+   202→    }
+   203→  }
+   204→
+   205→  async function handleViewCampaign(id: string) {
+   206→    setLoadingDetail(true)
+   207→    try {
+   208→      const res = await fetch(`/api/business/campaigns/${id}`)
+   209→      if (res.ok) {
+   210→        const data = await res.json()
+   211→        setSelectedCampaign(data.campaign)
+   212→      } else {
+   213→        toast.error('Failed to load campaign details')
+   214→      }
+   215→    } catch (err) {
+   216→      console.error('Failed to fetch campaign detail:', err)
+   217→      toast.error('Failed to load campaign details')
+   218→    } finally {
+   219→      setLoadingDetail(false)
+   220→    }
+   221→  }
+   222→
+   223→  function toggleRecipient(id: string) {
+   224→    setSelectedRecipients((prev) => {
+   225→      const next = new Set(prev)
+   226→      if (next.has(id)) next.delete(id)
+   227→      else next.add(id)
+   228→      return next
+   229→    })
+   230→  }
+   231→
+   232→  function selectAllRecipients() {
+   233→    if (selectedRecipients.size === customers.length) {
+   234→      setSelectedRecipients(new Set())
+   235→    } else {
+   236→      setSelectedRecipients(new Set(customers.map((c) => c.id)))
+   237→    }
+   238→  }
+   239→
+   240→  // Stats
+   241→  const totalOpens = campaigns.reduce((sum, c) => sum + c.opens, 0)
+   242→  const totalClicks = campaigns.reduce((sum, c) => sum + c.clicks, 0)
+   243→  const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipientCount, 0)
+   244→  const avgOpenRate = totalRecipients > 0 ? Math.round((totalOpens / totalRecipients) * 100) : 0
+   245→
+   246→  if (loading) return <CampaignsSkeleton />
+   247→
+   248→  // ─── Campaign Detail View ───
+   249→  if (selectedCampaign) {
+   250→    return (
+   251→      <div className="space-y-8">
+   252→        {/* Back Button */}
+   253→        <Button
+   254→          variant="ghost"
+   255→          onClick={() => setSelectedCampaign(null)}
+   256→          className="rounded-xl text-[13px]"
+   257→        >
+   258→          <ChevronLeft className="w-4 h-4" />
+   259→          Back to Campaigns
+   260→        </Button>
+   261→
+   262→        {/* Campaign Header */}
+   263→        <motion.div
+   264→          initial={{ opacity: 0, y: 16 }}
+   265→          animate={{ opacity: 1, y: 0 }}
+   266→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm"
+   267→        >
+   268→          <div className="flex items-center gap-3 mb-1">
+   269→            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#4285F4]/10 to-[#6366F1]/10 flex items-center justify-center">
+   270→              <Megaphone className="w-5 h-5 text-[#4285F4]" />
+   271→            </div>
+   272→            <div className="flex-1 min-w-0">
+   273→              <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">{selectedCampaign.subject}</h2>
+   274→              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
+   275→                Created {new Date(selectedCampaign.createdAt).toLocaleDateString()} &middot;{' '}
+   276→                {selectedCampaign.recipientCount} recipients
+   277→              </p>
+   278→            </div>
+   279→            <Badge className={selectedCampaign.sentAt ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-xs' : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-xs'}>
+   280→              {selectedCampaign.sentAt ? 'Sent' : 'Draft'}
+   281→            </Badge>
+   282→          </div>
+   283→
+   284→          {/* Stats Row */}
+   285→          <div className="grid grid-cols-4 gap-4 mt-6">
+   286→            <div className="rounded-xl bg-gradient-to-br from-gray-50 to-transparent dark:from-gray-800/50 dark:to-transparent p-4 ring-1 ring-gray-200 dark:ring-gray-700">
+   287→              <div className="flex items-center gap-2 mb-2">
+   288→                <Users className="w-4 h-4 text-gray-400" />
+   289→                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Recipients</span>
+   290→              </div>
+   291→              <div className="text-2xl font-bold text-gray-900 dark:text-white">{selectedCampaign.recipientCount}</div>
+   292→            </div>
+   293→            <div className="rounded-xl bg-gradient-to-br from-[#4285F4]/5 to-transparent p-4 ring-1 ring-[#4285F4]/10">
+   294→              <div className="flex items-center gap-2 mb-2">
+   295→                <Eye className="w-4 h-4 text-[#4285F4]" />
+   296→                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Open Rate</span>
+   297→              </div>
+   298→              <div className="text-2xl font-bold text-[#4285F4]">{selectedCampaign.openRate}%</div>
+   299→            </div>
+   300→            <div className="rounded-xl bg-gradient-to-br from-[#34A853]/5 to-transparent p-4 ring-1 ring-[#34A853]/10">
+   301→              <div className="flex items-center gap-2 mb-2">
+   302→                <MousePointerClick className="w-4 h-4 text-[#34A853]" />
+   303→                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Click Rate</span>
+   304→              </div>
+   305→              <div className="text-2xl font-bold text-[#34A853]">{selectedCampaign.clickRate}%</div>
+   306→            </div>
+   307→            <div className="rounded-xl bg-gradient-to-br from-[#FBBC04]/5 to-transparent p-4 ring-1 ring-[#FBBC04]/10">
+   308→              <div className="flex items-center gap-2 mb-2">
+   309→                <Eye className="w-4 h-4 text-[#FBBC04]" />
+   310→                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Total Opens</span>
+   311→              </div>
+   312→              <div className="text-2xl font-bold text-[#FBBC04]">{selectedCampaign.openedCount}</div>
+   313→            </div>
+   314→          </div>
+   315→        </motion.div>
+   316→
+   317→        {/* Recipients Table */}
+   318→        <motion.div
+   319→          initial={{ opacity: 0, y: 16 }}
+   320→          animate={{ opacity: 1, y: 0 }}
+   321→          transition={{ delay: 0.1 }}
+   322→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
+   323→        >
+   324→          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+   325→            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Recipients</h3>
+   326→          </div>
+   327→          <Table>
+   328→            <TableHeader>
+   329→              <TableRow className="border-b border-gray-100 dark:border-gray-800">
+   330→                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</TableHead>
+   331→                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</TableHead>
+   332→                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Opened</TableHead>
+   333→                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Clicked</TableHead>
+   334→              </TableRow>
+   335→            </TableHeader>
+   336→            <TableBody>
+   337→              {loadingDetail ? (
+   338→                <TableRow>
+   339→                  <TableCell colSpan={4} className="text-center py-8">
+   340→                    <Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" />
+   341→                  </TableCell>
+   342→                </TableRow>
+   343→              ) : selectedCampaign.recipients.length > 0 ? (
+   344→                selectedCampaign.recipients.map((r, index) => (
+   345→                  <motion.tr
+   346→                    key={r.id}
+   347→                    initial={{ opacity: 0, y: 4 }}
+   348→                    animate={{ opacity: 1, y: 0 }}
+   349→                    transition={{ duration: 0.15, delay: index * 0.02 }}
+   350→                    className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors border-l-2 border-l-transparent hover:border-l-[#4285F4]"
+   351→                  >
+   352→                    <TableCell className="text-[13px] font-medium text-gray-900 dark:text-white">
+   353→                      {r.customer.name || '—'}
+   354→                    </TableCell>
+   355→                    <TableCell className="text-[13px] text-gray-600 dark:text-gray-400">
+   356→                      {r.customer.email}
+   357→                    </TableCell>
+   358→                    <TableCell>
+   359→                      {r.openedAt ? (
+   360→                        <Badge className="bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-[10px] px-2 py-0.5">
+   361→                          <Eye className="w-3 h-3 mr-1" /> Yes
+   362→                        </Badge>
+   363→                      ) : (
+   364→                        <span className="text-xs text-gray-400">No</span>
+   365→                      )}
+   366→                    </TableCell>
+   367→                    <TableCell>
+   368→                      {r.clickedAt ? (
+   369→                        <Badge className="bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/20 text-[10px] px-2 py-0.5">
+   370→                          <MousePointerClick className="w-3 h-3 mr-1" /> Yes
+   371→                        </Badge>
+   372→                      ) : (
+   373→                        <span className="text-xs text-gray-400">No</span>
+   374→                      )}
+   375→                    </TableCell>
+   376→                  </motion.tr>
+   377→                ))
+   378→              ) : (
+   379→                <TableRow>
+   380→                  <TableCell colSpan={4} className="text-center py-8">
+   381→                    <p className="text-sm text-gray-500">No recipients</p>
+   382→                  </TableCell>
+   383→                </TableRow>
+   384→              )}
+   385→            </TableBody>
+   386→          </Table>
+   387→        </motion.div>
+   388→      </div>
+   389→    )
+   390→  }
+   391→
+   392→  // ─── Campaigns List View ───
+   393→  return (
+   394→    <div className="space-y-8">
+   395→      {/* ─── Stats Row ─── */}
+   396→      <div className="grid grid-cols-4 gap-4">
+   397→        <motion.div
+   398→          initial={{ opacity: 0, y: 16 }}
+   399→          animate={{ opacity: 1, y: 0 }}
+   400→          transition={{ duration: 0.3 }}
+   401→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm"
+   402→        >
+   403→          <div className="flex items-center justify-between">
+   404→            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Campaigns</span>
+   405→            <Megaphone className="w-4 h-4 text-[#EA4335]" />
+   406→          </div>
+   407→          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{campaigns.length}</p>
+   408→          <p className="text-[11px] text-gray-400 mt-1">All time</p>
+   409→        </motion.div>
+   410→        <motion.div
+   411→          initial={{ opacity: 0, y: 16 }}
+   412→          animate={{ opacity: 1, y: 0 }}
+   413→          transition={{ duration: 0.3, delay: 0.05 }}
+   414→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm"
+   415→        >
+   416→          <div className="flex items-center justify-between">
+   417→            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Opens</span>
+   418→            <Eye className="w-4 h-4 text-[#4285F4]" />
+   419→          </div>
+   420→          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{totalOpens}</p>
+   421→          <p className="text-[11px] text-gray-400 mt-1">Across all campaigns</p>
+   422→        </motion.div>
+   423→        <motion.div
+   424→          initial={{ opacity: 0, y: 16 }}
+   425→          animate={{ opacity: 1, y: 0 }}
+   426→          transition={{ duration: 0.3, delay: 0.1 }}
+   427→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm"
+   428→        >
+   429→          <div className="flex items-center justify-between">
+   430→            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Clicks</span>
+   431→            <MousePointerClick className="w-4 h-4 text-[#34A853]" />
+   432→          </div>
+   433→          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{totalClicks}</p>
+   434→          <p className="text-[11px] text-gray-400 mt-1">Link interactions</p>
+   435→        </motion.div>
+   436→        <motion.div
+   437→          initial={{ opacity: 0, y: 16 }}
+   438→          animate={{ opacity: 1, y: 0 }}
+   439→          transition={{ duration: 0.3, delay: 0.15 }}
+   440→          className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm"
+   441→        >
+   442→          <div className="flex items-center justify-between">
+   443→            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Open Rate</span>
+   444→            <Target className="w-4 h-4 text-[#FBBC04]" />
+   445→          </div>
+   446→          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{avgOpenRate}%</p>
+   447→          <p className="text-[11px] text-gray-400 mt-1">Average performance</p>
+   448→        </motion.div>
+   449→      </div>
+   450→
+   451→      {/* ─── Page Header ─── */}
+   452→      <div className="flex items-center justify-between">
+   453→        <div>
+   454→          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Campaigns</h2>
+   455→          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
+   456→            {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''} total
+   457→          </p>
+   458→        </div>
+   459→        <Button
+   460→          onClick={() => setShowCreateForm(true)}
+   461→          className="rounded-xl bg-gradient-to-r from-[#4285F4] to-[#4285F4]/90 hover:from-[#4285F4]/90 hover:to-[#4285F4]/80 text-white shadow-sm shadow-[#4285F4]/20"
+   462→        >
+   463→          <Plus className="w-4 h-4" />
+   464→          New Campaign
+   465→        </Button>
+   466→      </div>
+   467→
+   468→      {/* ─── Create Campaign Modal ─── */}
+   469→      <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+   470→        <DialogContent className="rounded-2xl max-w-xl max-h-[85vh] overflow-y-auto">
+   471→          <DialogHeader>
+   472→            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+   473→              <div className="w-8 h-8 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
+   474→                <FileEdit className="w-4 h-4 text-[#4285F4]" />
+   475→              </div>
+   476→              Create New Campaign
+   477→            </DialogTitle>
+   478→            <DialogDescription className="text-[13px] text-gray-500">
+   479→              Compose your campaign email and select recipients to send it to.
+   480→            </DialogDescription>
+   481→          </DialogHeader>
+   482→
+   483→          <div className="space-y-5 mt-4">
+   484→            {/* Subject */}
+   485→            <div>
+   486→              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">
+   487→                Subject Line
+   488→              </label>
+   489→              <Input
+   490→                placeholder="Campaign subject line..."
+   491→                value={subject}
+   492→                onChange={(e) => setSubject(e.target.value)}
+   493→                className="rounded-xl dark:bg-gray-800"
+   494→              />
+   495→            </div>
+   496→
+   497→            {/* Body */}
+   498→            <div>
+   499→              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">
+   500→                Email Body
+   501→              </label>
+   502→              <Textarea
+   503→                placeholder="Write your campaign message..."
+   504→                value={body}
+   505→                onChange={(e) => setBody(e.target.value)}
+   506→                rows={6}
+   507→                className="rounded-xl resize-none dark:bg-gray-800"
+   508→              />
+   509→            </div>
+   510→
+   511→            {/* Recipients */}
+   512→            <div>
+   513→              <div className="flex items-center justify-between mb-2">
+   514→                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+   515→                  Recipients ({selectedRecipients.size} selected)
+   516→                </label>
+   517→                <Button
+   518→                  size="sm"
+   519→                  variant="ghost"
+   520→                  onClick={selectAllRecipients}
+   521→                  className="text-[11px] h-6 rounded-lg"
+   522→                >
+   523→                  {selectedRecipients.size === customers.length ? 'Deselect All' : 'Select All'}
+   524→                </Button>
+   525→              </div>
+   526→              {customers.length > 0 ? (
+   527→                <div className="ring-1 ring-gray-200 dark:ring-gray-700 rounded-xl max-h-48 overflow-y-auto">
+   528→                  {customers.map((customer) => (
+   529→                    <label
+   530→                      key={customer.id}
+   531→                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+   532→                        selectedRecipients.has(customer.id)
+   533→                          ? 'bg-[#4285F4]/5'
+   534→                          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+   535→                      } border-b border-gray-50 dark:border-gray-800 last:border-b-0`}
+   536→                    >
+   537→                      <input
+   538→                        type="checkbox"
+   539→                        checked={selectedRecipients.has(customer.id)}
+   540→                        onChange={() => toggleRecipient(customer.id)}
+   541→                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#4285F4] focus:ring-[#4285F4]"
+   542→                      />
+   543→                      <span className="text-[13px] text-gray-900 dark:text-white">
+   544→                        {customer.name || '—'}
+   545→                      </span>
+   546→                      <span className="text-[11px] text-gray-400">{customer.email}</span>
+   547→                    </label>
+   548→                  ))}
+   549→                </div>
+   550→              ) : (
+   551→                <div className="text-center py-8 rounded-xl ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+   552→                  <Users className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+   553→                  <p className="text-[13px] text-gray-500">No customers yet. Add customers first.</p>
+   554→                </div>
+   555→              )}
+   556→            </div>
+   557→          </div>
+   558→
+   559→          {/* Actions */}
+   560→          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 mt-4">
+   561→            <Button
+   562→              variant="outline"
+   563→              onClick={() => {
+   564→                setShowCreateForm(false)
+   565→                setSubject('')
+   566→                setBody('')
+   567→                setSelectedRecipients(new Set())
+   568→              }}
+   569→              className="rounded-xl"
+   570→            >
+   571→              Cancel
+   572→            </Button>
+   573→            <Button
+   574→              onClick={handleCreateCampaign}
+   575→              disabled={creating || selectedRecipients.size === 0}
+   576→              className="rounded-xl bg-[#4285F4] hover:bg-[#4285F4]/90 text-white"
+   577→            >
+   578→              {creating ? (
+   579→                <Loader2 className="w-4 h-4 animate-spin" />
+   580→              ) : (
+   581→                <Send className="w-4 h-4" />
+   582→              )}
+   583→              Create Campaign
+   584→            </Button>
+   585→          </div>
+   586→        </DialogContent>
+   587→      </Dialog>
+   588→
+   589→      {/* ─── Campaigns Table ─── */}
+   590→      <div className="rounded-2xl ring-1 ring-gray-200 dark:ring-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+   591→        <Table>
+   592→          <TableHeader>
+   593→            <TableRow className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+   594→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Campaign</TableHead>
+   595→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</TableHead>
+   596→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Recipients</TableHead>
+   597→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Performance</TableHead>
+   598→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</TableHead>
+   599→              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Actions</TableHead>
+   600→            </TableRow>
+   601→          </TableHeader>
+   602→          <TableBody>
+   603→            {campaigns.length > 0 ? (
+   604→              campaigns.map((campaign, index) => {
+   605→                const openRate = campaign.recipientCount > 0 ? Math.round((campaign.opens / campaign.recipientCount) * 100) : 0
+   606→                return (
+   607→                  <motion.tr
+   608→                    key={campaign.id}
+   609→                    initial={{ opacity: 0, y: 8 }}
+   610→                    animate={{ opacity: 1, y: 0 }}
+   611→                    transition={{ duration: 0.2, delay: index * 0.03 }}
+   612→                    className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-all duration-150 border-l-2 border-l-transparent hover:border-l-[#4285F4]"
+   613→                  >
+   614→                    <TableCell>
+   615→                      <div className="flex items-center gap-2.5">
+   616→                        <div className="w-8 h-8 rounded-lg bg-[#4285F4]/10 flex items-center justify-center shrink-0">
+   617→                          <Megaphone className="w-4 h-4 text-[#4285F4]" />
+   618→                        </div>
+   619→                        <span className="text-[13px] font-medium text-gray-900 dark:text-white truncate max-w-[220px]">
+   620→                          {campaign.subject}
+   621→                        </span>
+   622→                      </div>
+   623→                    </TableCell>
+   624→                    <TableCell>
+   625→                      <Badge className={
+   626→                        campaign.sentAt
+   627→                          ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-[10px] px-2 py-0.5'
+   628→                          : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-[10px] px-2 py-0.5'
+   629→                      }>
+   630→                        {campaign.sentAt ? 'Sent' : 'Draft'}
+   631→                      </Badge>
+   632→                    </TableCell>
+   633→                    <TableCell>
+   634→                      <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+   635→                        {campaign.recipientCount}
+   636→                      </Badge>
+   637→                    </TableCell>
+   638→                    <TableCell>
+   639→                      <div className="space-y-1.5 min-w-[140px]">
+   640→                        <div className="flex items-center gap-2">
+   641→                          <Eye className="w-3.5 h-3.5 text-[#4285F4]" />
+   642→                          <span className="text-[12px] text-gray-600 dark:text-gray-400">{campaign.opens} opens</span>
+   643→                        </div>
+   644→                        {/* Open rate progress bar */}
+   645→                        <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+   646→                          <motion.div
+   647→                            initial={{ width: 0 }}
+   648→                            animate={{ width: `${Math.min(openRate, 100)}%` }}
+   649→                            transition={{ duration: 0.6, delay: index * 0.05 }}
+   650→                            className="h-full bg-gradient-to-r from-[#4285F4] to-[#6366F1] rounded-full"
+   651→                          />
+   652→                        </div>
+   653→                        <span className="text-[10px] text-gray-400">{openRate}% open rate</span>
+   654→                      </div>
+   655→                    </TableCell>
+   656→                    <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">
+   657→                      {new Date(campaign.createdAt).toLocaleDateString()}
+   658→                    </TableCell>
+   659→                    <TableCell className="text-right">
+   660→                      <Button
+   661→                        size="sm"
+   662→                        variant="ghost"
+   663→                        onClick={() => handleViewCampaign(campaign.id)}
+   664→                        className="h-8 text-[11px] rounded-lg hover:bg-[#4285F4]/5"
+   665→                      >
+   666→                        View Details
+   667→                        <ChevronRight className="w-3 h-3 ml-1" />
+   668→                      </Button>
+   669→                    </TableCell>
+   670→                  </motion.tr>
+   671→                )
+   672→              })
+   673→            ) : (
+   674→              <TableRow>
+   675→                <TableCell colSpan={6} className="text-center py-16">
+   676→                  <div className="flex flex-col items-center">
+   677→                    <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+   678→                      <Zap className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+   679→                    </div>
+   680→                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No campaigns yet</p>
+   681→                    <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-1 max-w-sm text-center">
+   682→                      Create your first email campaign to reach your customers. Track opens, clicks, and engagement in real time.
+   683→                    </p>
+   684→                    <Button
+   685→                      onClick={() => setShowCreateForm(true)}
+   686→                      className="mt-4 rounded-xl bg-[#4285F4] hover:bg-[#4285F4]/90 text-white"
+   687→                    >
+   688→                      <Plus className="w-4 h-4" />
+   689→                      Create First Campaign
+   690→                    </Button>
+   691→                  </div>
+   692→                </TableCell>
+   693→              </TableRow>
+   694→            )}
+   695→          </TableBody>
+   696→        </Table>
+   697→      </div>
+   698→    </div>
+   699→  )
+   700→}
