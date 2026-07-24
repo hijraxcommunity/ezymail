@@ -1,0 +1,1224 @@
+diff --git a/src/components/auth/login-form.tsx b/src/components/auth/login-form.tsx
+index ed699e0..242b5ab 100755
+--- a/src/components/auth/login-form.tsx
++++ b/src/components/auth/login-form.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useState } from 'react'
+ import { motion } from 'framer-motion'
+-import { Mail, Eye, EyeOff, Loader2 } from 'lucide-react'
++import { Mail, Eye, EyeOff, Loader2, Building2, User, Briefcase } from 'lucide-react'
+ import { useForm } from 'react-hook-form'
+ import { zodResolver } from '@hookform/resolvers/zod'
+ import { z } from 'zod'
+@@ -24,6 +24,7 @@ export function LoginForm() {
+   const [showPassword, setShowPassword] = useState(false)
+   const [isLoading, setIsLoading] = useState(false)
+   const [rememberMe, setRememberMe] = useState(false)
++  const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
+ 
+   const {
+     register,
+@@ -67,16 +68,83 @@ export function LoginForm() {
+   }
+ 
+   return (
+-    <div className="min-h-screen flex items-center justify-center p-4">
+-      <motion.div
+-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+-        animate={{ opacity: 1, y: 0, scale: 1 }}
+-        transition={{ duration: 0.5, ease: 'easeOut' }}
+-        className="w-full max-w-md"
+-      >
+-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
+-          {/* Logo */}
+-          <div className="flex items-center justify-center gap-2 mb-8">
++    <div className="min-h-screen flex flex-col">
++      {/* ── Desktop/Tablet: Split screen ── */}
++      {/* ── Mobile: Full screen form only ── */}
++      <div className="flex-1 flex flex-col md:flex-row">
++        {/* ── Left Panel: Illustration / Branding (hidden on mobile) ── */}
++        <div className="hidden md:flex md:w-1/2 relative overflow-hidden bg-gradient-to-br from-[#4285F4] via-[#5B9CF4] to-[#34A853]">
++          {/* Decorative shapes */}
++          <div className="absolute inset-0">
++            <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full bg-white/10 blur-3xl" />
++            <div className="absolute bottom-[-15%] right-[-10%] w-[50%] h-[50%] rounded-full bg-white/10 blur-3xl" />
++            <div className="absolute top-[40%] right-[20%] w-[20%] h-[20%] rounded-full bg-white/5 blur-2xl" />
++            {/* Grid pattern overlay */}
++            <div className="absolute inset-0 opacity-[0.03]"
++              style={{
++                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
++              }}
++            />
++          </div>
++
++          {/* Branding content */}
++          <div className="relative z-10 flex flex-col items-center justify-center w-full px-12 text-white">
++            {/* Logo */}
++            <motion.div
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, ease: 'easeOut' }}
++              className="mb-10"
++            >
++              <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-black/10">
++                <img src="/favicon-32.png" alt="EzyMail" className="w-12 h-12 rounded-xl" />
++              </div>
++            </motion.div>
++
++            <motion.h1
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
++              className="text-4xl lg:text-5xl font-bold mb-4 text-center"
++            >
++              Ezy<span className="text-white/80">Mail</span>
++            </motion.h1>
++
++            <motion.p
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
++              className="text-lg text-white/80 text-center max-w-sm leading-relaxed"
++            >
++              Email made Ezy. Fast, secure, and beautifully simple.
++            </motion.p>
++
++            {/* Floating mail icon illustration */}
++            <motion.div
++              initial={{ opacity: 0, scale: 0.8 }}
++              animate={{ opacity: 1, scale: 1 }}
++              transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
++              className="mt-12"
++            >
++              <div className="relative">
++                <div className="w-32 h-32 rounded-3xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-xl">
++                  <Mail className="w-16 h-16 text-white" />
++                </div>
++                <div className="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-[#34A853] flex items-center justify-center shadow-lg animate-bounce" style={{ animationDuration: '3s' }}>
++                  <span className="text-white text-lg font-bold">+</span>
++                </div>
++                <div className="absolute -bottom-2 -left-4 w-12 h-8 rounded-lg bg-[#FBBC04] flex items-center justify-center shadow-lg" style={{ animation: 'float 4s ease-in-out infinite' }}>
++                  <span className="text-white text-xs font-bold">New</span>
++                </div>
++              </div>
++            </motion.div>
++          </div>
++        </div>
++
++        {/* ── Right Panel: Login Form ── */}
++        <div className="flex-1 flex flex-col bg-white dark:bg-gray-950">
++          {/* Mobile-only logo header */}
++          <div className="md:hidden flex items-center justify-center gap-2 pt-8 pb-4">
+             <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
+             <h1 className="text-2xl font-bold">
+               <span className="text-[#4285F4]">Ezy</span>
+@@ -84,135 +152,168 @@ export function LoginForm() {
+             </h1>
+           </div>
+ 
+-          {/* Heading */}
+-          <div className="text-center mb-6">
+-            <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white">Welcome back</h2>
+-            <p className="text-sm text-[#444746] dark:text-gray-400 mt-1">
+-              Sign in to your EzyMail account
+-            </p>
+-          </div>
+-
+-          {/* Form */}
+-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+-            {/* Email */}
+-            <div className="space-y-2">
+-              <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+-                Email address
+-              </label>
+-              <div className="relative">
+-                <Input
+-                  {...register('email')}
+-                  type="email"
+-                  placeholder="you@ezy.af"
+-                  className="h-11 rounded-xl pl-3 pr-16 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+-                  disabled={isLoading}
+-                />
+-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+-                  @ezy.af
+-                </span>
++          {/* Form container */}
++          <div className="flex-1 flex items-center justify-center px-6 py-8 md:px-12 lg:px-20">
++            <motion.div
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.5, ease: 'easeOut' }}
++              className="w-full max-w-[420px]"
++            >
++              {/* Heading */}
++              <div className="mb-8">
++                <h2 className="text-2xl font-semibold text-[#1F1F1F] dark:text-white">
++                  {activeTab === 'business' ? 'Business Sign In' : 'Welcome back'}
++                </h2>
++                <p className="text-sm text-[#444746] dark:text-gray-400 mt-1.5">
++                  {activeTab === 'business'
++                    ? 'Sign in to your business email account'
++                    : 'Sign in to your EzyMail account'
++                  }
++                </p>
+               </div>
+-              {errors.email && (
+-                <p className="text-xs text-[#EA4335]">{errors.email.message}</p>
+-              )}
+-            </div>
+ 
+-            {/* Password */}
+-            <div className="space-y-2">
+-              <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+-                Password
+-              </label>
+-              <div className="relative">
+-                <Input
+-                  {...register('password')}
+-                  type={showPassword ? 'text' : 'password'}
+-                  placeholder="Enter your password"
+-                  className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
++              {/* Form */}
++              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
++                {/* Email */}
++                <div className="space-y-1.5">
++                  <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
++                    Email address
++                  </label>
++                  <div className="relative">
++                    <Input
++                      {...register('email')}
++                      type="email"
++                      placeholder="you@ezy.af"
++                      className="h-12 rounded-xl pl-4 pr-20 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 text-[15px]"
++                      disabled={isLoading}
++                    />
++                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
++                      @ezy.af
++                    </span>
++                  </div>
++                  {errors.email && (
++                    <p className="text-xs text-[#EA4335] mt-1">{errors.email.message}</p>
++                  )}
++                </div>
++
++                {/* Password */}
++                <div className="space-y-1.5">
++                  <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
++                    Password
++                  </label>
++                  <div className="relative">
++                    <Input
++                      {...register('password')}
++                      type={showPassword ? 'text' : 'password'}
++                      placeholder="Enter your password"
++                      className="h-12 rounded-xl pl-4 pr-11 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 text-[15px]"
++                      disabled={isLoading}
++                    />
++                    <button
++                      type="button"
++                      onClick={() => setShowPassword(!showPassword)}
++                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
++                    >
++                      {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
++                    </button>
++                  </div>
++                  {errors.password && (
++                    <p className="text-xs text-[#EA4335] mt-1">{errors.password.message}</p>
++                  )}
++                </div>
++
++                {/* Remember me & Forgot password */}
++                <div className="flex items-center justify-between">
++                  <div className="flex items-center gap-2">
++                    <Checkbox
++                      id="remember"
++                      checked={rememberMe}
++                      onCheckedChange={(checked) => setRememberMe(checked === true)}
++                      className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4]"
++                    />
++                    <label
++                      htmlFor="remember"
++                      className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer"
++                    >
++                      Remember me
++                    </label>
++                  </div>
++                  <button
++                    type="button"
++                    onClick={() => setAuthView('forgot-password')}
++                    className="text-sm text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
++                  >
++                    Forgot password?
++                  </button>
++                </div>
++
++                {/* Submit */}
++                <Button
++                  type="submit"
+                   disabled={isLoading}
+-                />
+-                <button
+-                  type="button"
+-                  onClick={() => setShowPassword(!showPassword)}
+-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
++                  className="w-full h-12 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium text-[15px] transition-all duration-200 shadow-lg shadow-[#4285F4]/20 hover:shadow-[#1a73e8]/30"
+                 >
+-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+-                </button>
+-              </div>
+-              {errors.password && (
+-                <p className="text-xs text-[#EA4335]">{errors.password.message}</p>
+-              )}
+-            </div>
++                  {isLoading ? (
++                    <>
++                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
++                      Signing in...
++                    </>
++                  ) : (
++                    'Sign In'
++                  )}
++                </Button>
++              </form>
+ 
+-            {/* Remember me & Forgot password */}
+-            <div className="flex items-center justify-between">
+-              <div className="flex items-center gap-2">
+-                <Checkbox
+-                  id="remember"
+-                  checked={rememberMe}
+-                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+-                  className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4]"
+-                />
+-                <label
+-                  htmlFor="remember"
+-                  className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer"
+-                >
+-                  Remember me
+-                </label>
++              {/* Register link */}
++              <div className="text-center mt-6">
++                <p className="text-sm text-[#444746] dark:text-gray-400">
++                  Don&apos;t have an account?{' '}
++                  <button
++                    onClick={() => setAuthView('register')}
++                    className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
++                  >
++                    Create account
++                  </button>
++                </p>
+               </div>
++            </motion.div>
++          </div>
++
++          {/* ── Bottom Tab Bar: Personal / Business ── */}
++          <div className="border-t border-gray-100 dark:border-gray-800">
++            <div className="flex items-center justify-center gap-1 py-3 px-4">
++              {/* Personal tab - always visible */}
+               <button
+                 type="button"
+-                onClick={() => setAuthView('forgot-password')}
+-                className="text-sm text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
++                onClick={() => setActiveTab('personal')}
++                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
++                  activeTab === 'personal'
++                    ? 'bg-[#4285F4] text-white shadow-md shadow-[#4285F4]/20'
++                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
++                }`}
+               >
+-                Forgot password?
++                <User className="w-4 h-4" />
++                <span>Personal</span>
+               </button>
+-            </div>
+ 
+-            {/* Submit */}
+-            <Button
+-              type="submit"
+-              disabled={isLoading}
+-              className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium text-sm transition-all duration-200"
+-            >
+-              {isLoading ? (
+-                <>
+-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+-                  Signing in...
+-                </>
+-              ) : (
+-                'Sign In'
+-              )}
+-            </Button>
+-          </form>
+-
+-          {/* Divider */}
+-          <div className="relative my-6">
+-            <div className="absolute inset-0 flex items-center">
+-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+-            </div>
+-            <div className="relative flex justify-center text-xs">
+-              <span className="px-3 bg-white dark:bg-gray-900 text-gray-400">OR</span>
+-            </div>
+-          </div>
+-
+-          {/* Register link */}
+-          <div className="text-center">
+-            <p className="text-sm text-[#444746] dark:text-gray-400">
+-              Don&apos;t have an account?{' '}
++              {/* Business tab - only visible on md+ screens */}
+               <button
+-                onClick={() => setAuthView('register')}
+-                className="text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors"
++                type="button"
++                onClick={() => setActiveTab('business')}
++                className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
++                  activeTab === 'business'
++                    ? 'bg-[#34A853] text-white shadow-md shadow-[#34A853]/20'
++                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
++                }`}
+               >
+-                Create account
++                <Briefcase className="w-4 h-4" />
++                <span>Business</span>
+               </button>
+-            </p>
++            </div>
+           </div>
+         </div>
+-
+-        {/* Footer */}
+-        <p className="text-center text-xs text-gray-400 mt-6">
+-          © 2025 EzyMail. All rights reserved.
+-        </p>
+-      </motion.div>
++      </div>
+     </div>
+   )
+ }
+diff --git a/src/components/auth/register-form.tsx b/src/components/auth/register-form.tsx
+index 2ef321b..204109a 100755
+--- a/src/components/auth/register-form.tsx
++++ b/src/components/auth/register-form.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useState, useEffect, useRef } from 'react'
+ import { motion, AnimatePresence } from 'framer-motion'
+-import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X } from 'lucide-react'
++import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Briefcase } from 'lucide-react'
+ import { useForm } from 'react-hook-form'
+ import { zodResolver } from '@hookform/resolvers/zod'
+ import { z } from 'zod'
+@@ -74,6 +74,7 @@ export function RegisterForm() {
+   const [isLoading, setIsLoading] = useState(false)
+   const [showPassword, setShowPassword] = useState(false)
+   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
++  const [activeTab, setActiveTab] = useState<'personal' | 'business'>('personal')
+ 
+   // Step 1: Name
+   const [firstName, setFirstName] = useState('')
+@@ -207,16 +208,70 @@ export function RegisterForm() {
+   }
+ 
+   return (
+-    <div className="min-h-screen flex items-center justify-center p-4">
+-      <motion.div
+-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+-        animate={{ opacity: 1, y: 0, scale: 1 }}
+-        transition={{ duration: 0.5, ease: 'easeOut' }}
+-        className="w-full max-w-md"
+-      >
+-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-black/5 p-6 sm:p-8">
+-          {/* Logo */}
+-          <div className="flex items-center justify-center gap-2 mb-6">
++    <div className="min-h-screen flex flex-col">
++      <div className="flex-1 flex flex-col md:flex-row">
++        {/* ── Left Panel: Illustration / Branding (hidden on mobile) ── */}
++        <div className="hidden md:flex md:w-1/2 relative overflow-hidden bg-gradient-to-br from-[#34A853] via-[#43B85E] to-[#0F9D58]">
++          {/* Decorative shapes */}
++          <div className="absolute inset-0">
++            <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-white/10 blur-3xl" />
++            <div className="absolute bottom-[-15%] left-[-10%] w-[50%] h-[50%] rounded-full bg-white/10 blur-3xl" />
++            <div className="absolute top-[30%] left-[15%] w-[25%] h-[25%] rounded-full bg-white/5 blur-2xl" />
++            <div className="absolute inset-0 opacity-[0.03]"
++              style={{
++                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
++              }}
++            />
++          </div>
++
++          {/* Branding content */}
++          <div className="relative z-10 flex flex-col items-center justify-center w-full px-12 text-white">
++            <motion.div
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, ease: 'easeOut' }}
++              className="mb-10"
++            >
++              <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-black/10">
++                <img src="/favicon-32.png" alt="EzyMail" className="w-12 h-12 rounded-xl" />
++              </div>
++            </motion.div>
++
++            <motion.h1
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
++              className="text-4xl lg:text-5xl font-bold mb-4 text-center"
++            >
++              Create your<br />Ezy<span className="text-white/80">Mail</span> account
++            </motion.h1>
++
++            <motion.p
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
++              className="text-lg text-white/80 text-center max-w-sm leading-relaxed"
++            >
++              Join millions who trust EzyMail for fast, secure communication.
++            </motion.p>
++
++            <motion.div
++              initial={{ opacity: 0, scale: 0.8 }}
++              animate={{ opacity: 1, scale: 1 }}
++              transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
++              className="mt-12"
++            >
++              <div className="w-32 h-32 rounded-3xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-xl">
++                <User className="w-16 h-16 text-white" />
++              </div>
++            </motion.div>
++          </div>
++        </div>
++
++        {/* ── Right Panel: Registration Form ── */}
++        <div className="flex-1 flex flex-col bg-white dark:bg-gray-950">
++          {/* Mobile-only logo header */}
++          <div className="md:hidden flex items-center justify-center gap-2 pt-6 pb-2">
+             <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
+             <h1 className="text-2xl font-bold">
+               <span className="text-[#4285F4]">Ezy</span>
+@@ -224,354 +279,392 @@ export function RegisterForm() {
+             </h1>
+           </div>
+ 
+-          {/* Progress Steps */}
+-          <div className="flex items-center justify-between mb-8 px-2 sm:px-4">
+-            {STEPS.map((s, i) => {
+-              const StepIcon = s.icon
+-              const isActive = step === s.id
+-              const isCompleted = step > s.id
+-              return (
+-                <div key={s.id} className="flex items-center">
+-                  <div className="flex flex-col items-center">
+-                    <div
+-                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+-                        isCompleted
+-                          ? 'bg-[#34A853] text-white'
+-                          : isActive
+-                          ? 'bg-[#4285F4] text-white shadow-lg shadow-[#4285F4]/30'
+-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+-                      }`}
+-                    >
+-                      {isCompleted ? <Check className="w-4 h-4 sm:w-5 sm:h-5" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+-                    </div>
+-                    <span className={`text-[10px] sm:text-xs mt-1 font-medium ${
+-                      isActive ? 'text-[#4285F4]' : isCompleted ? 'text-[#34A853]' : 'text-gray-400'
+-                    }`}>
+-                      {s.label}
+-                    </span>
+-                  </div>
+-                  {i < STEPS.length - 1 && (
+-                    <div className={`w-6 sm:w-12 h-0.5 mx-1 sm:mx-2 transition-all duration-300 ${
+-                      step > s.id ? 'bg-[#34A853]' : 'bg-gray-200 dark:bg-gray-700'
+-                    }`} />
+-                  )}
+-                </div>
+-              )
+-            })}
+-          </div>
+-
+-          {/* Step Content */}
+-          <AnimatePresence mode="wait">
+-            {/* STEP 1: Name + Email */}
+-            {step === 1 && (
+-              <motion.div
+-                key="step1"
+-                initial={{ opacity: 0, x: 20 }}
+-                animate={{ opacity: 1, x: 0 }}
+-                exit={{ opacity: 0, x: -20 }}
+-                transition={{ duration: 0.25 }}
+-              >
+-                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+-                  What&apos;s your name?
+-                </h2>
+-                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+-                  Choose your name and pick your email address
+-                </p>
+-                <div className="space-y-4">
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
+-                    <Input
+-                      {...nameForm.register('firstName')}
+-                      placeholder="John"
+-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+-                      autoFocus
+-                    />
+-                    {nameForm.formState.errors.firstName && (
+-                      <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
+-                    )}
+-                  </div>
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
+-                    <Input
+-                      {...nameForm.register('lastName')}
+-                      placeholder="Doe"
+-                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+-                    />
+-                    {nameForm.formState.errors.lastName && (
+-                      <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
+-                    )}
+-                  </div>
+-
+-                  {/* EMAIL CHOOSER */}
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+-                      <Mail className="w-3.5 h-3.5 inline mr-1" />
+-                      Email address
+-                    </label>
+-                    <div className="relative">
+-                      <Input
+-                        value={emailUsername}
+-                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
+-                        placeholder="yourname"
+-                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
+-                      />
+-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
+-                        @ezy.af
+-                      </span>
++          {/* Form container */}
++          <div className="flex-1 flex items-center justify-center px-6 py-6 md:px-12 lg:px-20">
++            <motion.div
++              initial={{ opacity: 0, y: 20 }}
++              animate={{ opacity: 1, y: 0 }}
++              transition={{ duration: 0.5, ease: 'easeOut' }}
++              className="w-full max-w-[440px]"
++            >
++              {/* Progress Steps */}
++              <div className="flex items-center justify-between mb-6 px-1">
++                {STEPS.map((s, i) => {
++                  const StepIcon = s.icon
++                  const isActive = step === s.id
++                  const isCompleted = step > s.id
++                  return (
++                    <div key={s.id} className="flex items-center">
++                      <div className="flex flex-col items-center">
++                        <div
++                          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 ${
++                            isCompleted
++                              ? 'bg-[#34A853] text-white'
++                              : isActive
++                              ? 'bg-[#4285F4] text-white shadow-lg shadow-[#4285F4]/30'
++                              : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
++                          }`}
++                        >
++                          {isCompleted ? <Check className="w-4 h-4" /> : <StepIcon className="w-3.5 h-3.5" />}
++                        </div>
++                        <span className={`text-[10px] mt-1 font-medium ${
++                          isActive ? 'text-[#4285F4]' : isCompleted ? 'text-[#34A853]' : 'text-gray-400'
++                        }`}>
++                          {s.label}
++                        </span>
++                      </div>
++                      {i < STEPS.length - 1 && (
++                        <div className={`w-8 h-0.5 mx-1 transition-all duration-300 ${
++                          step > s.id ? 'bg-[#34A853]' : 'bg-gray-200 dark:bg-gray-700'
++                        }`} />
++                      )}
+                     </div>
+-                    {/* Status indicator */}
+-                    {fullEmail && isValidUsername && (
+-                      <div className="flex items-center gap-1.5">
+-                        {emailStatus === 'checking' && (
+-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
++                  )
++                })}
++              </div>
++
++              {/* Step Content */}
++              <AnimatePresence mode="wait">
++                {/* STEP 1: Name + Email */}
++                {step === 1 && (
++                  <motion.div
++                    key="step1"
++                    initial={{ opacity: 0, x: 20 }}
++                    animate={{ opacity: 1, x: 0 }}
++                    exit={{ opacity: 0, x: -20 }}
++                    transition={{ duration: 0.25 }}
++                  >
++                    <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
++                      What&apos;s your name?
++                    </h2>
++                    <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
++                      Choose your name and pick your email address
++                    </p>
++                    <div className="space-y-4">
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
++                        <Input
++                          {...nameForm.register('firstName')}
++                          placeholder="John"
++                          className="h-12 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
++                          autoFocus
++                        />
++                        {nameForm.formState.errors.firstName && (
++                          <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
+                         )}
+-                        {emailStatus === 'available' && (
+-                          <>
+-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+-                            <span className="text-xs text-emerald-500 font-medium">{fullEmail} is available</span>
+-                          </>
++                      </div>
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
++                        <Input
++                          {...nameForm.register('lastName')}
++                          placeholder="Doe"
++                          className="h-12 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
++                        />
++                        {nameForm.formState.errors.lastName && (
++                          <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
+                         )}
+-                        {emailStatus === 'taken' && (
+-                          <>
+-                            <X className="w-3.5 h-3.5 text-red-500" />
+-                            <span className="text-xs text-red-500 font-medium">{fullEmail} is taken</span>
+-                          </>
++                      </div>
++
++                      {/* EMAIL CHOOSER */}
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
++                          <Mail className="w-3.5 h-3.5 inline mr-1" />
++                          Email address
++                        </label>
++                        <div className="relative">
++                          <Input
++                            value={emailUsername}
++                            onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
++                            placeholder="yourname"
++                            className="h-12 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
++                          />
++                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium">
++                            @ezy.af
++                          </span>
++                        </div>
++                        {fullEmail && isValidUsername && (
++                          <div className="flex items-center gap-1.5 mt-1">
++                            {emailStatus === 'checking' && (
++                              <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
++                            )}
++                            {emailStatus === 'available' && (
++                              <>
++                                <Check className="w-3.5 h-3.5 text-emerald-500" />
++                                <span className="text-xs text-emerald-500 font-medium">{fullEmail} is available</span>
++                              </>
++                            )}
++                            {emailStatus === 'taken' && (
++                              <>
++                                <X className="w-3.5 h-3.5 text-red-500" />
++                                <span className="text-xs text-red-500 font-medium">{fullEmail} is taken</span>
++                              </>
++                            )}
++                          </div>
+                         )}
+                       </div>
+-                    )}
+-                  </div>
+-                </div>
+-              </motion.div>
+-            )}
+-
+-            {/* STEP 2: Birthday */}
+-            {step === 2 && (
+-              <motion.div
+-                key="step2"
+-                initial={{ opacity: 0, x: 20 }}
+-                animate={{ opacity: 1, x: 0 }}
+-                exit={{ opacity: 0, x: -20 }}
+-                transition={{ duration: 0.25 }}
+-              >
+-                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+-                  When&apos;s your birthday?
+-                </h2>
+-                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+-                  You must be 13 or older to use EzyMail
+-                </p>
+-                <div className="space-y-4">
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
+-                    <select
+-                      value={month}
+-                      onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
+-                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+-                    >
+-                      <option value={0}>Select month</option>
+-                      {MONTHS.map((m, i) => (
+-                        <option key={m} value={i + 1}>{m}</option>
+-                      ))}
+-                    </select>
+-                  </div>
+-                  <div className="grid grid-cols-2 gap-4">
+-                    <div className="space-y-2">
+-                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
+-                      <select
+-                        value={day}
+-                        onChange={(e) => setDay(Number(e.target.value))}
+-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+-                      >
+-                        <option value={0}>Day</option>
+-                        {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
+-                          <option key={d} value={d}>{d}</option>
+-                        ))}
+-                      </select>
+-                    </div>
+-                    <div className="space-y-2">
+-                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
+-                      <select
+-                        value={year}
+-                        onChange={(e) => setYear(Number(e.target.value))}
+-                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+-                      >
+-                        <option value={0}>Year</option>
+-                        {generateYears().map(y => (
+-                          <option key={y} value={y}>{y}</option>
+-                        ))}
+-                      </select>
+-                    </div>
+-                  </div>
+-                </div>
+-              </motion.div>
+-            )}
+-
+-            {/* STEP 3: Password */}
+-            {step === 3 && (
+-              <motion.div
+-                key="step3"
+-                initial={{ opacity: 0, x: 20 }}
+-                animate={{ opacity: 1, x: 0 }}
+-                exit={{ opacity: 0, x: -20 }}
+-                transition={{ duration: 0.25 }}
+-              >
+-                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+-                  Create a password
+-                </h2>
+-                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+-                  Use 8+ characters with uppercase, lowercase & numbers
+-                </p>
+-                <div className="space-y-4">
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
+-                    <div className="relative">
+-                      <Input
+-                        {...passwordForm.register('password')}
+-                        type={showPassword ? 'text' : 'password'}
+-                        placeholder="Create a strong password"
+-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+-                        autoFocus
+-                      />
+-                      <button
+-                        type="button"
+-                        onClick={() => setShowPassword(!showPassword)}
+-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+-                      >
+-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+-                      </button>
+                     </div>
+-                    {passwordForm.formState.errors.password && (
+-                      <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
+-                    )}
+-                    {passwordValue && (
+-                      <div className="space-y-1">
+-                        <div className="flex gap-1">
+-                          {[1, 2, 3, 4, 5].map(i => (
+-                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+-                              i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+-                            }`} />
++                  </motion.div>
++                )}
++
++                {/* STEP 2: Birthday */}
++                {step === 2 && (
++                  <motion.div
++                    key="step2"
++                    initial={{ opacity: 0, x: 20 }}
++                    animate={{ opacity: 1, x: 0 }}
++                    exit={{ opacity: 0, x: -20 }}
++                    transition={{ duration: 0.25 }}
++                  >
++                    <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
++                      When&apos;s your birthday?
++                    </h2>
++                    <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
++                      You must be 13 or older to use EzyMail
++                    </p>
++                    <div className="space-y-4">
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
++                        <select
++                          value={month}
++                          onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
++                          className="w-full h-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
++                        >
++                          <option value={0}>Select month</option>
++                          {MONTHS.map((m, i) => (
++                            <option key={m} value={i + 1}>{m}</option>
+                           ))}
++                        </select>
++                      </div>
++                      <div className="grid grid-cols-2 gap-4">
++                        <div className="space-y-1.5">
++                          <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
++                          <select
++                            value={day}
++                            onChange={(e) => setDay(Number(e.target.value))}
++                            className="w-full h-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
++                          >
++                            <option value={0}>Day</option>
++                            {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
++                              <option key={d} value={d}>{d}</option>
++                            ))}
++                          </select>
++                        </div>
++                        <div className="space-y-1.5">
++                          <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
++                          <select
++                            value={year}
++                            onChange={(e) => setYear(Number(e.target.value))}
++                            className="w-full h-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
++                          >
++                            <option value={0}>Year</option>
++                            {generateYears().map(y => (
++                              <option key={y} value={y}>{y}</option>
++                            ))}
++                          </select>
+                         </div>
+-                        <p className={`text-xs font-medium ${
+-                          passwordStrength.label === 'Weak' ? 'text-red-500' :
+-                          passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
+-                        }`}>{passwordStrength.label}</p>
+                       </div>
+-                    )}
+-                  </div>
+-                  <div className="space-y-2">
+-                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
+-                    <div className="relative">
+-                      <Input
+-                        {...passwordForm.register('confirmPassword')}
+-                        type={showConfirmPassword ? 'text' : 'password'}
+-                        placeholder="Confirm your password"
+-                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+-                      />
+-                      <button
+-                        type="button"
+-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+-                      >
+-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+-                      </button>
+                     </div>
+-                    {passwordForm.formState.errors.confirmPassword && (
+-                      <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
+-                    )}
+-                  </div>
+-                </div>
+-              </motion.div>
+-            )}
+-
+-            {/* STEP 4: Review */}
+-            {step === 4 && (
+-              <motion.div
+-                key="step4"
+-                initial={{ opacity: 0, x: 20 }}
+-                animate={{ opacity: 1, x: 0 }}
+-                exit={{ opacity: 0, x: -20 }}
+-                transition={{ duration: 0.25 }}
+-              >
+-                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+-                  Review your info
+-                </h2>
+-                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+-                  Double check before creating your account
+-                </p>
+-                <div className="space-y-4 mb-6">
+-                  <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
+-                    <div className="flex justify-between items-center">
+-                      <span className="text-sm text-gray-500">Name</span>
+-                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+-                        {firstName} {lastName}
+-                      </span>
+-                    </div>
+-                    <div className="flex justify-between items-center">
+-                      <span className="text-sm text-gray-500">Email</span>
+-                      <span className={`text-sm font-medium ${fullEmail && isValidUsername && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
+-                        {fullEmail || 'Not set'}
+-                      </span>
++                  </motion.div>
++                )}
++
++                {/* STEP 3: Password */}
++                {step === 3 && (
++                  <motion.div
++                    key="step3"
++                    initial={{ opacity: 0, x: 20 }}
++                    animate={{ opacity: 1, x: 0 }}
++                    exit={{ opacity: 0, x: -20 }}
++                    transition={{ duration: 0.25 }}
++                  >
++                    <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
++                      Create a password
++                    </h2>
++                    <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
++                      Use 8+ characters with uppercase, lowercase & numbers
++                    </p>
++                    <div className="space-y-4">
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
++                        <div className="relative">
++                          <Input
++                            {...passwordForm.register('password')}
++                            type={showPassword ? 'text' : 'password'}
++                            placeholder="Create a strong password"
++                            className="h-12 rounded-xl pl-4 pr-11 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
++                            autoFocus
++                          />
++                          <button
++                            type="button"
++                            onClick={() => setShowPassword(!showPassword)}
++                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
++                          >
++                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
++                          </button>
++                        </div>
++                        {passwordForm.formState.errors.password && (
++                          <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
++                        )}
++                        {passwordValue && (
++                          <div className="space-y-1">
++                            <div className="flex gap-1">
++                              {[1, 2, 3, 4, 5].map(i => (
++                                <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
++                                  i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
++                                }`} />
++                              ))}
++                            </div>
++                            <p className={`text-xs font-medium ${
++                              passwordStrength.label === 'Weak' ? 'text-red-500' :
++                              passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
++                            }`}>{passwordStrength.label}</p>
++                          </div>
++                        )}
++                      </div>
++                      <div className="space-y-1.5">
++                        <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
++                        <div className="relative">
++                          <Input
++                            {...passwordForm.register('confirmPassword')}
++                            type={showConfirmPassword ? 'text' : 'password'}
++                            placeholder="Confirm your password"
++                            className="h-12 rounded-xl pl-4 pr-11 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
++                          />
++                          <button
++                            type="button"
++                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
++                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
++                          >
++                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
++                          </button>
++                        </div>
++                        {passwordForm.formState.errors.confirmPassword && (
++                          <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
++                        )}
++                      </div>
+                     </div>
+-                    <div className="flex justify-between items-center">
+-                      <span className="text-sm text-gray-500">Birthday</span>
+-                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+-                        {MONTHSonth - 1]} {day}, {year}
+-                      </span>
++                  </motion.div>
++                )}
++
++                {/* STEP 4: Review */}
++                {step === 4 && (
++                  <motion.div
++                    key="step4"
++                    initial={{ opacity: 0, x: 20 }}
++                    animate={{ opacity: 1, x: 0 }}
++                    exit={{ opacity: 0, x: -20 }}
++                    transition={{ duration: 0.25 }}
++                  >
++                    <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
++                      Review your info
++                    </h2>
++                    <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
++                      Double check before creating your account
++                    </p>
++                    <div className="space-y-4 mb-6">
++                      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
++                        <div className="flex justify-between items-center">
++                          <span className="text-sm text-gray-500">Name</span>
++                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
++                            {firstName} {lastName}
++                          </span>
++                        </div>
++                        <div className="flex justify-between items-center">
++                          <span className="text-sm text-gray-500">Email</span>
++                          <span className={`text-sm font-medium ${fullEmail && isValidUsername && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
++                            {fullEmail || 'Not set'}
++                          </span>
++                        </div>
++                        <div className="flex justify-between items-center">
++                          <span className="text-sm text-gray-500">Birthday</span>
++                          <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
++                            {MONTHSonth - 1]} {day}, {year}
++                          </span>
++                        </div>
++                      </div>
++                      <div className="flex items-start gap-2">
++                        <Checkbox
++                          id="terms"
++                          checked={agreedToTerms}
++                          onCheckedChange={(c) => setAgreedToTerms(c === true)}
++                          className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4] mt-0.5"
++                        />
++                        <label htmlFor="terms" className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer leading-relaxed">
++                          I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
++                        </label>
++                      </div>
+                     </div>
+-                  </div>
+-                  <div className="flex items-start gap-2">
+-                    <Checkbox
+-                      id="terms"
+-                      checked={agreedToTerms}
+-                      onCheckedChange={(c) => setAgreedToTerms(c === true)}
+-                      className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4] mt-0.5"
+-                    />
+-                    <label htmlFor="terms" className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer leading-relaxed">
+-                      I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
+-                    </label>
+-                  </div>
+-                </div>
+-              </motion.div>
+-            )}
+-          </AnimatePresence>
+-
+-          {/* Navigation */}
+-          <div className="flex gap-3 mt-6 sm:mt-8">
+-            {step > 1 && (
+-              <Button type="button" variant="outline" onClick={() => setStep(step - 1)}
+-                className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700">
+-                <ArrowLeft className="w-4 h-4 mr-1.5" />
+-                <span className="hidden sm:inline">Back</span>
+-              </Button>
+-            )}
+-            {step < 4 ? (
+-              <Button type="button"
+-                onClick={() => { if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext() }}
+-                className="h-11 rounded-xl flex-1 bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium">
+-                Continue
+-                <ArrowRight className="w-4 h-4 ml-1.5" />
+-              </Button>
+-            ) : (
+-              <Button type="button" onClick={handleRegister} disabled={isLoading}
+-                className="h-11 rounded-xl flex-1 bg-[#34A853] hover:bg-[#2d9249] text-white font-medium">
+-                {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Create Account'}
+-              </Button>
+-            )}
++                  </motion.div>
++                )}
++              </AnimatePresence>
++
++              {/* Navigation */}
++              <div className="flex gap-3 mt-6">
++                {step > 1 && (
++                  <Button type="button" variant="outline" onClick={() => setStep(step - 1)}
++                    className="h-12 rounded-xl flex-1 border-gray-200 dark:border-gray-700">
++                    <ArrowLeft className="w-4 h-4 mr-1.5" />
++                    Back
++                  </Button>
++                )}
++                {step < 4 ? (
++                  <Button type="button"
++                    onClick={() => { if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext() }}
++                    className="h-12 rounded-xl flex-1 bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium">
++                    Continue
++                    <ArrowRight className="w-4 h-4 ml-1.5" />
++                  </Button>
++                ) : (
++                  <Button type="button" onClick={handleRegister} disabled={isLoading}
++                    className="h-12 rounded-xl flex-1 bg-[#34A853] hover:bg-[#2d9249] text-white font-medium shadow-lg shadow-[#34A853]/20">
++                    {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Create Account'}
++                  </Button>
++                )}
++              </div>
++
++              {/* Back to login */}
++              <div className="text-center mt-5">
++                <button onClick={() => setAuthView('login')}
++                  className="text-sm text-[#444746] dark:text-gray-400 hover:text-[#4285F4] transition-colors">
++                  Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
++                </button>
++              </div>
++            </motion.div>
+           </div>
+ 
+-          {/* Back to login */}
+-          <div className="text-center mt-5">
+-            <button onClick={() => setAuthView('login')}
+-              className="text-sm text-[#444746] dark:text-gray-400 hover:text-[#4285F4] transition-colors">
+-              Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
+-            </button>
++          {/* ── Bottom Tab Bar: Personal / Business ── */}
++          <div className="border-t border-gray-100 dark:border-gray-800">
++            <div className="flex items-center justify-center gap-1 py-3 px-4">
++              {/* Personal tab - always visible */}
++              <button
++                type="button"
++                onClick={() => setActiveTab('personal')}
++                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
++                  activeTab === 'personal'
++                    ? 'bg-[#4285F4] text-white shadow-md shadow-[#4285F4]/20'
++                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
++                }`}
++              >
++                <User className="w-4 h-4" />
++                <span>Personal</span>
++              </button>
++
++              {/* Business tab - only visible on md+ screens */}
++              <button
++                type="button"
++                onClick={() => setActiveTab('business')}
++                className={`hidden md:flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
++                  activeTab === 'business'
++                    ? 'bg-[#34A853] text-white shadow-md shadow-[#34A853]/20'
++                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
++                }`}
++              >
++                <Briefcase className="w-4 h-4" />
++                <span>Business</span>
++              </button>
++            </div>
+           </div>
+         </div>
+-
+-        <p className="text-center text-xs text-gray-400 mt-4">
+-          &copy; 2025 EzyMail. All rights reserved.
+-        </p>
+-      </motion.div>
++      </div>
+     </div>
+   )
+ }

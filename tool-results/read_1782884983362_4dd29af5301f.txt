@@ -1,0 +1,1550 @@
+     1→'use client'
+     2→
+     3→import { useState, useRef, useEffect, useCallback } from 'react'
+     4→import { useEditor, EditorContent } from '@tiptap/react'
+     5→import StarterKit from '@tiptap/starter-kit'
+     6→import LinkExtension from '@tiptap/extension-link'
+     7→import Placeholder from '@tiptap/extension-placeholder'
+     8→import ImageExtension from '@tiptap/extension-image'
+     9→import { AnimatePresence, motion } from 'framer-motion'
+    10→import {
+    11→  Send, Paperclip, X, Bold, Italic, Strikethrough,
+    12→  Link, List, ListOrdered, Image as ImageIcon,
+    13→  Clock, Flag, FileText, MoreVertical, Check, CalendarDays, Trash2, Users,
+    14→  Sun, Sunset, Briefcase,
+    15→} from 'lucide-react'
+    16→import { format } from 'date-fns'
+    17→import { toast } from 'sonner'
+    18→import { cn } from '@/lib/utils'
+    19→import { Button } from '@/components/ui/button'
+    20→import { Input } from '@/components/ui/input'
+    21→import { Badge } from '@/components/ui/badge'
+    22→import { Separator } from '@/components/ui/separator'
+    23→import { Calendar } from '@/components/ui/calendar'
+    24→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    25→import {
+    26→  DropdownMenu,
+    27→  DropdownMenuContent,
+    28→  DropdownMenuItem,
+    29→  DropdownMenuSeparator,
+    30→  DropdownMenuTrigger,
+    31→} from '@/components/ui/dropdown-menu'
+    32→import { useAppStore, type Template } from '@/store/use-app-store'
+    33→
+    34→const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
+    35→const MAX_TOTAL_SIZE = 50 * 1024 * 1024 // 50MB
+    36→
+    37→interface PendingSendData {
+    38→  to: string
+    39→  cc: string
+    40→  bcc: string
+    41→  subject: string
+    42→  html: string
+    43→  replyToId?: string
+    44→  attachments?: Array<{ name: string; url: string; size: number; type: string; data?: string }>
+    45→  priority?: string
+    46→  scheduledAt?: string | null
+    47→  sentEmailId?: string
+    48→}
+    49→
+    50→interface RestoreData {
+    51→  to: string
+    52→  cc: string
+    53→  bcc: string
+    54→  subject: string
+    55→  html: string
+    56→  showCc: boolean
+    57→  showBcc: boolean
+    58→  attachments: File[]
+    59→  priority: string
+    60→}
+    61→
+    62→function ToolbarButton({
+    63→  active,
+    64→  onClick,
+    65→  disabled,
+    66→  children,
+    67→  title,
+    68→}: {
+    69→  active?: boolean
+    70→  onClick: () => void
+    71→  disabled?: boolean
+    72→  children: React.ReactNode
+    73→  title?: string
+    74→}) {
+    75→  const handleMouseDown = useCallback(
+    76→    (e: React.MouseEvent) => {
+    77→      e.preventDefault()
+    78→      onClick()
+    79→    },
+    80→    [onClick],
+    81→  )
+    82→
+    83→  return (
+    84→    <button
+    85→      type="button"
+    86→      title={title}
+    87→      disabled={disabled}
+    88→      className={cn(
+    89→        'inline-flex items-center justify-center h-9 w-9 rounded-lg shrink-0 transition-colors cursor-pointer',
+    90→        'hover:bg-accent hover:text-accent-foreground',
+    91→        'active:scale-95',
+    92→        'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none',
+    93→        active && 'bg-accent text-accent-foreground'
+    94→      )}
+    95→      onMouseDown={handleMouseDown}
+    96→    >
+    97→      {children}
+    98→    </button>
+    99→  )
+   100→}
+   101→
+   102→export function ComposeModal() {
+   103→  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, setCurrentFolder } = useAppStore()
+   104→
+   105→  const [isMobile, setIsMobile] = useState(() => {
+   106→    if (typeof globalThis === 'undefined') return false
+   107→    return globalThis.innerWidth < 768
+   108→  })
+   109→  const [to, setTo] = useState('')
+   110→  const [cc, setCc] = useState('')
+   111→  const [bcc, setBcc] = useState('')
+   112→  const [subject, setSubject] = useState('')
+   113→  const [errors, setErrors] = useState<Record<string, string>>({})
+   114→  const [attachments, setAttachments] = useState<File[]>([])
+   115→  const [showCc, setShowCc] = useState(false)
+   116→  const [showBcc, setShowBcc] = useState(false)
+   117→  const [isDragging, setIsDragging] = useState(false)
+   118→  const [isUploading, setIsUploading] = useState(false)
+   119→  const [uploadProgress, setUploadProgress] = useState(0)
+   120→  const [priority, setPriority] = useState<'normal' | 'high'>('normal')
+   121→  const [showSchedulePopover, setShowSchedulePopover] = useState(false)
+   122→  const [showTemplatesPopover, setShowTemplatesPopover] = useState(false)
+   123→  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined)
+   124→  const [scheduleHour, setScheduleHour] = useState('9')
+   125→  const [scheduleMinute, setScheduleMinute] = useState('00')
+   126→  const [scheduleAmPm, setScheduleAmPm] = useState<'AM' | 'PM'>('AM')
+   127→  const [showCustomSchedule, setShowCustomSchedule] = useState(false)
+   128→  const [undoCountdown, setUndoCountdown] = useState(0)
+   129→  const [showContactsPicker, setShowContactsPicker] = useState(false)
+   130→  const [contacts, setContacts] = useState<Array<{ id: string; name: string; email: string }>>([])
+   131→  const [contactSearch, setContactSearch] = useState('')
+   132→
+   133→  // Fetch contacts when picker opens
+   134→  useEffect(() => {
+   135→    if (!showContactsPicker) return
+   136→    fetch('/api/contacts')
+   137→      .then(res => res.json())
+   138→      .then(data => setContacts(data.data || []))
+   139→      .catch(() => setContacts([]))
+   140→  }, [showContactsPicker])
+   141→
+   142→  const fileInputRef = useRef<HTMLInputElement>(null)
+   143→  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   144→  const pendingSendRef = useRef<PendingSendData | null>(null)
+   145→  const restoreDataRef = useRef<RestoreData | null>(null)
+   146→  const dragCounterRef = useRef(0)
+   147→  const autoSavedDraftIdRef = useRef<string | null>(null)
+   148→  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+   149→  const isSendingRef = useRef(false)
+   150→
+   151→  // TipTap Editor
+   152→  const editor = useEditor({
+   153→    immediatelyRender: false,
+   154→    extensions: [
+   155→      StarterKit.configure({}),
+   156→      LinkExtension.configure({
+   157→        openOnClick: false,
+   158→        HTMLAttributes: {
+   159→          rel: 'noopener noreferrer',
+   160→          target: '_blank',
+   161→        },
+   162→      }),
+   163→      Placeholder.configure({
+   164→        placeholder: 'Write your message...',
+   165→      }),
+   166→      ImageExtension.configure({
+   167→        HTMLAttributes: {
+   168→          class: 'max-w-full rounded-lg',
+   169→        },
+   170→      }),
+   171→    ],
+   172→    content: '',
+   173→    editorProps: {
+   174→      attributes: {
+   175→        class: 'tiptap',
+   176→      },
+   177→    },
+   178→    onUpdate: ({ editor: updatedEditor }) => {
+   179→      if (updatedEditor.getText().trim().length > 0) {
+   180→        setErrors(prev => {
+   181→          const next = { ...prev }
+   182→          delete next.body
+   183→          return next
+   184→        })
+   185→      }
+   186→    },
+   187→  })
+   188→
+   189→  // Mobile resize listener
+   190→  useEffect(() => {
+   191→    const handleResize = () => setIsMobile(globalThis.innerWidth < 768)
+   192→    window.addEventListener('resize', handleResize)
+   193→    return () => window.removeEventListener('resize', handleResize)
+   194→  }, [])
+   195→
+   196→  // Fetch templates when compose opens
+   197→  useEffect(() => {
+   198→    if (!composeOpen) return
+   199→    if (templates.length > 0) return
+   200→    fetch('/api/templates')
+   201→      .then(res => res.json())
+   202→      .then(data => {
+   203→        if (data.success) setTemplates(data.data)
+   204→      })
+   205→      .catch(() => {})
+   206→  }, [composeOpen, templates.length, setTemplates])
+   207→
+   208→  // Reset editor when compose opens
+   209→  useEffect(() => {
+   210→    if (!composeOpen || !editor) return
+   211→
+   212→    if (restoreDataRef.current) {
+   213→      const data = restoreDataRef.current
+   214→      restoreDataRef.current = null
+   215→      setTo(data.to)
+   216→      setCc(data.cc)
+   217→      setBcc(data.bcc)
+   218→      setSubject(data.subject)
+   219→      setShowCc(data.showCc)
+   220→      setShowBcc(data.showBcc)
+   221→      editor.commands.setContent(data.html)
+   222→      setAttachments(data.attachments || [])
+   223→      setPriority((data.priority as 'normal' | 'high') || 'normal')
+   224→      setErrors({})
+   225→      return
+   226→    }
+   227→
+   228→    // Load draft content when editing a draft
+   229→    if (editDraftEmail) {
+   230→      setTo(editDraftEmail.recipient?.email || '')
+   231→      setSubject(editDraftEmail.subject || '')
+   232→      editor.commands.setContent(editDraftEmail.bodyHtml || editDraftEmail.body?.replace(/\n/g, '<br>') || '')
+   233→      setErrors({})
+   234→      return
+   235→    }
+   236→
+   237→    if (replyToEmail && replyMode) {
+   238→      // Always use the sender's actual email from the DB, never construct from name
+   239→      const senderEmail = replyToEmail.sender?.email || ''
+   240→      const senderName = replyToEmail.sender
+   241→        ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
+   242→        : 'Unknown Sender'
+   243→
+   244→      if (replyMode === 'forward') {
+   245→        setTo('')
+   246→        setSubject(replyToEmail.subject?.startsWith('Fwd: ')
+   247→          ? replyToEmail.subject
+   248→          : `Fwd: ${replyToEmail.subject || '(No subject)'}`)
+   249→        const fwdBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>---------- Forwarded message ----------</p><p>From: ${senderName} &lt;${senderEmail}&gt;</p><p>Date: ${new Date(replyToEmail.createdAt).toLocaleString()}</p><p>Subject: ${replyToEmail.subject || '(No subject)'}</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
+   250→        editor.commands.setContent(fwdBody)
+   251→      } else {
+   252→        if (replyMode === 'reply') {
+   253→          setTo(senderEmail)
+   254→        } else {
+   255→          // Reply All: sender goes in To, recipient + CC go in CC
+   256→          const recipientEmail = replyToEmail.recipient?.email || ''
+   257→          // Parse CC from the original email if available
+   258→          const originalCc = (() => { try { const cc = (replyToEmail as unknown as Record<string, unknown>).cc; if (!cc) return []; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean); if (Array.isArray(cc)) return cc } catch { return [] } return [] })()
+   259→          // Build CC list: original recipient + original CC, excluding sender (that goes in To)
+   260→          const allCc = [recipientEmail, ...originalCc].filter(e => e && e !== senderEmail)
+   261→          const uniqueCc = [...new Set(allCc)]
+   262→          setTo(senderEmail)
+   263→          if (uniqueCc.length > 0) {
+   264→            setCc(uniqueCc.join(', '))
+   265→            setShowCc(true)
+   266→          }
+   267→        }
+   268→        const subject = replyToEmail.subject?.startsWith('Re: ')
+   269→          ? replyToEmail.subject
+   270→          : `Re: ${replyToEmail.subject || ''}`
+   271→        setSubject(subject)
+   272→        const quoteDate = new Date(replyToEmail.createdAt).toLocaleString()
+   273→        const quotedBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>On ${quoteDate}, ${senderName} wrote:</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
+   274→        editor.commands.setContent(quotedBody)
+   275→      }
+   276→    } else if (replyToEmail) {
+   277→      setTo(replyToEmail.sender?.email || '')
+   278→      setSubject(`Re: ${replyToEmail.subject || ''}`)
+   279→      editor.commands.setContent('')
+   280→    } else {
+   281→      setTo('')
+   282→      setSubject('')
+   283→      editor.commands.setContent('')
+   284→    }
+   285→    setCc('')
+   286→    setBcc('')
+   287→    setShowCc(false)
+   288→    setShowBcc(false)
+   289→    setAttachments([])
+   290→    setPriority('normal')
+   291→    setScheduleDate(undefined)
+   292→    setScheduleHour('9')
+   293→    setScheduleMinute('00')
+   294→    setScheduleAmPm('AM')
+   295→    setShowCustomSchedule(false)
+   296→    setShowSchedulePopover(false)
+   297→    setShowTemplatesPopover(false)
+   298→    setErrors({})
+   299→  }, [composeOpen, editor, replyToEmail, replyMode])
+   300→
+   301→  // Cleanup timers
+   302→  useEffect(() => {
+   303→    return () => {
+   304→      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+   305→      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+   306→    }
+   307→  }, [])
+   308→
+   309→  // ─── Auto-save draft on page refresh / visibility change ──────────────
+   310→  const saveDraft = useCallback(async () => {
+   311→    if (!composeOpen || isSendingRef.current) return
+   312→    if (!editor) return
+   313→
+   314→    const html = editor.getHTML() || ''
+   315→    const text = editor.getText().trim()
+   316→    const toVal = to.trim()
+   317→    const subjectVal = subject.trim()
+   318→    const hasContent = toVal || subjectVal || text || html.replace(/<[^>]*>/g, '').trim()
+   319→
+   320→    if (!hasContent) return
+   321→
+   322→    try {
+   323→      // If editing an existing draft, update it
+   324→      const draftId = editDraftEmail?.id || autoSavedDraftIdRef.current
+   325→      const body = await fetch('/api/drafts', {
+   326→        method: 'POST',
+   327→        headers: { 'Content-Type': 'application/json' },
+   328→        body: JSON.stringify({
+   329→          id: draftId || undefined,
+   330→          to: toVal,
+   331→          cc: showCc ? cc.trim() : '',
+   332→          bcc: showBcc ? bcc.trim() : '',
+   333→          subject: subjectVal || '',
+   334→          bodyHtml: html,
+   335→          body: text,
+   336→        }),
+   337→        keepalive: true,
+   338→      })
+   339→      const data = await body.json()
+   340→      if (data.success && data.draft?.id && !draftId) {
+   341→        autoSavedDraftIdRef.current = data.draft.id
+   342→      }
+   343→    } catch {
+   344→      // Silent fail — draft save should never block or alert
+   345→    }
+   346→  }, [composeOpen, editor, to, cc, bcc, subject, showCc, showBcc, editDraftEmail])
+   347→
+   348→  useEffect(() => {
+   349→    if (!composeOpen) return
+   350→
+   351→    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+   352→      if (isSendingRef.current) return
+   353→      const html = editor?.getHTML() || ''
+   354→      const text = editor?.getText().trim()
+   355→      const hasContent = to.trim() || subject.trim() || text || html.replace(/<[^>]*>/g, '').trim()
+   356→      if (hasContent) {
+   357→        // Save draft using sendBeacon (works during page unload)
+   358→        const draftId = editDraftEmail?.id || autoSavedDraftIdRef.current
+   359→        const payload = JSON.stringify({
+   360→          id: draftId || undefined,
+   361→          to: to.trim(),
+   362→          cc: showCc ? cc.trim() : '',
+   363→          bcc: showBcc ? bcc.trim() : '',
+   364→          subject: subject.trim() || '',
+   365→          bodyHtml: html,
+   366→          body: text,
+   367→        })
+   368→        navigator.sendBeacon('/api/drafts', payload)
+   369→      }
+   370→    }
+   371→
+   372→    const handleVisibilityChange = () => {
+   373→      if (document.visibilityState === 'hidden') {
+   374→        saveDraft()
+   375→      }
+   376→    }
+   377→
+   378→    window.addEventListener('beforeunload', handleBeforeUnload)
+   379→    document.addEventListener('visibilitychange', handleVisibilityChange)
+   380→
+   381→    return () => {
+   382→      window.removeEventListener('beforeunload', handleBeforeUnload)
+   383→      document.removeEventListener('visibilitychange', handleVisibilityChange)
+   384→    }
+   385→  }, [composeOpen, editor, to, cc, bcc, subject, showCc, showBcc, editDraftEmail, saveDraft])
+   386→
+   387→  // Reset auto-saved draft ref when compose closes
+   388→  useEffect(() => {
+   389→    if (!composeOpen) {
+   390→      autoSavedDraftIdRef.current = null
+   391→    }
+   392→  }, [composeOpen])
+   393→
+   394→  const handleClose = useCallback(() => {
+   395→    if (editDraftEmail) {
+   396→      setCurrentFolder('drafts')
+   397→    }
+   398→    setComposeOpen(false)
+   399→  }, [editDraftEmail, setCurrentFolder, setComposeOpen])
+   400→
+   401→  const handleDiscard = useCallback(() => {
+   402→    if (editDraftEmail) {
+   403→      removeEmail(editDraftEmail.id)
+   404→      fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+   405→      toast.success('Draft discarded')
+   406→    }
+   407→    setComposeOpen(false)
+   408→  }, [editDraftEmail, removeEmail, setComposeOpen])
+   409→
+   410→  const processRecipients = (value: string): string => {
+   411→    return value
+   412→      .split(',')
+   413→      .map(r => r.trim())
+   414→      .filter(Boolean)
+   415→      .map(r => {
+   416→        // Already a valid email address
+   417→        if (r.includes('@')) return r
+   418→        // Only auto-append @ezy.af for simple usernames (letters, numbers, dots, underscores, hyphens)
+   419→        // NOT for full names with spaces like "Muhammad Wasil Amiri"
+   420→        if (/^[a-zA-Z0-9._-]+$/.test(r)) return `${r}@ezy.af`
+   421→        // If it contains spaces or looks like a name, return as-is (will fail validation)
+   422→        return r
+   423→      })
+   424→      .join(', ')
+   425→  }
+   426→
+   427→  const actuallySendEmail = useCallback(async (data: PendingSendData) => {
+   428→    try {
+   429→      const finalTo = processRecipients(data.to)
+   430→      const payload: Record<string, unknown> = {
+   431→        to: finalTo,
+   432→        subject: data.subject,
+   433→        body: data.html.replace(/<[^>]*>/g, ''),
+   434→        bodyHtml: data.html,
+   435→      }
+   436→      if (data.cc.trim()) payload.cc = processRecipients(data.cc)
+   437→      if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
+   438→      if (data.replyToId) payload.replyToId = data.replyToId
+   439→      if (data.attachments && data.attachments.length > 0) {
+   440→        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
+   441→      }
+   442→      if (data.priority === 'high') payload.priority = 'high'
+   443→      if (data.scheduledAt) payload.scheduledAt = data.scheduledAt
+   444→
+   445→      const res = await fetch('/api/emails', {
+   446→        method: 'POST',
+   447→        headers: { 'Content-Type': 'application/json' },
+   448→        body: JSON.stringify(payload),
+   449→      })
+   450→
+   451→      if (!res.ok) {
+   452→        const errData = await res.json()
+   453→        toast.error(errData.error || 'Failed to send email')
+   454→      }
+   455→    } catch {
+   456→      toast.error('Failed to send email')
+   457→    }
+   458→  }, [])
+   459→
+   460→  const handleUndo = useCallback(() => {
+   461→    if (undoTimerRef.current) {
+   462→      clearTimeout(undoTimerRef.current)
+   463→      undoTimerRef.current = null
+   464→    }
+   465→    if (countdownTimerRef.current) {
+   466→      clearInterval(countdownTimerRef.current)
+   467→      countdownTimerRef.current = null
+   468→    }
+   469→    const pending = pendingSendRef.current
+   470→    if (!pending) return
+   471→    pendingSendRef.current = null
+   472→    setUndoCountdown(0)
+   473→
+   474→    // If email was already sent (has sentEmailId), delete it
+   475→    if (pending.sentEmailId) {
+   476→      fetch(`/api/emails/${pending.sentEmailId}`, { method: 'DELETE' }).catch(() => {})
+   477→    }
+   478→
+   479→    restoreDataRef.current = {
+   480→      to: pending.to,
+   481→      cc: pending.cc,
+   482→      bcc: pending.bcc,
+   483→      subject: pending.subject,
+   484→      html: pending.html,
+   485→      showCc: !!pending.cc.trim(),
+   486→      showBcc: !!pending.bcc.trim(),
+   487→      attachments: attachments,
+   488→      priority: pending.priority || 'normal',
+   489→    }
+   490→    setComposeOpen(true)
+   491→    toast.success('Email draft restored')
+   492→  }, [setComposeOpen, attachments])
+   493→
+   494→  const startUndoCountdown = useCallback(() => {
+   495→    setUndoCountdown(5)
+   496→    countdownTimerRef.current = setInterval(() => {
+   497→      setUndoCountdown(prev => {
+   498→        if (prev <= 1) {
+   499→          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+   500→          return 0
+   501→        }
+   502→        return prev - 1
+   503→      })
+   504→    }, 1000)
+   505→  }, [])
+   506→
+   507→  const handleSend = async (scheduledAtDate?: Date | null) => {
+   508→    // Prevent double-send from double-click or rapid taps
+   509→    if (isSendingRef.current) return
+   510→    isSendingRef.current = true
+   511→
+   512→    try {
+   513→      const e: Record<string, string> = {}
+   514→      if (!to.trim()) e.to = 'Recipient is required'
+   515→      if (!subject.trim()) e.subject = 'Subject is required'
+   516→      const text = editor?.getText().trim()
+   517→      if (!text || text.length === 0) e.body = 'Message body is required'
+   518→      // Validate CC recipients if provided
+   519→      if (showCc && cc.trim()) {
+   520→        const ccParts = cc.split(',').map(r => r.trim()).filter(Boolean)
+   521→        for (const part of ccParts) {
+   522→          const processed = processRecipients(part)
+   523→          if (!processed.endsWith('@ezy.af')) {
+   524→            e.cc = `"${part}" is not a valid @ezy.af address`
+   525→            break
+   526→          }
+   527→        }
+   528→      }
+   529→      // Validate BCC recipients if provided
+   530→      if (showBcc && bcc.trim()) {
+   531→        const bccParts = bcc.split(',').map(r => r.trim()).filter(Boolean)
+   532→        for (const part of bccParts) {
+   533→          const processed = processRecipients(part)
+   534→          if (!processed.endsWith('@ezy.af')) {
+   535→            e.bcc = `"${part}" is not a valid @ezy.af address`
+   536→            break
+   537→          }
+   538→        }
+   539→      }
+   540→      setErrors(e)
+   541→      if (Object.keys(e).length > 0) {
+   542→        isSendingRef.current = false
+   543→        return
+   544→      }
+   545→
+   546→      const html = editor?.getHTML() || ''
+   547→      const currentAttachments = attachments
+   548→
+   549→      // Upload attachments FIRST
+   550→      let uploadedFiles: Array<{ name: string; url: string; size: number; type: string }> | undefined
+   551→      if (currentAttachments.length > 0) {
+   552→        setIsUploading(true)
+   553→        setUploadProgress(0)
+   554→        try {
+   555→          const result = await new Promise<Array<{ name: string; url: string; size: number; type: string; data: string }>>((resolve, reject) => {
+   556→            const formData = new FormData()
+   557→            currentAttachments.forEach(file => formData.append('files', file))
+   558→            const xhr = new XMLHttpRequest()
+   559→            xhr.open('POST', '/api/upload')
+   560→            xhr.withCredentials = true
+   561→            xhr.upload.addEventListener('progress', (ev) => {
+   562→              if (ev.lengthComputable) {
+   563→                setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
+   564→              }
+   565→            })
+   566→            xhr.addEventListener('load', () => {
+   567→              if (xhr.status >= 200 && xhr.status < 300) {
+   568→                try {
+   569→                  const data = JSON.parse(xhr.responseText)
+   570→                  resolve(data.files)
+   571→                } catch {
+   572→                  reject(new Error('Invalid response from server'))
+   573→                }
+   574→              } else {
+   575→                try {
+   576→                  const err = JSON.parse(xhr.responseText)
+   577→                  reject(new Error(err.error || `Upload failed (status ${xhr.status})`))
+   578→                } catch {
+   579→                  reject(new Error(`Upload failed (status ${xhr.status})`))
+   580→                }
+   581→              }
+   582→            })
+   583→            xhr.addEventListener('error', () => reject(new Error('Network error — check your connection')))
+   584→            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+   585→            xhr.timeout = 120000 // 2 minute timeout
+   586→            xhr.addEventListener('timeout', () => reject(new Error('Upload timed out — try a smaller file')))
+   587→            xhr.send(formData)
+   588→          })
+   589→          uploadedFiles = result
+   590→        } catch (err) {
+   591→          toast.error(err instanceof Error ? err.message : 'Failed to upload attachments')
+   592→          setIsUploading(false)
+   593→          setUploadProgress(0)
+   594→          return
+   595→        }
+   596→        setIsUploading(false)
+   597→        setUploadProgress(0)
+   598→      }
+   599→
+   600→      const data: PendingSendData = {
+   601→        to, cc, bcc, subject, html,
+   602→        replyToId: replyToEmail?.id,
+   603→        attachments: uploadedFiles,
+   604→        priority,
+   605→        scheduledAt: scheduledAtDate ? scheduledAtDate.toISOString() : null,
+   606→      }
+   607→      pendingSendRef.current = data
+   608→
+   609→      // Close compose modal
+   610→      setComposeOpen(false)
+   611→      setShowSchedulePopover(false)
+   612→
+   613→      if (scheduledAtDate) {
+   614→        // Schedule send — send immediately to API (no undo)
+   615→        toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
+   616→        actuallySendEmail(data)
+   617→        // Delete draft if editing one
+   618→        if (editDraftEmail) {
+   619→          fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+   620→        }
+   621→      } else {
+   622→        // Normal send with undo
+   623→        const sendResult = await actuallySendEmailWithResponse(data)
+   624→        if (sendResult?.emailId) {
+   625→          pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
+   626→          // Delete draft if editing one
+   627→          if (editDraftEmail) {
+   628→            fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+   629→          }
+   630→        }
+   631→
+   632→        toast('Message sent.', {
+   633→          description: undoCountdown > 0 ? `Undo available (${undoCountdown}s)` : undefined,
+   634→          action: {
+   635→            label: 'Undo',
+   636→            onClick: handleUndo,
+   637→          },
+   638→          duration: 5000,
+   639→        })
+   640→
+   641→        startUndoCountdown()
+   642→
+   643→        undoTimerRef.current = setTimeout(() => {
+   644→          const payload = pendingSendRef.current
+   645→          if (!payload) return
+   646→          pendingSendRef.current = null
+   647→          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+   648→          setUndoCountdown(0)
+   649→        }, 5000)
+   650→      }
+   651→    } finally {
+   652→      isSendingRef.current = false
+   653→    }
+   654→  }
+   655→
+   656→  const actuallySendEmailWithResponse = useCallback(async (data: PendingSendData) => {
+   657→    try {
+   658→      const finalTo = processRecipients(data.to)
+   659→      const payload: Record<string, unknown> = {
+   660→        to: finalTo,
+   661→        subject: data.subject,
+   662→        body: data.html.replace(/<[^>]*>/g, ''),
+   663→        bodyHtml: data.html,
+   664→      }
+   665→      if (data.cc.trim()) payload.cc = processRecipients(data.cc)
+   666→      if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
+   667→      if (data.replyToId) payload.replyToId = data.replyToId
+   668→      if (data.attachments && data.attachments.length > 0) {
+   669→        payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
+   670→      }
+   671→      if (data.priority === 'high') payload.priority = 'high'
+   672→      payload.sentAt = new Date().toISOString()
+   673→
+   674→      const res = await fetch('/api/emails', {
+   675→        method: 'POST',
+   676→        headers: { 'Content-Type': 'application/json' },
+   677→        body: JSON.stringify(payload),
+   678→      })
+   679→
+   680→      if (!res.ok) {
+   681→        const errData = await res.json()
+   682→        toast.error(errData.error || 'Failed to send email')
+   683→        return null
+   684→      }
+   685→
+   686→      const responseData = await res.json()
+   687→      return { emailId: responseData.email?.id }
+   688→    } catch {
+   689→      toast.error('Failed to send email')
+   690→      return null
+   691→    }
+   692→  }, [])
+   693→
+   694→  const handleLink = useCallback(() => {
+   695→    if (!editor) return
+   696→    const previousUrl = editor.getAttributes('link').href
+   697→    const url = window.prompt('Enter URL:', previousUrl || '')
+   698→    if (url === null) return
+   699→    if (url === '') {
+   700→      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+   701→      return
+   702→    }
+   703→    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+   704→  }, [editor])
+   705→
+   706→  const handleImage = useCallback(() => {
+   707→    if (!editor) return
+   708→    const url = window.prompt('Enter image URL:')
+   709→    if (!url) return
+   710→    editor.chain().focus().setImage({ src: url }).run()
+   711→  }, [editor])
+   712→
+   713→  // Schedule send helpers
+   714→  const getLaterToday = () => {
+   715→    const d = new Date()
+   716→    d.setHours(17, 0, 0, 0)
+   717→    if (d <= new Date()) d.setDate(d.getDate() + 1)
+   718→    return d
+   719→  }
+   720→
+   721→  const getTomorrowMorning = () => {
+   722→    const d = new Date()
+   723→    d.setDate(d.getDate() + 1)
+   724→    d.setHours(9, 0, 0, 0)
+   725→    return d
+   726→  }
+   727→
+   728→  const getTomorrowAfternoon = () => {
+   729→    const d = new Date()
+   730→    d.setDate(d.getDate() + 1)
+   731→    d.setHours(13, 0, 0, 0)
+   732→    return d
+   733→  }
+   734→
+   735→  const getNextMonday = () => {
+   736→    const d = new Date()
+   737→    const day = d.getDay()
+   738→    const daysUntilMon = day === 0 ? 1 : (8 - day)
+   739→    d.setDate(d.getDate() + daysUntilMon)
+   740→    d.setHours(8, 0, 0, 0)
+   741→    return d
+   742→  }
+   743→
+   744→  const handleQuickSchedule = (date: Date) => {
+   745→    handleSend(date)
+   746→  }
+   747→
+   748→  const handleCustomSchedule = () => {
+   749→    if (!scheduleDate) return
+   750→    const hr = parseInt(scheduleHour) || 0
+   751→    let hours = scheduleAmPm === 'PM' && hr !== 12 ? hr + 12 : scheduleAmPm === 'AM' && hr === 12 ? 0 : hr
+   752→    const minutes = parseInt(scheduleMinute) || 0
+   753→    const d = new Date(scheduleDate)
+   754→    d.setHours(hours, minutes, 0, 0)
+   755→    if (d <= new Date()) {
+   756→      toast.error('Please select a future date and time')
+   757→      return
+   758→    }
+   759→    handleSend(d)
+   760→  }
+   761→
+   762→  // Template handling
+   763→  const handleLoadTemplate = (template: Template) => {
+   764→    if (!editor) return
+   765→    if (template.subject) setSubject(template.subject)
+   766→    if (template.bodyHtml) {
+   767→      editor.commands.setContent(template.bodyHtml)
+   768→    } else if (template.body) {
+   769→      editor.commands.setContent(template.body.replace(/\n/g, '<br>'))
+   770→    }
+   771→    setShowTemplatesPopover(false)
+   772→    toast.success(`Template "${template.name}" loaded`)
+   773→  }
+   774→
+   775→  const handleSaveAsTemplate = async () => {
+   776→    const html = editor?.getHTML() || ''
+   777→    const name = subject.trim() || 'Untitled Template'
+   778→    try {
+   779→      const res = await fetch('/api/templates', {
+   780→        method: 'POST',
+   781→        headers: { 'Content-Type': 'application/json' },
+   782→        body: JSON.stringify({
+   783→          name,
+   784→          subject: subject.trim(),
+   785→          body: html.replace(/<[^>]*>/g, ''),
+   786→          bodyHtml: html,
+   787→        }),
+   788→      })
+   789→      const data = await res.json()
+   790→      if (data.success) {
+   791→        toast.success('Template saved')
+   792→      } else {
+   793→        toast.error(data.error || 'Failed to save template')
+   794→      }
+   795→    } catch {
+   796→      toast.error('Failed to save template')
+   797→    }
+   798→  }
+   799→
+   800→  // Drag and drop handlers
+   801→  const handleDragEnter = useCallback((e: React.DragEvent) => {
+   802→    e.preventDefault()
+   803→    e.stopPropagation()
+   804→    dragCounterRef.current++
+   805→    if (e.dataTransfer.types.includes('Files')) setIsDragging(true)
+   806→  }, [])
+   807→
+   808→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   809→    e.preventDefault()
+   810→    e.stopPropagation()
+   811→    dragCounterRef.current--
+   812→    if (dragCounterRef.current === 0) setIsDragging(false)
+   813→  }, [])
+   814→
+   815→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   816→    e.preventDefault()
+   817→    e.stopPropagation()
+   818→  }, [])
+   819→
+   820→  const handleDrop = useCallback((e: React.DragEvent) => {
+   821→    e.preventDefault()
+   822→    e.stopPropagation()
+   823→    setIsDragging(false)
+   824→    dragCounterRef.current = 0
+   825→    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+   826→      const newFiles = Array.from(e.dataTransfer.files)
+   827→      const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
+   828→      if (oversized.length > 0) {
+   829→        toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
+   830→        return
+   831→      }
+   832→      const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
+   833→      const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
+   834→      if (newTotal > MAX_TOTAL_SIZE) {
+   835→        toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+   836→        return
+   837→      }
+   838→      setAttachments(prev => [...prev, ...newFiles])
+   839→    }
+   840→  }, [attachments])
+   841→
+   842→  const removeAttachment = useCallback((index: number) => {
+   843→    setAttachments(prev => prev.filter((_, idx) => idx !== index))
+   844→  }, [])
+   845→
+   846→  // ─── Render ───────────────────────────────────────────────────────────────
+   847→  return (
+   848→    <AnimatePresence>
+   849→      {composeOpen && (
+   850→        <motion.div
+   851→          key="compose-root"
+   852→          className="fixed inset-0 z-[100]"
+   853→          initial={{ opacity: 0 }}
+   854→          animate={{ opacity: 1 }}
+   855→          exit={{ opacity: 0 }}
+   856→          transition={{ duration: 0.2 }}
+   857→        >
+   858→          {/* Backdrop */}
+   859→          <div
+   860→            className="absolute inset-0 bg-black/50"
+   861→            onClick={handleClose}
+   862→          />
+   863→
+   864→          {/* Panel */}
+   865→          <motion.div
+   866→            initial={
+   867→              isMobile
+   868→                ? { opacity: 0, y: '100%' }
+   869→                : { opacity: 0, scale: 0.95, y: 20 }
+   870→            }
+   871→            animate={
+   872→              isMobile
+   873→                ? { opacity: 1, y: 0 }
+   874→                : { opacity: 1, scale: 1, y: 0 }
+   875→            }
+   876→            exit={
+   877→              isMobile
+   878→                ? { opacity: 0, y: '100%' }
+   879→                : { opacity: 0, scale: 0.95, y: 20 }
+   880→            }
+   881→            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+   882→            className={
+   883→              isMobile
+   884→                ? 'absolute inset-x-0 bottom-0 z-[1] h-[85vh] bg-white dark:bg-gray-900 rounded-t-2xl overflow-hidden shadow-2xl border-t border-gray-200 dark:border-gray-700 flex flex-col'
+   885→                : 'absolute top-[5vh] right-4 z-[1] w-[560px] max-w-[calc(100vw-2rem)] h-[80vh] bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col'
+   886→            }
+   887→            onDragEnter={handleDragEnter}
+   888→            onDragLeave={handleDragLeave}
+   889→            onDragOver={handleDragOver}
+   890→            onDrop={handleDrop}
+   891→          >
+   892→            {/* Header */}
+   893→            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+   894→              <div className="flex items-center gap-2">
+   895→                {priority === 'high' && (
+   896→                  <Badge variant="destructive" className="text-xs h-5 gap-1 px-1.5">
+   897→                    <Flag className="w-3 h-3" />
+   898→                    High Priority
+   899→                  </Badge>
+   900→                )}
+   901→                <h2 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">
+   902→                  {editDraftEmail ? 'Edit Draft' : replyMode === 'forward' ? 'Forward' : replyMode === 'replyAll' ? 'Reply All' : replyToEmail ? 'Reply' : 'New Message'}
+   903→                </h2>
+   904→              </div>
+   905→              <div className="flex items-center gap-1">
+   906→                {/* 3-dot menu */}
+   907→                <DropdownMenu>
+   908→                  <DropdownMenuTrigger asChild>
+   909→                    <button
+   910→                      type="button"
+   911→                      className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+   912→                      aria-label="More options"
+   913→                    >
+   914→                      <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+   915→                    </button>
+   916→                  </DropdownMenuTrigger>
+   917→                  <DropdownMenuContent align="end" className="w-52 z-[200]">
+   918→                    <DropdownMenuItem onClick={() => { setShowSchedulePopover(true) }} className="cursor-pointer gap-2">
+   919→                      <Clock className="w-4 h-4" />
+   920→                      Schedule
+   921→                    </DropdownMenuItem>
+   922→                    <DropdownMenuItem onClick={() => { setShowContactsPicker(true) }} className="cursor-pointer gap-2">
+   923→                      <Users className="w-4 h-4" />
+   924→                      Add from Contacts
+   925→                    </DropdownMenuItem>
+   926→                    <DropdownMenuSeparator />
+   927→                    <DropdownMenuItem onClick={handleDiscard} className="cursor-pointer gap-2 text-red-500 hover:text-red-600 focus:text-red-600">
+   928→                      <Trash2 className="w-4 h-4" />
+   929→                      Discard
+   930→                    </DropdownMenuItem>
+   931→                  </DropdownMenuContent>
+   932→                </DropdownMenu>
+   933→                {/* Contacts Picker - centered overlay */}
+   934→                <AnimatePresence>
+   935→                  {showContactsPicker && (
+   936→                    <motion.div
+   937→                      key="contacts-overlay"
+   938→                      initial={{ opacity: 0 }}
+   939→                      animate={{ opacity: 1 }}
+   940→                      exit={{ opacity: 0 }}
+   941→                      transition={{ duration: 0.15 }}
+   942→                      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40"
+   943→                      onClick={(e) => { if (e.target === e.currentTarget) { setShowContactsPicker(false); setContactSearch('') } }}
+   944→                    >
+   945→                      <motion.div
+   946→                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+   947→                        animate={{ opacity: 1, scale: 1, y: 0 }}
+   948→                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+   949→                        transition={{ duration: 0.15, ease: 'easeOut' as const }}
+   950→                        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden w-[calc(100%-2rem)] max-w-sm max-h-[70vh]"
+   951→                      >
+   952→                        {/* Header */}
+   953→                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+   954→                          <h3 className="text-sm font-semibold text-[#1F1F1F] dark:text-white">Add from Contacts</h3>
+   955→                          <button
+   956→                            type="button"
+   957→                            onClick={() => { setShowContactsPicker(false); setContactSearch('') }}
+   958→                            className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+   959→                            aria-label="Close contacts"
+   960→                          >
+   961→                            <X className="w-4 h-4 text-gray-400" />
+   962→                          </button>
+   963→                        </div>
+   964→                        {/* Search */}
+   965→                        <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+   966→                          <Input
+   967→                            placeholder="Search contacts..."
+   968→                            value={contactSearch}
+   969→                            onChange={(e) => setContactSearch(e.target.value)}
+   970→                            className="h-9 text-sm"
+   971→                            autoFocus
+   972→                          />
+   973→                        </div>
+   974→                        {/* Contact list */}
+   975→                        <div className="flex-1 overflow-y-auto">
+   976→                          {contacts.filter(c =>
+   977→                            !contactSearch ||
+   978→                            c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+   979→                            c.email.toLowerCase().includes(contactSearch.toLowerCase())
+   980→                          ).length === 0 ? (
+   981→                            <p className="text-xs text-gray-400 text-center py-6">No contacts found</p>
+   982→                          ) : (
+   983→                            contacts
+   984→                              .filter(c =>
+   985→                                !contactSearch ||
+   986→                                c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+   987→                                c.email.toLowerCase().includes(contactSearch.toLowerCase())
+   988→                              )
+   989→                              .map(c => (
+   990→                                <button
+   991→                                  key={c.id}
+   992→                                  type="button"
+   993→                                  onClick={() => {
+   994→                                    const currentTo = to.trim()
+   995→                                    setTo(currentTo ? `${currentTo}, ${c.email}` : c.email)
+   996→                                    setShowContactsPicker(false)
+   997→                                    setContactSearch('')
+   998→                                    toast.success(`Added ${c.name}`)
+   999→                                  }}
+  1000→                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer text-left"
+  1001→                                >
+  1002→                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+  1003→                                    {c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+  1004→                                  </div>
+  1005→                                  <div className="min-w-0 flex-1">
+  1006→                                    <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{c.name}</p>
+  1007→                                    <p className="text-xs text-gray-400 truncate">{c.email}</p>
+  1008→                                  </div>
+  1009→                                  <div className="shrink-0">
+  1010→                                    <div className="w-6 h-6 rounded-full bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center">
+  1011→                                      <span className="text-[#4285F4] text-xs font-bold">+</span>
+  1012→                                    </div>
+  1013→                                  </div>
+  1014→                                </button>
+  1015→                              ))
+  1016→                          )}
+  1017→                        </div>
+  1018→                      </motion.div>
+  1019→                    </motion.div>
+  1020→                  )}
+  1021→                </AnimatePresence>
+  1022→                <button
+  1023→                  type="button"
+  1024→                  onClick={handleClose}
+  1025→                  className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+  1026→                  aria-label="Close"
+  1027→                >
+  1028→                  <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+  1029→                </button>
+  1030→              </div>
+  1031→            </div>
+  1032→
+  1033→            {/* Fields */}
+  1034→            <div className="shrink-0 border-b border-gray-200 dark:border-gray-700">
+  1035→              {/* To */}
+  1036→              <div className="flex items-center px-4 gap-2">
+  1037→                <span className="text-sm text-gray-500 shrink-0 w-8">To</span>
+  1038→                <Input
+  1039→                  value={to}
+  1040→                  onChange={e => setTo(e.target.value)}
+  1041→                  placeholder="recipient"
+  1042→                  className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+  1043→                />
+  1044→                <div className="flex items-center gap-0.5 shrink-0">
+  1045→                  <button
+  1046→                    type="button"
+  1047→                    onClick={() => setShowCc(prev => !prev)}
+  1048→                    className={cn(
+  1049→                      'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
+  1050→                      showCc
+  1051→                        ? 'text-[#4285F4] bg-[#4285F4]/10'
+  1052→                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+  1053→                    )}
+  1054→                  >
+  1055→                    CC
+  1056→                  </button>
+  1057→                  <button
+  1058→                    type="button"
+  1059→                    onClick={() => setShowBcc(prev => !prev)}
+  1060→                    className={cn(
+  1061→                      'h-7 text-xs px-2 font-normal rounded-md transition-colors cursor-pointer',
+  1062→                      showBcc
+  1063→                        ? 'text-[#4285F4] bg-[#4285F4]/10'
+  1064→                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+  1065→                    )}
+  1066→                  >
+  1067→                    BCC
+  1068→                  </button>
+  1069→                </div>
+  1070→              </div>
+  1071→              {errors.to && <p className="text-xs text-red-500 px-4 pb-2">{errors.to}</p>}
+  1072→
+  1073→              {/* CC */}
+  1074→              {showCc && (
+  1075→                <div className="border-t border-gray-100 dark:border-gray-800">
+  1076→                  <div className="flex items-center px-4 gap-2">
+  1077→                    <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
+  1078→                    <Input
+  1079→                      value={cc}
+  1080→                      onChange={e => {
+  1081→                        setCc(e.target.value)
+  1082→                        if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
+  1083→                      }}
+  1084→                      placeholder="CC recipients (comma-separated)"
+  1085→                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+  1086→                    />
+  1087→                  </div>
+  1088→                  {errors.cc && <p className="text-xs text-red-500 px-4 pb-2">{errors.cc}</p>}
+  1089→                </div>
+  1090→              )}
+  1091→
+  1092→              {/* BCC */}
+  1093→              {showBcc && (
+  1094→                <div className="border-t border-gray-100 dark:border-gray-800">
+  1095→                  <div className="flex items-center px-4 gap-2">
+  1096→                    <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
+  1097→                    <Input
+  1098→                      value={bcc}
+  1099→                      onChange={e => {
+  1100→                        setBcc(e.target.value)
+  1101→                        if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
+  1102→                      }}
+  1103→                      placeholder="BCC recipients (comma-separated)"
+  1104→                      className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+  1105→                    />
+  1106→                  </div>
+  1107→                  {errors.bcc && <p className="text-xs text-red-500 px-4 pb-2">{errors.bcc}</p>}
+  1108→                </div>
+  1109→              )}
+  1110→
+  1111→              {/* Subject */}
+  1112→              <div className="border-t border-gray-100 dark:border-gray-800">
+  1113→                <div className="flex items-center px-4 gap-2">
+  1114→                  <span className="text-sm text-gray-500 shrink-0 w-8">Sub</span>
+  1115→                  <Input
+  1116→                    value={subject}
+  1117→                    onChange={e => setSubject(e.target.value)}
+  1118→                    placeholder="Email subject"
+  1119→                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-0"
+  1120→                  />
+  1121→                </div>
+  1122→                {errors.subject && <p className="text-xs text-red-500 px-4 pb-2">{errors.subject}</p>}
+  1123→              </div>
+  1124→            </div>
+  1125→
+  1126→            {/* Rich text editor area */}
+  1127→            <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+  1128→              {/* Toolbar */}
+  1129→              <div className="flex items-center gap-0.5 px-3 py-2 border-b border-gray-100 dark:border-gray-800 shrink-0 flex-wrap">
+  1130→                <ToolbarButton
+  1131→                  title="Bold"
+  1132→                  active={editor?.isActive('bold')}
+  1133→                  onClick={() => editor?.chain().focus().toggleBold().run()}
+  1134→                  disabled={!editor}
+  1135→                >
+  1136→                  <Bold className="w-4 h-4" />
+  1137→                </ToolbarButton>
+  1138→                <ToolbarButton
+  1139→                  title="Italic"
+  1140→                  active={editor?.isActive('italic')}
+  1141→                  onClick={() => editor?.chain().focus().toggleItalic().run()}
+  1142→                  disabled={!editor}
+  1143→                >
+  1144→                  <Italic className="w-4 h-4" />
+  1145→                </ToolbarButton>
+  1146→                <ToolbarButton
+  1147→                  title="Strikethrough"
+  1148→                  active={editor?.isActive('strike')}
+  1149→                  onClick={() => editor?.chain().focus().toggleStrike().run()}
+  1150→                  disabled={!editor}
+  1151→                >
+  1152→                  <Strikethrough className="w-4 h-4" />
+  1153→                </ToolbarButton>
+  1154→
+  1155→                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+  1156→
+  1157→                <ToolbarButton
+  1158→                  title="Insert Link"
+  1159→                  active={editor?.isActive('link')}
+  1160→                  onClick={handleLink}
+  1161→                  disabled={!editor}
+  1162→                >
+  1163→                  <Link className="w-4 h-4" />
+  1164→                </ToolbarButton>
+  1165→                <ToolbarButton
+  1166→                  title="Bullet List"
+  1167→                  active={editor?.isActive('bulletList')}
+  1168→                  onClick={() => editor?.chain().focus().toggleBulletList().run()}
+  1169→                  disabled={!editor}
+  1170→                >
+  1171→                  <List className="w-4 h-4" />
+  1172→                </ToolbarButton>
+  1173→                <ToolbarButton
+  1174→                  title="Ordered List"
+  1175→                  active={editor?.isActive('orderedList')}
+  1176→                  onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+  1177→                  disabled={!editor}
+  1178→                >
+  1179→                  <ListOrdered className="w-4 h-4" />
+  1180→                </ToolbarButton>
+  1181→
+  1182→                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+  1183→
+  1184→                <ToolbarButton
+  1185→                  title="Insert Image"
+  1186→                  onClick={handleImage}
+  1187→                  disabled={!editor}
+  1188→                >
+  1189→                  <ImageIcon className="w-4 h-4" />
+  1190→                </ToolbarButton>
+  1191→
+  1192→                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+  1193→
+  1194→                {/* Templates button */}
+  1195→                <Popover open={showTemplatesPopover} onOpenChange={setShowTemplatesPopover}>
+  1196→                  <PopoverTrigger asChild>
+  1197→                    <button
+  1198→                      type="button"
+  1199→                      title="Templates"
+  1200→                      className={cn(
+  1201→                        'inline-flex items-center justify-center h-9 w-9 rounded-lg shrink-0 transition-colors cursor-pointer',
+  1202→                        'hover:bg-accent hover:text-accent-foreground',
+  1203→                        'active:scale-95',
+  1204→                        showTemplatesPopover && 'bg-accent text-accent-foreground'
+  1205→                      )}
+  1206→                    >
+  1207→                      <FileText className="w-4 h-4" />
+  1208→                    </button>
+  1209→                  </PopoverTrigger>
+  1210→                  <PopoverContent className="w-72 p-0" align="start" side="bottom">
+  1211→                    <div className="px-3 py-2">
+  1212→                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Templates</p>
+  1213→                    </div>
+  1214→                    <Separator />
+  1215→                    <div className="max-h-48 overflow-y-auto">
+  1216→                      {templates.length === 0 ? (
+  1217→                        <div className="px-3 py-4 text-center text-sm text-gray-400">
+  1218→                          No templates yet
+  1219→                        </div>
+  1220→                      ) : (
+  1221→                        templates.map(t => (
+  1222→                          <button
+  1223→                            key={t.id}
+  1224→                            type="button"
+  1225→                            onClick={() => handleLoadTemplate(t)}
+  1226→                            className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-800 last:border-0"
+  1227→                          >
+  1228→                            <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{t.name}</p>
+  1229→                            <p className="text-xs text-gray-400 truncate mt-0.5">
+  1230→                              {t.subject || 'No subject'}
+  1231→                            </p>
+  1232→                          </button>
+  1233→                        ))
+  1234→                      )}
+  1235→                    </div>
+  1236→                  </PopoverContent>
+  1237→                </Popover>
+  1238→
+  1239→                {/* Priority toggle */}
+  1240→                <ToolbarButton
+  1241→                  title={priority === 'high' ? 'High Priority (click to change)' : 'Set High Priority'}
+  1242→                  active={priority === 'high'}
+  1243→                  onClick={() => setPriority(prev => prev === 'high' ? 'normal' : 'high')}
+  1244→                >
+  1245→                  <Flag className="w-4 h-4" />
+  1246→                </ToolbarButton>
+  1247→              </div>
+  1248→
+  1249→              {/* Editor */}
+  1250→              <div className="flex-1 overflow-y-auto min-h-[120px] relative tiptap-editor-wrap">
+  1251→                {editor ? (
+  1252→                  <EditorContent editor={editor} />
+  1253→                ) : (
+  1254→                  <div className="flex items-center justify-center h-full text-sm text-gray-400">
+  1255→                    Loading editor...
+  1256→                  </div>
+  1257→                )}
+  1258→              </div>
+  1259→
+  1260→              {errors.body && <p className="text-xs text-red-500 px-4 pb-1">{errors.body}</p>}
+  1261→
+  1262→              {/* Drag overlay */}
+  1263→              {isDragging && (
+  1264→                <div className="absolute inset-0 z-10 m-2 border-2 border-dashed border-[#4285F4] bg-[#4285F4]/5 rounded-lg flex items-center justify-center pointer-events-none">
+  1265→                  <div className="text-center">
+  1266→                    <Paperclip className="w-8 h-8 mx-auto text-[#4285F4] mb-2" />
+  1267→                    <p className="text-sm font-medium text-[#4285F4]">Drop files here</p>
+  1268→                  </div>
+  1269→                </div>
+  1270→              )}
+  1271→            </div>
+  1272→
+  1273→            {/* Attachments */}
+  1274→            {attachments.length > 0 && (
+  1275→              <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2 shrink-0 max-h-24 overflow-y-auto">
+  1276→                {attachments.map((file, i) => (
+  1277→                  <Badge key={i} variant="secondary" className="gap-1.5 pr-1">
+  1278→                    <Paperclip className="w-3 h-3" />
+  1279→                    <span className="max-w-[120px] truncate">{file.name}</span>
+  1280→                    <span className="text-muted-foreground text-xs">
+  1281→                      {(file.size / 1024).toFixed(0)}KB
+  1282→                    </span>
+  1283→                    <button
+  1284→                      type="button"
+  1285→                      onClick={() => removeAttachment(i)}
+  1286→                      className="inline-flex items-center justify-center h-4 w-4 ml-1 hover:text-red-500 cursor-pointer"
+  1287→                    >
+  1288→                      <X className="w-3 h-3" />
+  1289→                    </button>
+  1290→                  </Badge>
+  1291→                ))}
+  1292→              </div>
+  1293→            )}
+  1294→
+  1295→            {/* Footer */}
+  1296→            <div
+  1297→              className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 shrink-0"
+  1298→              style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 12px, 12px)' }}
+  1299→            >
+  1300→              <input
+  1301→                ref={fileInputRef}
+  1302→                type="file"
+  1303→                multiple
+  1304→                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,.gz,.tar,.json,.xml,.html,.css,.js,.heic,.heif"
+  1305→                className="hidden"
+  1306→                onChange={e => {
+  1307→                  if (e.target.files && e.target.files.length > 0) {
+  1308→                    const newFiles = Array.from(e.target.files)
+  1309→                    const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
+  1310→                    if (oversized.length > 0) {
+  1311→                      toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
+  1312→                      if (fileInputRef.current) fileInputRef.current.value = ''
+  1313→                      return
+  1314→                    }
+  1315→                    const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
+  1316→                    const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
+  1317→                    if (newTotal > MAX_TOTAL_SIZE) {
+  1318→                      toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+  1319→                      if (fileInputRef.current) fileInputRef.current.value = ''
+  1320→                      return
+  1321→                    }
+  1322→                    setAttachments(prev => [...prev, ...newFiles])
+  1323→                  }
+  1324→                  if (fileInputRef.current) fileInputRef.current.value = ''
+  1325→                }}
+  1326→              />
+  1327→              <button
+  1328→                type="button"
+  1329→                onClick={() => fileInputRef.current?.click()}
+  1330→                className="inline-flex items-center justify-center h-9 w-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+  1331→                aria-label="Attach file"
+  1332→              >
+  1333→                <Paperclip className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+  1334→              </button>
+  1335→              <div className="flex-1" />
+  1336→              <button
+  1337→                type="button"
+  1338→                onClick={handleClose}
+  1339→                className="inline-flex items-center justify-center h-9 px-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+  1340→              >
+  1341→                Discard
+  1342→              </button>
+  1343→
+  1344→              {/* Schedule Send button */}
+  1345→              <button
+  1346→                type="button"
+  1347→                disabled={!editor || isUploading}
+  1348→                onClick={() => setShowSchedulePopover(true)}
+  1349→                className="inline-flex items-center justify-center h-9 gap-1.5 text-sm font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 rounded-xl px-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+  1350→              >
+  1351→                <Clock className="w-4 h-4" />
+  1352→                <span className="hidden sm:inline">Schedule</span>
+  1353→              </button>
+  1354→
+  1355→              {/* Schedule Send Modal */}
+  1356→              <AnimatePresence>
+  1357→                {showSchedulePopover && !showCustomSchedule && (
+  1358→                  <motion.div
+  1359→                    initial={{ opacity: 0 }}
+  1360→                    animate={{ opacity: 1 }}
+  1361→                    exit={{ opacity: 0 }}
+  1362→                    transition={{ duration: 0.15 }}
+  1363→                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+  1364→                    onClick={() => setShowSchedulePopover(false)}
+  1365→                  >
+  1366→                    <motion.div
+  1367→                      initial={{ scale: 0.95, opacity: 0 }}
+  1368→                      animate={{ scale: 1, opacity: 1 }}
+  1369→                      exit={{ scale: 0.95, opacity: 0 }}
+  1370→                      transition={{ duration: 0.15 }}
+  1371→                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+  1372→                      onClick={(e) => e.stopPropagation()}
+  1373→                    >
+  1374→                      <div className="grid grid-cols-2 gap-2.5">
+  1375→                        {/* Tomorrow Morning */}
+  1376→                        <button
+  1377→                          type="button"
+  1378→                          onClick={() => handleQuickSchedule(getTomorrowMorning())}
+  1379→                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1380→                        >
+  1381→                          <Sun className="w-5 h-5 text-[#FBBC05]" />
+  1382→                          <div className="text-center">
+  1383→                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow morning</p>
+  1384→                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowMorning(), 'd MMM, h:mm a')}</p>
+  1385→                          </div>
+  1386→                        </button>
+  1387→                        {/* Tomorrow Afternoon */}
+  1388→                        <button
+  1389→                          type="button"
+  1390→                          onClick={() => handleQuickSchedule(getTomorrowAfternoon())}
+  1391→                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1392→                        >
+  1393→                          <Sunset className="w-5 h-5 text-[#FBBC05]" />
+  1394→                          <div className="text-center">
+  1395→                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Tomorrow afternoon</p>
+  1396→                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getTomorrowAfternoon(), 'd MMM, h:mm a')}</p>
+  1397→                          </div>
+  1398→                        </button>
+  1399→                        {/* Monday Morning */}
+  1400→                        <button
+  1401→                          type="button"
+  1402→                          onClick={() => handleQuickSchedule(getNextMonday())}
+  1403→                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1404→                        >
+  1405→                          <Briefcase className="w-5 h-5 text-[#FBBC05]" />
+  1406→                          <div className="text-center">
+  1407→                            <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Monday morning</p>
+  1408→                            <p className="text-[11px] text-gray-400 mt-0.5">{format(getNextMonday(), 'd MMM, h:mm a')}</p>
+  1409→                          </div>
+  1410→                        </button>
+  1411→                        {/* Pick date & time */}
+  1412→                        <button
+  1413→                          type="button"
+  1414→                          onClick={() => setShowCustomSchedule(true)}
+  1415→                          className="flex flex-col items-center justify-center gap-1.5 h-[76px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+  1416→                        >
+  1417→                          <CalendarDays className="w-5 h-5 text-[#FBBC05]" />
+  1418→                          <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-tight">Pick date & time</p>
+  1419→                        </button>
+  1420→                      </div>
+  1421→                      <p className="text-center text-[11px] text-gray-400 mt-3">
+  1422→                        All times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}
+  1423→                      </p>
+  1424→                    </motion.div>
+  1425→                  </motion.div>
+  1426→                )}
+  1427→              </AnimatePresence>
+  1428→
+  1429→              {/* Custom date/time picker modal */}
+  1430→              <AnimatePresence>
+  1431→                {showSchedulePopover && showCustomSchedule && (
+  1432→                  <motion.div
+  1433→                    initial={{ opacity: 0 }}
+  1434→                    animate={{ opacity: 1 }}
+  1435→                    exit={{ opacity: 0 }}
+  1436→                    transition={{ duration: 0.15 }}
+  1437→                    className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+  1438→                    onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+  1439→                  >
+  1440→                    <motion.div
+  1441→                      initial={{ scale: 0.95, opacity: 0 }}
+  1442→                      animate={{ scale: 1, opacity: 1 }}
+  1443→                      exit={{ scale: 0.95, opacity: 0 }}
+  1444→                      transition={{ duration: 0.15 }}
+  1445→                      className="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] shadow-xl"
+  1446→                      onClick={(e) => e.stopPropagation()}
+  1447→                    >
+  1448→                      <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Select date and time</p>
+  1449→                      <div className="[&_[data-slot=calendar]]:w-full [&_[data-slot=calendar]]:mx-auto [&_[data-slot=calendar]]:p-1.5" style={{ '--cell-size': '1.6rem' } as React.CSSProperties}>
+  1450→                      <Calendar
+  1451→                        mode="single"
+  1452→                        selected={scheduleDate}
+  1453→                        onSelect={setScheduleDate}
+  1454→                        disabled={{ before: new Date() }}
+  1455→                        classNames={{
+  1456→                          root: 'w-full',
+  1457→                          table: 'w-full border-collapse',
+  1458→                          weekday: 'text-[10px] flex-1',
+  1459→                          day: 'flex-1 p-0 aspect-square',
+  1460→                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md data-[selected=true]:rounded-none',
+  1461→                        }}
+  1462→                        modifiersClassNames={{
+  1463→                          selected: 'bg-[#4285F4] text-white rounded-md',
+  1464→                          today: 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 rounded-md',
+  1465→                        }}
+  1466→                      />
+  1467→                      </div>
+  1468→                      <div className="flex items-center gap-1.5 mt-3">
+  1469→                        <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
+  1470→                        <input
+  1471→                          type="text"
+  1472→                          inputMode="numeric"
+  1473→                          maxLength={2}
+  1474→                          value={scheduleHour}
+  1475→                          onChange={(e) => setScheduleHour(e.target.value.replace(/[^1-9]/g, '').slice(0, 2))}
+  1476→                          placeholder="9"
+  1477→                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+  1478→                        />
+  1479→                        <span className="text-sm text-gray-400">:</span>
+  1480→                        <input
+  1481→                          type="text"
+  1482→                          inputMode="numeric"
+  1483→                          maxLength={2}
+  1484→                          value={scheduleMinute}
+  1485→                          onChange={(e) => setScheduleMinute(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+  1486→                          placeholder="00"
+  1487→                          className="w-10 h-8 text-center text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+  1488→                        />
+  1489→                        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+  1490→                          <button
+  1491→                            type="button"
+  1492→                            onClick={() => setScheduleAmPm('AM')}
+  1493→                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'AM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+  1494→                          >AM</button>
+  1495→                          <button
+  1496→                            type="button"
+  1497→                            onClick={() => setScheduleAmPm('PM')}
+  1498→                            className={`px-2 h-8 text-[11px] font-medium transition-colors cursor-pointer ${scheduleAmPm === 'PM' ? 'bg-[#4285F4] text-white' : 'bg-transparent text-gray-500 dark:text-gray-400'}`}
+  1499→                          >PM</button>
+  1500→                        </div>
+  1501→                      </div>
+  1502→                      <div className="flex justify-end gap-2 mt-4">
+  1503→                        <Button
+  1504→                          size="sm"
+  1505→                          variant="ghost"
+  1506→                          className="h-8 text-xs"
+  1507→                          onClick={() => { setShowCustomSchedule(false); setShowSchedulePopover(false) }}
+  1508→                        >
+  1509→                          Cancel
+  1510→                        </Button>
+  1511→                        <Button
+  1512→                          size="sm"
+  1513→                          className="h-8 text-xs bg-[#4285F4] hover:bg-[#1a73e8]"
+  1514→                          onClick={handleCustomSchedule}
+  1515→                          disabled={!scheduleDate}
+  1516→                        >
+  1517→                          <Check className="w-3 h-3 mr-1" />
+  1518→                          Schedule send
+  1519→                        </Button>
+  1520→                      </div>
+  1521→                    </motion.div>
+  1522→                  </motion.div>
+  1523→                )}
+  1524→              </AnimatePresence>
+  1525→
+  1526→              {/* Send button */}
+  1527→              <button
+  1528→                type="button"
+  1529→                onClick={() => handleSend()}
+  1530→                disabled={!editor || isUploading}
+  1531→                className="inline-flex items-center justify-center h-9 bg-[#4285F4] hover:bg-[#1a73e8] active:bg-[#1557b0] text-white font-medium rounded-xl px-4 sm:px-5 shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+  1532→              >
+  1533→                {isUploading ? (
+  1534→                  <svg className="w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24" fill="none">
+  1535→                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+  1536→                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  1537→                  </svg>
+  1538→                ) : (
+  1539→                  <Send className="w-4 h-4 mr-2" />
+  1540→                )}
+  1541→                {isUploading ? (uploadProgress > 0 ? `${uploadProgress}%` : 'Uploading...') : 'Send'}
+  1542→              </button>
+  1543→            </div>
+  1544→          </motion.div>
+  1545→        </motion.div>
+  1546→      )}
+  1547→    </AnimatePresence>
+  1548→  )
+  1549→}
+  1550→

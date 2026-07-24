@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useRef, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { useTheme } from 'next-themes'
+     6→import { toast } from 'sonner'
+     7→import {
+     8→  X, Sun, Moon, Monitor, Bell, Volume2, Save, Loader2, Camera,
+     9→  Eye, EyeOff, Shield, Smartphone, Globe, Clock, Lock, Download,
+    10→  Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
+    11→  Bold, Italic, Link as LinkIcon, List, ChevronRight,
+    12→  RefreshCw, LogOut, CalendarDays, Filter, ArrowLeft, User, Palette,
+    13→  BellRing, FileText, ShieldCheck, Settings as SettingsIcon
+    14→} from 'lucide-react'
+    15→import { useEditor, EditorContent } from '@tiptap/react'
+    16→import StarterKit from '@tiptap/starter-kit'
+    17→import LinkExtension from '@tiptap/extension-link'
+    18→import Placeholder from '@tiptap/extension-placeholder'
+    19→import { Button } from '@/components/ui/button'
+    20→import { Input } from '@/components/ui/input'
+    21→import { Label } from '@/components/ui/label'
+    22→import { Separator } from '@/components/ui/separator'
+    23→import { Badge } from '@/components/ui/badge'
+    24→import { Switch } from '@/components/ui/switch'
+    25→import { Card, CardContent } from '@/components/ui/card'
+    26→import { Textarea } from '@/components/ui/textarea'
+    27→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    28→// Tabs removed — now using list → detail pattern
+    29→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    30→import {
+    31→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    32→} from '@/components/ui/table'
+    33→import {
+    34→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    35→  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+    36→} from '@/components/ui/alert-dialog'
+    37→import { FiltersTab } from '@/components/settings/filters-tab'
+    38→import { useAppStore } from '@/store/use-app-store'
+    39→
+    40→// ─── Types ──────────────────────────────────────────────────────────────────
+    41→
+    42→interface ProfileData {
+    43→  id: string
+    44→  email: string
+    45→  firstName: string
+    46→  lastName: string
+    47→  displayName: string | null
+    48→  avatar: string | null
+    49→  bio: string
+    50→  phone: string | null
+    51→  dateOfBirth: string
+    52→  recoveryEmail: string | null
+    53→  role: string
+    54→  status: string
+    55→  signature: string
+    56→  preferences: string
+    57→  createdAt: string
+    58→  lastLogin: string | null
+    59→}
+    60→
+    61→interface SessionData {
+    62→  id: string
+    63→  deviceName: string
+    64→  deviceType: string
+    65→  ipAddress: string
+    66→  location: string | null
+    67→  lastActive: string
+    68→  isCurrent: boolean
+    69→}
+    70→
+    71→interface LoginLogData {
+    72→  id: string
+    73→  date: string
+    74→  ipAddress: string
+    75→  userAgent: string | null
+    76→  deviceType: string | null
+    77→  location: string | null
+    78→  success: boolean
+    79→}
+    80→
+    81→interface TwoFAStatus {
+    82→  enabled: boolean
+    83→  verified: boolean
+    84→  createdAt: string | null
+    85→}
+    86→
+    87→// ─── Helpers ────────────────────────────────────────────────────────────────
+    88→
+    89→function getPasswordStrength(password: string) {
+    90→  if (!password) return { score: 0, label: '', color: '' }
+    91→  let score = 0
+    92→  if (password.length >= 8) score++
+    93→  if (/[a-z]/.test(password)) score++
+    94→  if (/[A-Z]/.test(password)) score++
+    95→  if (/[0-9]/.test(password)) score++
+    96→  if (/[^a-zA-Z0-9]/.test(password)) score++
+    97→  if (score <= 2) return { score, label: 'Weak', color: 'bg-[#EA4335]' }
+    98→  if (score <= 3) return { score, label: 'Medium', color: 'bg-[#FBBC05]' }
+    99→  return { score, label: 'Strong', color: 'bg-[#34A853]' }
+   100→}
+   101→
+   102→function formatDate(dateStr: string | null) {
+   103→  if (!dateStr) return 'Never'
+   104→  const d = new Date(dateStr)
+   105→  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+   106→}
+   107→
+   108→function timeAgo(dateStr: string) {
+   109→  const now = Date.now()
+   110→  const then = new Date(dateStr).getTime()
+   111→  const diff = now - then
+   112→  const mins = Math.floor(diff / 60000)
+   113→  if (mins < 1) return 'Just now'
+   114→  if (mins < 60) return `${mins}m ago`
+   115→  const hrs = Math.floor(mins / 60)
+   116→  if (hrs < 24) return `${hrs}h ago`
+   117→  const days = Math.floor(hrs / 24)
+   118→  return `${days}d ago`
+   119→}
+   120→
+   121→function getDeviceIcon(type: string) {
+   122→  switch (type) {
+   123→    case 'mobile': return <Smartphone className="w-4 h-4" />
+   124→    case 'tablet': return <Globe className="w-4 h-4" />
+   125→    case 'desktop': return <Monitor className="w-4 h-4" />
+   126→    default: return <Globe className="w-4 h-4" />
+   127→  }
+   128→}
+   129→
+   130→// ─── Animation variants ─────────────────────────────────────────────────────
+   131→
+   132→const fadeInUp = {
+   133→  initial: { opacity: 0, y: 12 },
+   134→  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
+   135→}
+   136→
+   137→const tabVariants = {
+   138→  initial: { opacity: 0, x: 8 },
+   139→  animate: { opacity: 1, x: 0, transition: { duration: 0.25, ease: 'easeOut' as const } },
+   140→  exit: { opacity: 0, x: -8, transition: { duration: 0.15 } },
+   141→}
+   142→
+   143→// ─── Main Component ─────────────────────────────────────────────────────────
+   144→
+   145→export function SettingsPanel() {
+   146→  const { settingsView, setSettingsView, user, setAdminView } = useAppStore()
+   147→  const { theme, setTheme } = useTheme()
+   148→
+   149→  // Determine if showing list or a detail page
+   150→  const isListView = settingsView === 'settings' || settingsView === 'profile' || !settingsView
+   151→  const activeSection = isListView ? null : settingsView?.replace('settings-', '') || null
+   152→
+   153→  // ─── Profile state ──────────────────────────────────────────────────────
+   154→  const [profile, setProfile] = useState<ProfileData | null>(null)
+   155→  const [profileLoading, setProfileLoading] = useState(true)
+   156→  const [savingProfile, setSavingProfile] = useState(false)
+   157→  const [avatarUploading, setAvatarUploading] = useState(false)
+   158→  const [avatarUploadProgress, setAvatarUploadProgress] = useState(0)
+   159→
+   160→  // ─── Password state ─────────────────────────────────────────────────────
+   161→  const [currentPassword, setCurrentPassword] = useState('')
+   162→  const [newPassword, setNewPassword] = useState('')
+   163→  const [confirmPassword, setConfirmPassword] = useState('')
+   164→  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+   165→  const [showNewPassword, setShowNewPassword] = useState(false)
+   166→  const [savingPassword, setSavingPassword] = useState(false)
+   167→  const passwordStrength = getPasswordStrength(newPassword)
+   168→
+   169→  // ─── Sessions state ─────────────────────────────────────────────────────
+   170→  const [sessions, setSessions] = useState<SessionData[]>([])
+   171→  const [sessionsLoading, setSessionsLoading] = useState(false)
+   172→  const [loginLogs, setLoginLogs] = useState<LoginLogData[]>([])
+   173→  const [loginLogsLoading, setLoginLogsLoading] = useState(false)
+   174→
+   175→  // ─── 2FA state ─────────────────────────────────────────────────────────
+   176→  const [twoFA, setTwoFA] = useState<TwoFAStatus>({ enabled: false, verified: false, createdAt: null })
+   177→  const [twoFALoading, setTwoFALoading] = useState(false)
+   178→  const [twoFASetup, setTwoFASetup] = useState(false)
+   179→  const [twoFASecret, setTwoFASecret] = useState('')
+   180→  const [twoFAUri, setTwoFAUri] = useState('')
+   181→  const [twoFABackupCodes, setTwoFABackupCodes] = useState<string[]>([])
+   182→  const [twoFAVerifyCode, setTwoFAVerifyCode] = useState('')
+   183→  const [twoFAVerifying, setTwoFAVerifying] = useState(false)
+   184→  const [twoFADisabling, setTwoFADisabling] = useState(false)
+   185→  const [disable2FAPassword, setDisable2FAPassword] = useState('')
+   186→
+   187→  // ─── Preferences state ──────────────────────────────────────────────────
+   188→  const [emailDensity, setEmailDensity] = useState<'comfortable' | 'cozy' | 'compact'>('comfortable')
+   189→  const [previewLines, setPreviewLines] = useState<'none' | '1' | '2' | '3'>('2')
+   190→  const [conversationView, setConversationView] = useState(true)
+   191→  const [desktopNotif, setDesktopNotif] = useState(false)
+   192→  const [soundNotif, setSoundNotif] = useState(true)
+   193→  const [dateFormat, setDateFormat] = useState<'12h' | '24h'>('12h')
+   194→  const [savingPrefs, setSavingPrefs] = useState(false)
+   195→
+   196→  // ─── Signature editor ───────────────────────────────────────────────────
+   197→  const signatureEditor = useEditor({
+   198→    immediatelyRender: false,
+   199→    extensions: [
+   200→      StarterKit,
+   201→      LinkExtension.configure({ openOnClick: false }),
+   202→      Placeholder.configure({ placeholder: 'Write your email signature here...' }),
+   203→    ],
+   204→    content: '',
+   205→    editorProps: {
+   206→      attributes: {
+   207→        class: 'min-h-[100px] w-full px-3 py-2 text-sm text-[#1F1F1F] dark:text-gray-300 focus:outline-none prose prose-sm dark:prose-invert max-w-none [&_.ProseMirror-placeholder.is-empty::before]:text-gray-400 [&_.ProseMirror-placeholder.is-empty::before]:content-[attr(data-placeholder)] [&_.ProseMirror-placeholder.is-empty::before]:float-left [&_.ProseMirror-placeholder.is-empty::before]:pointer-events-none',
+   208→      },
+   209→    },
+   210→  })
+   211→
+   212→  const [savingSignature, setSavingSignature] = useState(false)
+   213→
+   214→  // ─── Account state ──────────────────────────────────────────────────────
+   215→  const [exporting, setExporting] = useState(false)
+   216→
+   217→  // ─── Refs ───────────────────────────────────────────────────────────────
+   218→  const avatarInputRef = useRef<HTMLInputElement>(null)
+   219→
+   220→  // ─── Load profile data ──────────────────────────────────────────────────
+   221→  const loadProfile = useCallback(async () => {
+   222→    setProfileLoading(true)
+   223→    try {
+   224→      const res = await fetch('/api/user/profile')
+   225→      if (res.ok) {
+   226→        const data = await res.json()
+   227→        const u = data.user as ProfileData
+   228→        setProfile(u)
+   229→        // Load preferences
+   230→        if (u.preferences) {
+   231→          try {
+   232→            const prefs = typeof u.preferences === 'string' ? JSON.parse(u.preferences) : u.preferences
+   233→            if (prefs.emailDensity) setEmailDensity(prefs.emailDensity)
+   234→            if (prefs.previewLines) setPreviewLines(prefs.previewLines)
+   235→            if (prefs.conversationView !== undefined) setConversationView(prefs.conversationView)
+   236→            if (prefs.desktopNotif !== undefined) setDesktopNotif(prefs.desktopNotif)
+   237→            if (prefs.soundNotif !== undefined) setSoundNotif(prefs.soundNotif)
+   238→            if (prefs.dateFormat) setDateFormat(prefs.dateFormat)
+   239→          } catch {
+   240→            // ignore parse errors
+   241→          }
+   242→        }
+   243→        // Set signature editor content
+   244→        if (u.signature && signatureEditor) {
+   245→          signatureEditor.commands.setContent(u.signature)
+   246→        }
+   247→      }
+   248→    } catch {
+   249→      toast.error('Failed to load profile')
+   250→    } finally {
+   251→      setProfileLoading(false)
+   252→    }
+   253→  }, [signatureEditor])
+   254→
+   255→  useEffect(() => {
+   256→    loadProfile()
+   257→  }, [loadProfile])
+   258→
+   259→  // ─── Profile handlers ──────────────────────────────────────────────────
+   260→  const handleSaveProfile = async () => {
+   261→    if (!profile) return
+   262→    if (!profile.firstName.trim() || !profile.lastName.trim()) {
+   263→      toast.error('Name fields are required')
+   264→      return
+   265→    }
+   266→    setSavingProfile(true)
+   267→    try {
+   268→      const res = await fetch('/api/user/profile', {
+   269→        method: 'PUT',
+   270→        headers: { 'Content-Type': 'application/json' },
+   271→        body: JSON.stringify({
+   272→          firstName: profile.firstName,
+   273→          lastName: profile.lastName,
+   274→          displayName: profile.displayName,
+   275→          bio: profile.bio,
+   276→          phone: profile.phone,
+   277→          dateOfBirth: profile.dateOfBirth,
+   278→        }),
+   279→      })
+   280→      if (res.ok) {
+   281→        const data = await res.json()
+   282→        const updated = data.user as ProfileData
+   283→        setProfile(updated)
+   284→        // Also update Zustand store user
+   285→        const store = useAppStore.getState()
+   286→        store.setUser({
+   287→          id: updated.id,
+   288→          email: updated.email,
+   289→          firstName: updated.firstName,
+   290→          lastName: updated.lastName,
+   291→          avatar: updated.avatar,
+   292→          role: updated.role,
+   293→          status: updated.status,
+   294→          onboardingDone: store.user?.onboardingDone ?? false,
+   295→        })
+   296→        toast.success('Profile updated')
+   297→      } else {
+   298→        const data = await res.json()
+   299→        toast.error(data.error || 'Failed to update profile')
+   300→      }
+   301→    } catch {
+   302→      toast.error('Failed to update profile')
+   303→    } finally {
+   304→      setSavingProfile(false)
+   305→    }
+   306→  }
+   307→
+   308→  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   309→    const file = e.target.files?.[0]
+   310→    if (!file) return
+   311→    if (!file.type.startsWith('image/')) {
+   312→      toast.error('Please select an image file')
+   313→      return
+   314→    }
+   315→    if (file.size > 5 * 1024 * 1024) {
+   316→      toast.error('Image must be less than 5MB')
+   317→      return
+   318→    }
+   319→    setAvatarUploading(true)
+   320→    setAvatarUploadProgress(0)
+   321→    const formData = new FormData()
+   322→    formData.append('avatar', file)
+   323→    // Simulate upload progress
+   324→    const progressInterval = setInterval(() => {
+   325→      setAvatarUploadProgress(prev => {
+   326→        if (prev >= 85) return prev
+   327→        return prev + Math.random() * 15 + 5
+   328→      })
+   329→    }, 150)
+   330→    try {
+   331→      const res = await fetch('/api/user/avatar', { method: 'POST', body: formData })
+   332→      clearInterval(progressInterval)
+   333→      setAvatarUploadProgress(100)
+   334→      await new Promise(r => setTimeout(r, 400))
+   335→      if (res.ok) {
+   336→        const data = await res.json()
+   337→        setProfile(prev => prev ? { ...prev, avatar: data.avatar } : prev)
+   338→        const store = useAppStore.getState()
+   339→        if (store.user) store.setUser({ ...store.user, avatar: data.avatar })
+   340→        toast.success('Avatar updated')
+   341→      } else {
+   342→        toast.error('Failed to upload avatar')
+   343→      }
+   344→    } catch {
+   345→      clearInterval(progressInterval)
+   346→      toast.error('Failed to upload avatar')
+   347→    } finally {
+   348→      setAvatarUploading(false)
+   349→      setAvatarUploadProgress(0)
+   350→    }
+   351→  }
+   352→
+   353→  // ─── Password handlers ─────────────────────────────────────────────────
+   354→  const handleChangePassword = async () => {
+   355→    if (!currentPassword || !newPassword || !confirmPassword) {
+   356→      toast.error('All password fields are required')
+   357→      return
+   358→    }
+   359→    if (newPassword !== confirmPassword) {
+   360→      toast.error('New passwords do not match')
+   361→      return
+   362→    }
+   363→    if (newPassword.length < 8) {
+   364→      toast.error('Password must be at least 8 characters')
+   365→      return
+   366→    }
+   367→    setSavingPassword(true)
+   368→    try {
+   369→      const res = await fetch('/api/user/password', {
+   370→        method: 'PUT',
+   371→        headers: { 'Content-Type': 'application/json' },
+   372→        body: JSON.stringify({ currentPassword, newPassword }),
+   373→      })
+   374→      if (res.ok) {
+   375→        toast.success('Password changed')
+   376→        setCurrentPassword('')
+   377→        setNewPassword('')
+   378→        setConfirmPassword('')
+   379→      } else {
+   380→        const data = await res.json()
+   381→        toast.error(data.error || 'Failed to change password')
+   382→      }
+   383→    } catch {
+   384→      toast.error('Failed to change password')
+   385→    } finally {
+   386→      setSavingPassword(false)
+   387→    }
+   388→  }
+   389→
+   390→  // ─── Sessions handlers ─────────────────────────────────────────────────
+   391→  const loadSessions = useCallback(async () => {
+   392→    setSessionsLoading(true)
+   393→    try {
+   394→      const res = await fetch('/api/user/sessions')
+   395→      if (res.ok) {
+   396→        const data = await res.json()
+   397→        setSessions(data.data.sessions || [])
+   398→      }
+   399→    } catch {
+   400→      toast.error('Failed to load sessions')
+   401→    } finally {
+   402→      setSessionsLoading(false)
+   403→    }
+   404→  }, [])
+   405→
+   406→  const loadLoginLogs = useCallback(async () => {
+   407→    setLoginLogsLoading(true)
+   408→    try {
+   409→      const res = await fetch('/api/user/login-history?limit=15')
+   410→      if (res.ok) {
+   411→        const data = await res.json()
+   412→        setLoginLogs(data.data.logs || [])
+   413→      }
+   414→    } catch {
+   415→      toast.error('Failed to load login history')
+   416→    } finally {
+   417→      setLoginLogsLoading(false)
+   418→    }
+   419→  }, [])
+   420→
+   421→  const handleRevokeSession = async (sessionId: string) => {
+   422→    try {
+   423→      const res = await fetch('/api/user/sessions', {
+   424→        method: 'DELETE',
+   425→        headers: { 'Content-Type': 'application/json' },
+   426→        body: JSON.stringify({ sessionId }),
+   427→      })
+   428→      if (res.ok) {
+   429→        toast.success('Session revoked')
+   430→        loadSessions()
+   431→      } else {
+   432→        const data = await res.json()
+   433→        toast.error(data.error || 'Failed to revoke session')
+   434→      }
+   435→    } catch {
+   436→      toast.error('Failed to revoke session')
+   437→    }
+   438→  }
+   439→
+   440→  const handleRevokeAllOthers = async () => {
+   441→    try {
+   442→      const res = await fetch('/api/user/sessions', {
+   443→        method: 'DELETE',
+   444→        headers: { 'Content-Type': 'application/json' },
+   445→        body: JSON.stringify({ all: true }),
+   446→      })
+   447→      if (res.ok) {
+   448→        const data = await res.json()
+   449→        toast.success(`${data.data.revoked} session(s) revoked`)
+   450→        loadSessions()
+   451→      } else {
+   452→        const data = await res.json()
+   453→        toast.error(data.error || 'Failed to revoke sessions')
+   454→      }
+   455→    } catch {
+   456→      toast.error('Failed to revoke sessions')
+   457→    }
+   458→  }
+   459→
+   460→  // ─── 2FA handlers ──────────────────────────────────────────────────────
+   461→  const load2FA = useCallback(async () => {
+   462→    setTwoFALoading(true)
+   463→    try {
+   464→      const res = await fetch('/api/user/2fa')
+   465→      if (res.ok) {
+   466→        const data = await res.json()
+   467→        setTwoFA(data.data)
+   468→      }
+   469→    } catch {
+   470→      toast.error('Failed to load 2FA status')
+   471→    } finally {
+   472→      setTwoFALoading(false)
+   473→    }
+   474→  }, [])
+   475→
+   476→  const handleSetup2FA = async () => {
+   477→    try {
+   478→      const res = await fetch('/api/user/2fa', { method: 'POST' })
+   479→      if (res.ok) {
+   480→        const data = await res.json()
+   481→        setTwoFASecret(data.data.secret)
+   482→        setTwoFAUri(data.data.otpAuthUri)
+   483→        setTwoFABackupCodes(data.data.backupCodes)
+   484→        setTwoFASetup(true)
+   485→      } else {
+   486→        const data = await res.json()
+   487→        toast.error(data.error || 'Failed to setup 2FA')
+   488→      }
+   489→    } catch {
+   490→      toast.error('Failed to setup 2FA')
+   491→    }
+   492→  }
+   493→
+   494→  const handleVerify2FA = async () => {
+   495→    if (twoFAVerifyCode.length !== 6) {
+   496→      toast.error('Enter 6-digit code')
+   497→      return
+   498→    }
+   499→    setTwoFAVerifying(true)
+   500→    try {
+   501→      const res = await fetch('/api/user/2fa', {
+   502→        method: 'PUT',
+   503→        headers: { 'Content-Type': 'application/json' },
+   504→        body: JSON.stringify({ code: twoFAVerifyCode }),
+   505→      })
+   506→      if (res.ok) {
+   507→        toast.success('2FA enabled successfully')
+   508→        setTwoFASetup(false)
+   509→        setTwoFAVerifyCode('')
+   510→        load2FA()
+   511→      } else {
+   512→        const data = await res.json()
+   513→        toast.error(data.error || 'Invalid code')
+   514→      }
+   515→    } catch {
+   516→      toast.error('Failed to verify 2FA')
+   517→    } finally {
+   518→      setTwoFAVerifying(false)
+   519→    }
+   520→  }
+   521→
+   522→  const handleDisable2FA = async () => {
+   523→    if (!disable2FAPassword) {
+   524→      toast.error('Enter your password to confirm')
+   525→      return
+   526→    }
+   527→    setTwoFADisabling(true)
+   528→    try {
+   529→      const res = await fetch('/api/user/2fa', {
+   530→        method: 'DELETE',
+   531→        headers: { 'Content-Type': 'application/json' },
+   532→        body: JSON.stringify({ password: disable2FAPassword }),
+   533→      })
+   534→      if (res.ok) {
+   535→        toast.success('2FA disabled')
+   536→        setDisable2FAPassword('')
+   537→        load2FA()
+   538→      } else {
+   539→        const data = await res.json()
+   540→        toast.error(data.error || 'Failed to disable 2FA')
+   541→      }
+   542→    } catch {
+   543→      toast.error('Failed to disable 2FA')
+   544→    } finally {
+   545→      setTwoFADisabling(false)
+   546→    }
+   547→  }
+   548→
+   549→  // ─── Preferences handlers ───────────────────────────────────────────────
+   550→  const handleSavePreferences = async () => {
+   551→    setSavingPrefs(true)
+   552→    try {
+   553→      const prefs = {
+   554→        emailDensity,
+   555→        previewLines,
+   556→        conversationView,
+   557→        desktopNotif,
+   558→        soundNotif,
+   559→        dateFormat,
+   560→      }
+   561→      const res = await fetch('/api/user/profile', {
+   562→        method: 'PUT',
+   563→        headers: { 'Content-Type': 'application/json' },
+   564→        body: JSON.stringify({ preferences: prefs }),
+   565→      })
+   566→      if (res.ok) {
+   567→        // Update the notification preferences cache so the hook picks up changes immediately
+   568→        try {
+   569→          sessionStorage.setItem('ezymail-notif-prefs', JSON.stringify({ desktopNotif, soundNotif }))
+   570→        } catch { /* ignore */ }
+   571→        toast.success('Preferences saved')
+   572→      } else {
+   573→        toast.error('Failed to save preferences')
+   574→      }
+   575→    } catch {
+   576→      toast.error('Failed to save preferences')
+   577→    } finally {
+   578→      setSavingPrefs(false)
+   579→    }
+   580→  }
+   581→
+   582→  // ─── Signature handlers ────────────────────────────────────────────────
+   583→  const handleSaveSignature = async () => {
+   584→    if (!signatureEditor) return
+   585→    setSavingSignature(true)
+   586→    try {
+   587→      const html = signatureEditor.getHTML()
+   588→      const res = await fetch('/api/user/profile', {
+   589→        method: 'PUT',
+   590→        headers: { 'Content-Type': 'application/json' },
+   591→        body: JSON.stringify({ signature: html }),
+   592→      })
+   593→      if (res.ok) {
+   594→        toast.success('Signature saved')
+   595→      } else {
+   596→        toast.error('Failed to save signature')
+   597→      }
+   598→    } catch {
+   599→      toast.error('Failed to save signature')
+   600→    } finally {
+   601→      setSavingSignature(false)
+   602→    }
+   603→  }
+   604→
+   605→  // ─── Export handler ────────────────────────────────────────────────────
+   606→  const handleExport = async (format: 'json' | 'csv') => {
+   607→    setExporting(true)
+   608→    try {
+   609→      const res = await fetch(`/api/user/export?format=${format}`)
+   610→      if (res.ok) {
+   611→        const blob = await res.blob()
+   612→        const url = URL.createObjectURL(blob)
+   613→        const a = document.createElement('a')
+   614→        a.href = url
+   615→        a.download = `ezymail-export-${new Date().toISOString().slice(0, 10)}.${format}`
+   616→        document.body.appendChild(a)
+   617→        a.click()
+   618→        document.body.removeChild(a)
+   619→        URL.revokeObjectURL(url)
+   620→        toast.success(`Data exported as ${format.toUpperCase()}`)
+   621→      } else {
+   622→        toast.error('Failed to export data')
+   623→      }
+   624→    } catch {
+   625→      toast.error('Failed to export data')
+   626→    } finally {
+   627→      setExporting(false)
+   628→    }
+   629→  }
+   630→
+   631→  // ─── Derived values ────────────────────────────────────────────────────
+   632→  const initials = profile
+   633→    ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase()
+   634→    : 'U'
+   635→
+   636→  // ─── Render ────────────────────────────────────────────────────────────
+   637→  if (!profile && profileLoading) {
+   638→    return (
+   639→      <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 flex items-center justify-center">
+   640→        <Loader2 className="w-8 h-8 animate-spin text-[#4285F4]" />
+   641→      </div>
+   642→    )
+   643→  }
+   644→
+   645→  const handleClose = () => setSettingsView(null)
+   646→  const goBack = () => setSettingsView('settings')
+   647→  const navigateTo = (section: string) => setSettingsView(`settings-${section}`)
+   648→
+   649→  // Settings list items with value previews
+   650→  const settingsItems = [
+   651→    { key: 'profile', label: 'Profile', description: 'Manage your personal information, avatar, and bio', icon: User, color: 'bg-[#4285F4]/10 text-[#4285F4]', preview: profile?.displayName || `${profile?.firstName} ${profile?.lastName}` },
+   652→    { key: 'security', label: 'Security', description: 'Password, sessions, login history, and two-factor authentication', icon: ShieldCheck, color: 'bg-[#34A853]/10 text-[#34A853]', badge: 'Protected' },
+   653→    { key: 'preferences', label: 'Appearance & Preferences', description: 'Theme, density, notifications, date format, and signature', icon: Palette, color: 'bg-[#FBBC05]/10 text-[#E37400]', preview: theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'System' },
+   654→    { key: 'filters', label: 'Filters & Rules', description: 'Email filters, auto-labeling, and automated rules', icon: Filter, color: 'bg-[#EA4335]/10 text-[#EA4335]' },
+   655→    { key: 'account', label: 'Account', description: 'Export data and manage your account', icon: SettingsIcon, color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+   656→  ]
+   657→
+   658→  // Add admin panel item for admin users
+   659→  if (user?.role === 'admin') {
+   660→    settingsItems.push({ key: 'admin', label: 'Admin Panel', description: 'Manage users, reports, announcements, and system settings', icon: Shield, color: 'bg-[#4285F4]/10 text-[#4285F4]' })
+   661→  }
+   662→
+   663→  // Detail page titles
+   664→  const sectionTitles: Record<string, string> = {
+   665→    profile: 'Profile',
+   666→    security: 'Security',
+   667→    preferences: 'Appearance & Preferences',
+   668→    filters: 'Filters & Rules',
+   669→    account: 'Account',
+   670→  }
+   671→
+   672→  return (
+   673→    <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 overflow-hidden flex flex-col">
+   674→      {/* Header */}
+   675→      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl">
+   676→        <div className="flex items-center gap-3 px-4 h-14">
+   677→          {!isListView && (
+   678→            <Button variant="ghost" size="icon" onClick={goBack} className="h-9 w-9 -ml-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
+   679→              <ArrowLeft className="w-5 h-5" />
+   680→            </Button>
+   681→          )}
+   682→          <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white flex-1">
+   683→            {isListView ? 'Settings' : (sectionTitles[activeSection || ''] || 'Settings')}
+   684→          </h2>
+   685→          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
+   686→            <X className="w-5 h-5" />
+   687→          </Button>
+   688→        </div>
+   689→      </div>
+   690→
+   691→      {/* Content */}
+   692→      <div className="flex-1 overflow-y-auto custom-scrollbar">
+   693→        <AnimatePresence mode="wait">
+   694→          {isListView ? (
+   695→            <motion.div
+   696→              key="settings-list"
+   697→              initial={{ opacity: 0, y: 8 }}
+   698→              animate={{ opacity: 1, y: 0 }}
+   699→              exit={{ opacity: 0, y: -8 }}
+   700→              transition={{ duration: 0.2 }}
+   701→              className="max-w-2xl mx-auto p-4 sm:p-6 space-y-3 pb-8"
+   702→            >
+   703→              {/* Profile Card */}
+   704→              <motion.div
+   705→                {...fadeInUp}
+   706→                onClick={() => navigateTo('profile')}
+   707→                className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#D3E3FD]/60 to-[#E6F4EA]/60 dark:from-[#4285F4]/10 dark:to-[#34A853]/10 border border-[#D3E3FD]/50 dark:border-[#4285F4]/20 cursor-pointer hover:from-[#D3E3FD]/80 hover:to-[#E6F4EA]/80 dark:hover:from-[#4285F4]/15 dark:hover:to-[#34A853]/15 transition-all"
+   708→              >
+   709→                <div className="relative">
+   710→                  <Avatar className="h-14 w-14 ring-2 ring-white dark:ring-gray-800 shadow-sm">
+   711→                    <AvatarImage src={profile?.avatar || undefined} />
+   712→                    <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-lg font-bold">
+   713→                      {initials}
+   714→                    </AvatarFallback>
+   715→                  </Avatar>
+   716→                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#34A853] rounded-full border-2 border-white dark:border-gray-900" />
+   717→                </div>
+   718→                <div className="flex-1 min-w-0">
+   719→                  <p className="text-[15px] font-semibold text-[#1F1F1F] dark:text-white truncate">
+   720→                    {profile?.displayName || `${profile?.firstName} ${profile?.lastName}`}
+   721→                  </p>
+   722→                  <p className="text-xs text-gray-500 truncate mt-0.5">{profile?.email}</p>
+   723→                </div>
+   724→                <ChevronRight className="w-5 h-5 text-gray-400" />
+   725→              </motion.div>
+   726→
+   727→              {/* Settings Items Group */}
+   728→              <motion.div {...fadeInUp} className="pt-2">
+   729→                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">General</p>
+   730→                <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+   731→                  {settingsItems.map((item, index) => (
+   732→                    <motion.button
+   733→                      key={item.key}
+   734→                      type="button"
+   735→                      onClick={() => {
+   736→                        if (item.key === 'admin') {
+   737→                          setSettingsView(null)
+   738→                          setAdminView('dashboard')
+   739→                        } else {
+   740→                          navigateTo(item.key)
+   741→                        }
+   742→                      }}
+   743→                      initial={{ opacity: 0, y: 4 }}
+   744→                      animate={{ opacity: 1, y: 0 }}
+   745→                      transition={{ duration: 0.15, delay: index * 0.03 }}
+   746→                      className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left group"
+   747→                    >
+   748→                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${item.color}`}>
+   749→                        <item.icon className="w-[18px] h-[18px]" />
+   750→                      </div>
+   751→                      <div className="flex-1 min-w-0">
+   752→                        <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">{item.label}</p>
+   753→                        <p className="text-[11px] text-gray-400 mt-px line-clamp-1">{item.description}</p>
+   754→                      </div>
+   755→                      {item.preview && (
+   756→                        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-md truncate max-w-[80px]">
+   757→                          {item.preview}
+   758→                        </span>
+   759→                      )}
+   760→                      {item.badge && (
+   761→                        <span className="text-[10px] font-medium text-[#34A853] bg-[#34A853]/10 px-2 py-0.5 rounded-full">
+   762→                          {item.badge}
+   763→                        </span>
+   764→                      )}
+   765→                      <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors flex-shrink-0" />
+   766→                    </motion.button>
+   767→                  ))}
+   768→                </div>
+   769→              </motion.div>
+   770→
+   771→              {/* Sign Out */}
+   772→              <motion.div {...fadeInUp} className="pt-2">
+   773→                <button
+   774→                  type="button"
+   775→                  onClick={async () => {
+   776→                    await fetch('/api/auth/logout', { method: 'POST' })
+   777→                    toast.success('Logged out')
+   778→                    useAppStore.getState().logout()
+   779→                  }}
+   780→                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[#EA4335] hover:bg-[#FCE8E6] dark:hover:bg-[#3B1A17] transition-colors border border-transparent hover:border-[#EA4335]/20"
+   781→                >
+   782→                  <div className="w-9 h-9 rounded-xl bg-[#EA4335]/10 flex items-center justify-center flex-shrink-0">
+   783→                    <LogOut className="w-[18px] h-[18px]" />
+   784→                  </div>
+   785→                  <span className="text-sm font-medium">Sign Out</span>
+   786→                </button>
+   787→              </motion.div>
+   788→
+   789→              {/* App Version Footer */}
+   790→              <motion.p {...fadeInUp} className="text-center text-[11px] text-gray-400 dark:text-gray-600 pt-4">
+   791→                EzyMail v1.0 &middot; Made with love
+   792→              </motion.p>
+   793→            </motion.div>
+   794→          ) : (
+   795→            <>
+   796→              {activeSection === 'profile' && (
+   797→                <motion.div key="detail-profile" {...tabVariants} initial="initial" animate="animate" exit="exit">
+   798→                  <ProfileTabContent
+   799→                    profile={profile}
+   800→                    setProfile={setProfile}
+   801→                    initials={initials}
+   802→                    avatarUploading={avatarUploading}
+   803→                    avatarUploadProgress={avatarUploadProgress}
+   804→                    savingProfile={savingProfile}
+   805→                    avatarInputRef={avatarInputRef}
+   806→                    handleAvatarUpload={handleAvatarUpload}
+   807→                    handleSaveProfile={handleSaveProfile}
+   808→                  />
+   809→                </motion.div>
+   810→              )}
+   811→              {activeSection === 'security' && (
+   812→                <motion.div key="detail-security" {...tabVariants} initial="initial" animate="animate" exit="exit">
+   813→                  <SecurityTabContent
+   814→                    currentPassword={currentPassword}
+   815→                    setCurrentPassword={setCurrentPassword}
+   816→                    newPassword={newPassword}
+   817→                    setNewPassword={setNewPassword}
+   818→                    confirmPassword={confirmPassword}
+   819→                    setConfirmPassword={setConfirmPassword}
+   820→                    showCurrentPassword={showCurrentPassword}
+   821→                    setShowCurrentPassword={setShowCurrentPassword}
+   822→                    showNewPassword={showNewPassword}
+   823→                    setShowNewPassword={setShowNewPassword}
+   824→                    savingPassword={savingPassword}
+   825→                    passwordStrength={passwordStrength}
+   826→                    handleChangePassword={handleChangePassword}
+   827→                    sessions={sessions}
+   828→                    sessionsLoading={sessionsLoading}
+   829→                    loadSessions={loadSessions}
+   830→                    handleRevokeSession={handleRevokeSession}
+   831→                    handleRevokeAllOthers={handleRevokeAllOthers}
+   832→                    loginLogs={loginLogs}
+   833→                    loginLogsLoading={loginLogsLoading}
+   834→                    loadLoginLogs={loadLoginLogs}
+   835→                    twoFA={twoFA}
+   836→                    twoFALoading={twoFALoading}
+   837→                    load2FA={load2FA}
+   838→                    twoFASetup={twoFASetup}
+   839→                    twoFASecret={twoFASecret}
+   840→                    twoFAUri={twoFAUri}
+   841→                    twoFABackupCodes={twoFABackupCodes}
+   842→                    twoFAVerifyCode={twoFAVerifyCode}
+   843→                    setTwoFAVerifyCode={setTwoFAVerifyCode}
+   844→                    twoFAVerifying={twoFAVerifying}
+   845→                    handleSetup2FA={handleSetup2FA}
+   846→                    handleVerify2FA={handleVerify2FA}
+   847→                    setTwoFASetup={setTwoFASetup}
+   848→                    twoFADisabling={twoFADisabling}
+   849→                    disable2FAPassword={disable2FAPassword}
+   850→                    setDisable2FAPassword={setDisable2FAPassword}
+   851→                    handleDisable2FA={handleDisable2FA}
+   852→                  />
+   853→                </motion.div>
+   854→              )}
+   855→              {activeSection === 'preferences' && (
+   856→                <motion.div key="detail-preferences" {...tabVariants} initial="initial" animate="animate" exit="exit">
+   857→                  <PreferencesTabContent
+   858→                    emailDensity={emailDensity}
+   859→                    setEmailDensity={setEmailDensity}
+   860→                    previewLines={previewLines}
+   861→                    setPreviewLines={setPreviewLines}
+   862→                    conversationView={conversationView}
+   863→                    setConversationView={setConversationView}
+   864→                    theme={theme || 'system'}
+   865→                    setTheme={setTheme}
+   866→                    desktopNotif={desktopNotif}
+   867→                    setDesktopNotif={setDesktopNotif}
+   868→                    soundNotif={soundNotif}
+   869→                    setSoundNotif={setSoundNotif}
+   870→                    dateFormat={dateFormat}
+   871→                    setDateFormat={setDateFormat}
+   872→                    savingPrefs={savingPrefs}
+   873→                    handleSavePreferences={handleSavePreferences}
+   874→                    signatureEditor={signatureEditor}
+   875→                    savingSignature={savingSignature}
+   876→                    handleSaveSignature={handleSaveSignature}
+   877→                  />
+   878→                </motion.div>
+   879→              )}
+   880→              {activeSection === 'filters' && (
+   881→                <motion.div key="detail-filters" {...tabVariants} initial="initial" animate="animate" exit="exit">
+   882→                  <FiltersTab />
+   883→                </motion.div>
+   884→              )}
+   885→              {activeSection === 'account' && (
+   886→                <motion.div key="detail-account" {...tabVariants} initial="initial" animate="animate" exit="exit">
+   887→                  <AccountTabContent
+   888→                    exporting={exporting}
+   889→                    handleExport={handleExport}
+   890→                  />
+   891→                </motion.div>
+   892→              )}
+   893→
+   894→            </>
+   895→          )}
+   896→        </AnimatePresence>
+   897→      </div>
+   898→    </div>
+   899→  )
+   900→}
+   901→
+   902→// ─── Profile Tab ──────────────────────────────────────────────────────────
+   903→
+   904→function ProfileTabContent({
+   905→  profile, setProfile, initials, avatarUploading, avatarUploadProgress, savingProfile,
+   906→  avatarInputRef, handleAvatarUpload, handleSaveProfile,
+   907→}: {
+   908→  profile: ProfileData | null
+   909→  setProfile: React.Dispatch<React.SetStateAction<ProfileData | null>>
+   910→  initials: string
+   911→  avatarUploading: boolean
+   912→  avatarUploadProgress: number
+   913→  savingProfile: boolean
+   914→  avatarInputRef: React.RefObject<HTMLInputElement | null>
+   915→  handleAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+   916→  handleSaveProfile: () => void
+   917→}) {
+   918→  if (!profile) return null
+   919→
+   920→  const update = (field: keyof ProfileData, value: string) => {
+   921→    setProfile(prev => prev ? { ...prev, [field]: value } : prev)
+   922→  }
+   923→
+   924→  return (
+   925→    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-8">
+   926→      {/* Avatar */}
+   927→      <motion.div className="flex flex-col items-center gap-3" {...fadeInUp}>
+   928→        <div className="relative group" style={{ width: 96, height: 96 }}>
+   929→          {/* Upload progress SVG ring */}
+   930→          {avatarUploading && (
+   931→            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 96 96">
+   932→              <circle cx="48" cy="48" r="45" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-200 dark:text-gray-700" />
+   933→              <circle
+   934→                cx="48" cy="48" r="45" fill="none" stroke="#4285F4" strokeWidth="3"
+   935→                strokeLinecap="round"
+   936→                strokeDasharray={`${2 * Math.PI * 45}`}
+   937→                strokeDashoffset={`${2 * Math.PI * 45 * (1 - avatarUploadProgress / 100)}`}
+   938→                className="transition-all duration-200 ease-out"
+   939→              />
+   940→            </svg>
+   941→          )}
+   942→          <Avatar className="w-full h-full">
+   943→            <AvatarImage src={profile.avatar || undefined} />
+   944→            <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-xl sm:text-2xl font-bold">
+   945→              {initials}
+   946→            </AvatarFallback>
+   947→          </Avatar>
+   948→          <button
+   949→            onClick={() => avatarInputRef.current?.click()}
+   950→            className={`absolute inset-0 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+   951→              avatarUploading
+   952→                ? 'bg-black/50 opacity-100'
+   953→                : 'bg-black/40 opacity-0 group-hover:opacity-100'
+   954→            }`}
+   955→            aria-label="Change avatar"
+   956→          >
+   957→            {avatarUploading ? (
+   958→              <span className="text-white text-xs font-bold tabular-nums">{Math.round(avatarUploadProgress)}%</span>
+   959→            ) : (
+   960→              <Camera className="w-6 h-6 text-white" />
+   961→            )}
+   962→          </button>
+   963→          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+   964→        </div>
+   965→        <p className="text-xs text-gray-500">
+   966→          {avatarUploading ? 'Uploading...' : 'Click to change photo'}
+   967→        </p>
+   968→      </motion.div>
+   969→
+   970→      {/* Personal Information */}
+   971→      <motion.div className="space-y-4" {...fadeInUp}>
+   972→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Personal Information</h3>
+   973→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+   974→          <CardContent className="p-4 space-y-4">
+   975→            <div className="space-y-1.5">
+   976→              <Label htmlFor="displayName" className="text-sm text-gray-600 dark:text-gray-400">Display Name</Label>
+   977→              <Input
+   978→                id="displayName"
+   979→                value={profile.displayName || ''}
+   980→                onChange={(e) => update('displayName', e.target.value)}
+   981→                placeholder="How others see you"
+   982→                className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+   983→              />
+   984→            </div>
+   985→            <div className="grid grid-cols-2 gap-3">
+   986→              <div className="space-y-1.5">
+   987→                <Label htmlFor="firstName" className="text-sm text-gray-600 dark:text-gray-400">First Name *</Label>
+   988→                <Input
+   989→                  id="firstName"
+   990→                  value={profile.firstName}
+   991→                  onChange={(e) => update('firstName', e.target.value)}
+   992→                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+   993→                />
+   994→              </div>
+   995→              <div className="space-y-1.5">
+   996→                <Label htmlFor="lastName" className="text-sm text-gray-600 dark:text-gray-400">Last Name *</Label>
+   997→                <Input
+   998→                  id="lastName"
+   999→                  value={profile.lastName}
+  1000→                  onChange={(e) => update('lastName', e.target.value)}
+  1001→                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+  1002→                />
+  1003→              </div>
+  1004→            </div>
+  1005→            <div className="space-y-1.5">
+  1006→              <Label htmlFor="email" className="text-sm text-gray-600 dark:text-gray-400">Email Address</Label>
+  1007→              <div className="relative">
+  1008→                <Input
+  1009→                  id="email"
+  1010→                  value={profile.email}
+  1011→                  readOnly
+  1012→                  className="h-10 rounded-xl bg-gray-50 dark:bg-gray-900 pr-16 border-gray-200 dark:border-gray-700"
+  1013→                />
+  1014→                <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4285F4] border-[#4285F4]/30 text-[10px] px-1.5">
+  1015→                  @ezy.af
+  1016→                </Badge>
+  1017→              </div>
+  1018→              <p className="text-[11px] text-gray-400">Your email address cannot be changed</p>
+  1019→            </div>
+  1020→            <div className="space-y-1.5">
+  1021→              <Label htmlFor="bio" className="text-sm text-gray-600 dark:text-gray-400">Bio</Label>
+  1022→              <Textarea
+  1023→                id="bio"
+  1024→                value={profile.bio || ''}
+  1025→                onChange={(e) => update('bio', e.target.value)}
+  1026→                placeholder="Tell others about yourself"
+  1027→                className="rounded-xl min-h-[70px] resize-none border-gray-200 dark:border-gray-700"
+  1028→              />
+  1029→            </div>
+  1030→            <div className="grid grid-cols-2 gap-3">
+  1031→              <div className="space-y-1.5">
+  1032→                <Label htmlFor="phone" className="text-sm text-gray-600 dark:text-gray-400">Phone</Label>
+  1033→                <Input
+  1034→                  id="phone"
+  1035→                  value={profile.phone || ''}
+  1036→                  onChange={(e) => update('phone', e.target.value)}
+  1037→                  placeholder="93700000000"
+  1038→                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+  1039→                />
+  1040→              </div>
+  1041→              <div className="space-y-1.5">
+  1042→                <Label htmlFor="dob" className="text-sm text-gray-600 dark:text-gray-400">Date of Birth</Label>
+  1043→                <Input
+  1044→                  id="dob"
+  1045→                  type="date"
+  1046→                  value={profile.dateOfBirth || ''}
+  1047→                  onChange={(e) => update('dateOfBirth', e.target.value)}
+  1048→                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+  1049→                />
+  1050→              </div>
+  1051→            </div>
+  1052→          </CardContent>
+  1053→        </Card>
+  1054→      </motion.div>
+  1055→
+  1056→      {/* Account Info (read-only) */}
+  1057→      <motion.div className="space-y-4" {...fadeInUp}>
+  1058→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Account Details</h3>
+  1059→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+  1060→          <CardContent className="p-0 divide-y divide-gray-100 dark:divide-gray-800">
+  1061→            <div className="flex justify-between items-center px-4 py-3">
+  1062→              <span className="text-sm text-gray-500 flex items-center gap-2">
+  1063→                <CalendarDays className="w-4 h-4 text-gray-400" /> Account Created
+  1064→              </span>
+  1065→              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+  1066→                {formatDate(profile.createdAt)}
+  1067→              </span>
+  1068→            </div>
+  1069→            <div className="flex justify-between items-center px-4 py-3">
+  1070→              <span className="text-sm text-gray-500 flex items-center gap-2">
+  1071→                <Clock className="w-4 h-4 text-gray-400" /> Last Login
+  1072→              </span>
+  1073→              <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+  1074→                {formatDate(profile.lastLogin)}
+  1075→              </span>
+  1076→            </div>
+  1077→            <div className="flex justify-between items-center px-4 py-3">
+  1078→              <span className="text-sm text-gray-500 flex items-center gap-2">
+  1079→                <Shield className="w-4 h-4 text-gray-400" /> Account Role
+  1080→              </span>
+  1081→              <Badge variant="outline" className="text-[10px] px-1.5">
+  1082→                {profile.role}
+  1083→              </Badge>
+  1084→            </div>
+  1085→          </CardContent>
+  1086→        </Card>
+  1087→      </motion.div>
+  1088→
+  1089→      <motion.div {...fadeInUp}>
+  1090→        <Button
+  1091→          onClick={handleSaveProfile}
+  1092→          disabled={savingProfile}
+  1093→          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
+  1094→        >
+  1095→          {savingProfile ? (
+  1096→            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+  1097→          ) : (
+  1098→            <><Save className="w-4 h-4 mr-2" />Save Profile</>
+  1099→          )}
+  1100→        </Button>
+  1101→      </motion.div>
+  1102→    </div>
+  1103→  )
+  1104→}
+  1105→
+  1106→// ─── Security Tab ─────────────────────────────────────────────────────────
+  1107→
+  1108→function SecurityTabContent({
+  1109→  currentPassword, setCurrentPassword,
+  1110→  newPassword, setNewPassword,
+  1111→  confirmPassword, setConfirmPassword,
+  1112→  showCurrentPassword, setShowCurrentPassword,
+  1113→  showNewPassword, setShowNewPassword,
+  1114→  savingPassword, passwordStrength,
+  1115→  handleChangePassword,
+  1116→  sessions, sessionsLoading, loadSessions,
+  1117→  handleRevokeSession, handleRevokeAllOthers,
+  1118→  loginLogs, loginLogsLoading, loadLoginLogs,
+  1119→  twoFA, twoFALoading, load2FA,
+  1120→  twoFASetup, twoFASecret, twoFAUri, twoFABackupCodes,
+  1121→  twoFAVerifyCode, setTwoFAVerifyCode, twoFAVerifying,
+  1122→  handleSetup2FA, handleVerify2FA, setTwoFASetup,
+  1123→  twoFADisabling, disable2FAPassword, setDisable2FAPassword, handleDisable2FA,
+  1124→}: {
+  1125→  currentPassword: string
+  1126→  setCurrentPassword: (v: string) => void
+  1127→  newPassword: string
+  1128→  setNewPassword: (v: string) => void
+  1129→  confirmPassword: string
+  1130→  setConfirmPassword: (v: string) => void
+  1131→  showCurrentPassword: boolean
+  1132→  setShowCurrentPassword: (v: boolean) => void
+  1133→  showNewPassword: boolean
+  1134→  setShowNewPassword: (v: boolean) => void
+  1135→  savingPassword: boolean
+  1136→  passwordStrength: { score: number; label: string; color: string }
+  1137→  handleChangePassword: () => void
+  1138→  sessions: SessionData[]
+  1139→  sessionsLoading: boolean
+  1140→  loadSessions: () => void
+  1141→  handleRevokeSession: (id: string) => void
+  1142→  handleRevokeAllOthers: () => void
+  1143→  loginLogs: LoginLogData[]
+  1144→  loginLogsLoading: boolean
+  1145→  loadLoginLogs: () => void
+  1146→  twoFA: TwoFAStatus
+  1147→  twoFALoading: boolean
+  1148→  load2FA: () => void
+  1149→  twoFASetup: boolean
+  1150→  twoFASecret: string
+  1151→  twoFAUri: string
+  1152→  twoFABackupCodes: string[]
+  1153→  twoFAVerifyCode: string
+  1154→  setTwoFAVerifyCode: (v: string) => void
+  1155→  twoFAVerifying: boolean
+  1156→  handleSetup2FA: () => void
+  1157→  handleVerify2FA: () => void
+  1158→  setTwoFASetup: (v: boolean) => void
+  1159→  twoFADisabling: boolean
+  1160→  disable2FAPassword: string
+  1161→  setDisable2FAPassword: (v: string) => void
+  1162→  handleDisable2FA: () => void
+  1163→}) {
+  1164→  const [activeSection, setActiveSection] = useState<'password' | 'sessions' | 'login-history' | '2fa'>('password')
+  1165→
+  1166→  useEffect(() => {
+  1167→    if (activeSection === 'sessions') loadSessions()
+  1168→    if (activeSection === 'login-history') loadLoginLogs()
+  1169→    if (activeSection === '2fa') load2FA()
+  1170→  }, [activeSection, loadSessions, loadLoginLogs, load2FA])
+  1171→
+  1172→  return (
+  1173→    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-4 pb-8">
+  1174→      {/* Section Navigation */}
+  1175→      <motion.div className="space-y-1" {...fadeInUp}>
+  1176→        {([
+  1177→          { key: 'password' as const, label: 'Change Password', description: 'Update your account password', icon: Lock },
+  1178→          { key: 'sessions' as const, label: 'Active Sessions', description: 'Manage devices logged into your account', icon: Smartphone },
+  1179→          { key: 'login-history' as const, label: 'Login History', description: 'Recent login activity and attempts', icon: Clock },
+  1180→          { key: '2fa' as const, label: 'Two-Factor Auth', description: 'Add extra security to your account', icon: Shield },
+  1181→        ]).map((item) => (
+  1182→          <button
+  1183→            key={item.key}
+  1184→            type="button"
+  1185→            onClick={() => setActiveSection(item.key)}
+  1186→            className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all ${
+  1187→              activeSection === item.key
+  1188→                ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/15 text-[#4285F4] shadow-sm'
+  1189→                : 'hover:bg-gray-50 dark:hover:bg-gray-900 text-[#1F1F1F] dark:text-gray-300'
+  1190→            }`}
+  1191→          >
+  1192→            <div className="flex items-center gap-3">
+  1193→              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+  1194→                activeSection === item.key
+  1195→                  ? 'bg-[#4285F4]/15'
+  1196→                  : 'bg-gray-100 dark:bg-gray-800'
+  1197→              }`}>
+  1198→                <item.icon className="w-4 h-4" />
+  1199→              </div>
+  1200→              <div className="text-left">
+  1201→                <span className="text-sm font-medium">{item.label}</span>
+  1202→                <p className="text-[11px] text-gray-400 dark:text-gray-500 hidden sm:block">{item.description}</p>
+  1203→              </div>
+  1204→            </div>
+  1205→            {activeSection === item.key && (
+  1206→              <Badge className="text-[10px] px-1.5 bg-[#4285F4] text-white border-0">Active</Badge>
+  1207→            )}
+  1208→          </button>
+  1209→        ))}
+  1210→      </motion.div>
+  1211→
+  1212→      <Separator />
+  1213→
+  1214→      <AnimatePresence mode="wait">
+  1215→        {/* Change Password */}
+  1216→        {activeSection === 'password' && (
+  1217→          <motion.div key="password" {...tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+  1218→            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Change Password</h3>
+  1219→            <div className="space-y-3">
+  1220→              <div className="space-y-1.5">
+  1221→                <Label htmlFor="currentPwd" className="text-sm">Current Password</Label>
+  1222→                <div className="relative">
+  1223→                  <Input
+  1224→                    id="currentPwd"
+  1225→                    type={showCurrentPassword ? 'text' : 'password'}
+  1226→                    value={currentPassword}
+  1227→                    onChange={(e) => setCurrentPassword(e.target.value)}
+  1228→                    className="h-10 rounded-xl pr-10"
+  1229→                  />
+  1230→                  <button
+  1231→                    type="button"
+  1232→                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+  1233→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+  1234→                    aria-label="Toggle password visibility"
+  1235→                  >
+  1236→                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+  1237→                  </button>
+  1238→                </div>
+  1239→              </div>
+  1240→              <div className="space-y-1.5">
+  1241→                <Label htmlFor="newPwd" className="text-sm">New Password</Label>
+  1242→                <div className="relative">
+  1243→                  <Input
+  1244→                    id="newPwd"
+  1245→                    type={showNewPassword ? 'text' : 'password'}
+  1246→                    value={newPassword}
+  1247→                    onChange={(e) => setNewPassword(e.target.value)}
+  1248→                    className="h-10 rounded-xl pr-10"
+  1249→                  />
+  1250→                  <button
+  1251→                    type="button"
+  1252→                    onClick={() => setShowNewPassword(!showNewPassword)}
+  1253→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+  1254→                    aria-label="Toggle password visibility"
+  1255→                  >
+  1256→                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+  1257→                  </button>
+  1258→                </div>
+  1259→                {newPassword && (
+  1260→                  <div className="space-y-1">
+  1261→                    <div className="flex gap-1">
+  1262→                      {[1, 2, 3, 4, 5].map(i => (
+  1263→                        <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+  1264→                          i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+  1265→                        }`} />
+  1266→                      ))}
+  1267→                    </div>
+  1268→                    <p className={`text-xs font-medium ${
+  1269→                      passwordStrength.label === 'Weak' ? 'text-[#EA4335]' :
+  1270→                      passwordStrength.label === 'Medium' ? 'text-[#FBBC05]' : 'text-[#34A853]'
+  1271→                    }`}>{passwordStrength.label}</p>
+  1272→                  </div>
+  1273→                )}
+  1274→              </div>
+  1275→              <div className="space-y-1.5">
+  1276→                <Label htmlFor="confirmPwd" className="text-sm">Confirm New Password</Label>
+  1277→                <Input
+  1278→                  id="confirmPwd"
+  1279→                  type="password"
+  1280→                  value={confirmPassword}
+  1281→                  onChange={(e) => setConfirmPassword(e.target.value)}
+  1282→                  className="h-10 rounded-xl"
+  1283→                />
+  1284→                {confirmPassword && newPassword !== confirmPassword && (
+  1285→                  <p className="text-xs text-[#EA4335]">Passwords do not match</p>
+  1286→                )}
+  1287→              </div>
+  1288→              <Button
+  1289→                onClick={handleChangePassword}
+  1290→                disabled={savingPassword}
+  1291→                className="w-full h-10 rounded-xl bg-[#34A853] hover:bg-[#2d9249] text-white font-medium"
+  1292→              >
+  1293→                {savingPassword ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Changing...</> : 'Change Password'}
+  1294→              </Button>
+  1295→            </div>
+  1296→          </motion.div>
+  1297→        )}
+  1298→
+  1299→        {/* Active Sessions */}
+  1300→        {activeSection === 'sessions' && (
+  1301→          <motion.div key="sessions" {...tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+  1302→            <div className="flex items-center justify-between">
+  1303→              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Active Sessions</h3>
+  1304→              {sessions.length > 1 && (
+  1305→                <Button
+  1306→                  variant="outline"
+  1307→                  size="sm"
+  1308→                  onClick={handleRevokeAllOthers}
+  1309→                  className="text-xs h-8 rounded-lg text-[#EA4335] border-[#EA4335]/30 hover:bg-[#EA4335]/10"
+  1310→                >
+  1311→                  <LogOut className="w-3 h-3 mr-1" />Revoke All Others
+  1312→                </Button>
+  1313→              )}
+  1314→            </div>
+  1315→            {sessionsLoading ? (
+  1316→              <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  1317→            ) : sessions.length === 0 ? (
+  1318→              <p className="text-sm text-gray-500 text-center py-8">No active sessions</p>
+  1319→            ) : (
+  1320→              <Card className="border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+  1321→                {sessions.map((session) => (
+  1322→                  <div key={session.id} className="flex items-center justify-between p-3">
+  1323→                    <div className="flex items-center gap-3 min-w-0">
+  1324→                      <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0">
+  1325→                        {getDeviceIcon(session.deviceType)}
+  1326→                      </div>
+  1327→                      <div className="min-w-0">
+  1328→                        <div className="flex items-center gap-2">
+  1329→                          <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">
+  1330→                            {session.deviceName}
+  1331→                          </p>
+  1332→                          {session.isCurrent && (
+  1333→                            <Badge className="text-[10px] px-1.5 py-0 bg-[#34A853] hover:bg-[#34A853] text-white">This device</Badge>
+  1334→                          )}
+  1335→                        </div>
+  1336→                        <p className="text-xs text-gray-500 truncate">
+  1337→                          {session.ipAddress} &middot; {timeAgo(session.lastActive)}
+  1338→                        </p>
+  1339→                      </div>
+  1340→                    </div>
+  1341→                    {!session.isCurrent && (
+  1342→                      <Button
+  1343→                        variant="ghost"
+  1344→                        size="sm"
+  1345→                        onClick={() => handleRevokeSession(session.id)}
+  1346→                        className="text-xs h-8 text-[#EA4335] hover:text-[#EA4335] hover:bg-[#EA4335]/10 flex-shrink-0"
+  1347→                      >
+  1348→                        Revoke
+  1349→                      </Button>
+  1350→                    )}
+  1351→                  </div>
+  1352→                ))}
+  1353→              </Card>
+  1354→            )}
+  1355→          </motion.div>
+  1356→        )}
+  1357→
+  1358→        {/* Login History */}
+  1359→        {activeSection === 'login-history' && (
+  1360→          <motion.div key="login-history" {...tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+  1361→            <div className="flex items-center justify-between">
+  1362→              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Login History</h3>
+  1363→              <Button variant="ghost" size="sm" onClick={loadLoginLogs} className="text-xs h-8">
+  1364→                <RefreshCw className="w-3 h-3 mr-1" />Refresh
+  1365→              </Button>
+  1366→            </div>
+  1367→            {loginLogsLoading ? (
+  1368→              <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  1369→            ) : loginLogs.length === 0 ? (
+  1370→              <p className="text-sm text-gray-500 text-center py-8">No login history</p>
+  1371→            ) : (
+  1372→              <Card className="border-gray-200 dark:border-gray-800 overflow-hidden">
+  1373→                <div className="max-h-80 overflow-y-auto">
+  1374→                  <Table>
+  1375→                    <TableHeader>
+  1376→                      <TableRow>
+  1377→                        <TableHead className="text-xs">Date</TableHead>
+  1378→                        <TableHead className="text-xs">IP</TableHead>
+  1379→                        <TableHead className="text-xs hidden sm:table-cell">Device</TableHead>
+  1380→                        <TableHead className="text-xs text-right">Status</TableHead>
+  1381→                      </TableRow>
+  1382→                    </TableHeader>
+  1383→                    <TableBody>
+  1384→                      {loginLogs.map((log) => (
+  1385→                        <TableRow key={log.id}>
+  1386→                          <TableCell className="text-xs py-2">
+  1387→                            {formatDate(log.date)}
+  1388→                          </TableCell>
+  1389→                          <TableCell className="text-xs py-2 font-mono">
+  1390→                            {log.ipAddress}
+  1391→                          </TableCell>
+  1392→                          <TableCell className="text-xs py-2 hidden sm:table-cell text-gray-500">
+  1393→                            {log.deviceType || 'Unknown'}
+  1394→                          </TableCell>
+  1395→                          <TableCell className="text-xs py-2 text-right">
+  1396→                            {log.success ? (
+  1397→                              <Badge className="text-[10px] px-1.5 py-0 bg-[#34A853]/10 text-[#34A853] border-0">
+  1398→                                <CheckCircle2 className="w-3 h-3 mr-1" />Success
+  1399→                              </Badge>
+  1400→                            ) : (
+  1401→                              <Badge className="text-[10px] px-1.5 py-0 bg-[#EA4335]/10 text-[#EA4335] border-0">
+  1402→                                <XCircle className="w-3 h-3 mr-1" />Failed
+  1403→                              </Badge>
+  1404→                            )}
+  1405→                          </TableCell>
+  1406→                        </TableRow>
+  1407→                      ))}
+  1408→                    </TableBody>
+  1409→                  </Table>
+  1410→                </div>
+  1411→              </Card>
+  1412→            )}
+  1413→          </motion.div>
+  1414→        )}
+  1415→
+  1416→        {/* 2FA */}
+  1417→        {activeSection === '2fa' && (
+  1418→          <motion.div key="2fa" {...tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+  1419→            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Two-Factor Authentication</h3>
+  1420→
+  1421→            {twoFALoading ? (
+  1422→              <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  1423→            ) : twoFASetup ? (
+  1424→              /* Setup flow */
+  1425→              <Card className="border-gray-200 dark:border-gray-800">
+  1426→                <CardContent className="p-4 space-y-4">
+  1427→                  <div className="flex items-start gap-3">
+  1428→                    <div className="w-9 h-9 rounded-lg bg-[#D3E3FD] flex items-center justify-center flex-shrink-0 mt-0.5">
+  1429→                      <Key className="w-4 h-4 text-[#4285F4]" />
+  1430→                    </div>
+  1431→                    <div>
+  1432→                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Setup 2FA</p>
+  1433→                      <p className="text-xs text-gray-500 mt-0.5">Scan this QR code in your authenticator app, or use the secret key below.</p>
+  1434→                    </div>
+  1435→                  </div>
+  1436→
+  1437→                  {/* Secret key */}
+  1438→                  <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
+  1439→                    <code className="text-xs font-mono text-[#1F1F1F] dark:text-white flex-1 break-all">
+  1440→                      {twoFASecret}
+  1441→                    </code>
+  1442→                    <Button
+  1443→                      variant="ghost"
+  1444→                      size="sm"
+  1445→                      onClick={() => {
+  1446→                        navigator.clipboard.writeText(twoFASecret)
+  1447→                        toast.success('Secret copied')
+  1448→                      }}
+  1449→                      className="h-8 w-8 p-0 flex-shrink-0"
+  1450→                    >
+  1451→                      <Copy className="w-3.5 h-3.5" />
+  1452→                    </Button>
+  1453→                  </div>
+  1454→
+  1455→                  {/* OTPAuth URI as clickable link */}
+  1456→                  <a
+  1457→                    href={twoFAUri}
+  1458→                    target="_blank"
+  1459→                    rel="noopener noreferrer"
+  1460→                    className="block text-xs text-[#4285F4] hover:underline break-all"
+  1461→                  >
+  1462→                    {twoFAUri}
+  1463→                  </a>
+  1464→
+  1465→                  {/* Backup codes */}
+  1466→                  <div>
+  1467→                    <p className="text-xs font-medium text-[#1F1F1F] dark:text-white mb-2">Backup Codes</p>
+  1468→                    <p className="text-[11px] text-gray-500 mb-2">Save these codes in a safe place. Each can only be used once.</p>
+  1469→                    <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
+  1470→                      {twoFABackupCodes.map((code, i) => (
+  1471→                        <code key={i} className="text-xs font-mono text-[#1F1F1F] dark:text-white py-0.5">
+  1472→                          {code}
+  1473→                        </code>
+  1474→                      ))}
+  1475→                    </div>
+  1476→                  </div>
+  1477→
+  1478→                  <Separator />
+  1479→
+  1480→                  {/* Verify code */}
+  1481→                  <div className="space-y-2">
+  1482→                    <Label htmlFor="verifyCode" className="text-sm">Enter Verification Code</Label>
+  1483→                    <Input
+  1484→                      id="verifyCode"
+  1485→                      value={twoFAVerifyCode}
+  1486→                      onChange={(e) => setTwoFAVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+  1487→                      placeholder="000000"
+  1488→                      className="h-10 rounded-xl text-center font-mono text-lg tracking-[0.5em]"
+  1489→                      maxLength={6}
+  1490→                    />
+  1491→                  </div>
+  1492→
+  1493→                  <div className="flex gap-2">
+  1494→                    <Button
+  1495→                      variant="outline"
+  1496→                      onClick={() => setTwoFASetup(false)}
+  1497→                      className="flex-1 h-10 rounded-xl"
+  1498→                    >
+  1499→                      Cancel
+  1500→                    </Button>
+  1501→                    <Button
+  1502→                      onClick={handleVerify2FA}
+  1503→                      disabled={twoFAVerifyCode.length !== 6 || twoFAVerifying}
+  1504→                      className="flex-1 h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white"
+  1505→                    >
+  1506→                      {twoFAVerifying ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verifying...</> : 'Verify & Enable'}
+  1507→                    </Button>
+  1508→                  </div>
+  1509→                </CardContent>
+  1510→              </Card>
+  1511→            ) : twoFA.enabled ? (
+  1512→              /* Enabled state */
+  1513→              <Card className="border-gray-200 dark:border-gray-800">
+  1514→                <CardContent className="p-4 space-y-4">
+  1515→                  <div className="flex items-center gap-3">
+  1516→                    <div className="w-9 h-9 rounded-lg bg-[#34A853]/10 flex items-center justify-center">
+  1517→                      <Shield className="w-4 h-4 text-[#34A853]" />
+  1518→                    </div>
+  1519→                    <div>
+  1520→                      <div className="flex items-center gap-2">
+  1521→                        <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">2FA Enabled</p>
+  1522→                        <Badge className="text-[10px] px-1.5 py-0 bg-[#34A853] hover:bg-[#34A853] text-white">Active</Badge>
+  1523→                      </div>
+  1524→                      <p className="text-xs text-gray-500 mt-0.5">
+  1525→                        {twoFA.createdAt ? `Enabled since ${formatDate(twoFA.createdAt)}` : 'Your account is protected with two-factor authentication'}
+  1526→                      </p>
+  1527→                    </div>
+  1528→                  </div>
+  1529→
+  1530→                  <Separator />
+  1531→
+  1532→                  <div className="space-y-2">
+  1533→                    <Label htmlFor="disable2faPwd" className="text-sm">Password to Disable</Label>
+  1534→                    <Input
+  1535→                      id="disable2faPwd"
+  1536→                      type="password"
+  1537→                      value={disable2FAPassword}
+  1538→                      onChange={(e) => setDisable2FAPassword(e.target.value)}
+  1539→                      placeholder="Enter your current password"
+  1540→                      className="h-10 rounded-xl"
+  1541→                    />
+  1542→                  </div>
+  1543→
+  1544→                  <Button
+  1545→                    onClick={handleDisable2FA}
+  1546→                    disabled={twoFADisabling || !disable2FAPassword}
+  1547→                    variant="outline"
+  1548→                    className="w-full h-10 rounded-xl text-[#EA4335] border-[#EA4335]/30 hover:bg-[#EA4335]/10"
+  1549→                  >
+  1550→                    {twoFADisabling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Disabling...</> : <><Shield className="w-4 h-4 mr-2" />Disable 2FA</>}
+  1551→                  </Button>
+  1552→                </CardContent>
+  1553→              </Card>
+  1554→            ) : (
+  1555→              /* Not enabled */
+  1556→              <Card className="border-gray-200 dark:border-gray-800">
+  1557→                <CardContent className="p-4 space-y-4">
+  1558→                  <div className="flex items-center gap-3">
+  1559→                    <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+  1560→                      <Shield className="w-4 h-4 text-gray-400" />
+  1561→                    </div>
+  1562→                    <div>
+  1563→                      <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">2FA Not Enabled</p>
+  1564→                      <p className="text-xs text-gray-500 mt-0.5">Add an extra layer of security to your account</p>
+  1565→                    </div>
+  1566→                  </div>
+  1567→                  <Button
+  1568→                    onClick={handleSetup2FA}
+  1569→                    className="w-full h-10 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white"
+  1570→                  >
+  1571→                    <Shield className="w-4 h-4 mr-2" />Enable 2FA
+  1572→                  </Button>
+  1573→                </CardContent>
+  1574→              </Card>
+  1575→            )}
+  1576→          </motion.div>
+  1577→        )}
+  1578→      </AnimatePresence>
+  1579→    </div>
+  1580→  )
+  1581→}
+  1582→
+  1583→// ─── Preferences Tab ──────────────────────────────────────────────────────
+  1584→
+  1585→// ─── Notification Settings ────────────────────────────────────────────────
+  1586→
+  1587→function NotificationSettings({
+  1588→  desktopNotif, setDesktopNotif,
+  1589→  soundNotif, setSoundNotif,
+  1590→}: {
+  1591→  desktopNotif: boolean
+  1592→  setDesktopNotif: (v: boolean) => void
+  1593→  soundNotif: boolean
+  1594→  setSoundNotif: (v: boolean) => void
+  1595→}) {
+  1596→  const [permissionStatus, setPermissionStatus] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('default')
+  1597→  const [requesting, setRequesting] = useState(false)
+  1598→
+  1599→  // Check current notification permission
+  1600→  useEffect(() => {
+  1601→    if (typeof window === 'undefined' || !('Notification' in window)) {
+  1602→      setPermissionStatus('unsupported')
+  1603→      return
+  1604→    }
+  1605→    setPermissionStatus(Notification.permission)
+  1606→  }, [])
+  1607→
+  1608→  const handleRequestPermission = async () => {
+  1609→    setRequesting(true)
+  1610→    try {
+  1611→      const permission = await Notification.requestPermission()
+  1612→      setPermissionStatus(permission)
+  1613→      if (permission === 'granted') {
+  1614→        toast.success('Browser notifications enabled!')
+  1615→      } else if (permission === 'denied') {
+  1616→        toast.error('Notifications blocked. Please enable them in your browser settings.')
+  1617→      }
+  1618→    } catch {
+  1619→      toast.error('Failed to request notification permission')
+  1620→    } finally {
+  1621→      setRequesting(false)
+  1622→    }
+  1623→  }
+  1624→
+  1625→  const getPermissionBadge = () => {
+  1626→    switch (permissionStatus) {
+  1627→      case 'granted':
+  1628→        return (
+  1629→          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#E6F4EA] dark:bg-[#1B3626] text-[#34A853]">
+  1630→            <CheckCircle2 className="w-3 h-3" /> Enabled
+  1631→          </span>
+  1632→        )
+  1633→      case 'denied':
+  1634→        return (
+  1635→          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FCE8E6] dark:bg-[#3B1A17] text-[#EA4335]">
+  1636→            <XCircle className="w-3 h-3" /> Blocked
+  1637→          </span>
+  1638→        )
+  1639→      case 'unsupported':
+  1640→        return (
+  1641→          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
+  1642→            Not supported
+  1643→          </span>
+  1644→        )
+  1645→      default:
+  1646→        return (
+  1647→          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FEF7E0] dark:bg-[#3B3117] text-[#FBBC05]">
+  1648→            Not enabled
+  1649→          </span>
+  1650→        )
+  1651→    }
+  1652→  }
+  1653→
+  1654→  return (
+  1655→    <motion.div className="space-y-3" {...fadeInUp}>
+  1656→      <div className="flex items-center justify-between">
+  1657→        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Notifications</h3>
+  1658→        {getPermissionBadge()}
+  1659→      </div>
+  1660→      <Card className="border-gray-200 dark:border-gray-800">
+  1661→        <CardContent className="p-4 space-y-4">
+  1662→          {/* Permission request */}
+  1663→          {permissionStatus !== 'granted' && permissionStatus !== 'unsupported' && (
+  1664→            <div className="p-3 rounded-xl bg-[#FEF7E0] dark:bg-[#3B3117] border border-[#FBBC05]/30">
+  1665→              <div className="flex items-start gap-2">
+  1666→                <Bell className="w-4 h-4 text-[#FBBC05] mt-0.5 flex-shrink-0" />
+  1667→                <div className="flex-1">
+  1668→                  <p className="text-xs font-medium text-[#1F1F1F] dark:text-white">
+  1669→                    {permissionStatus === 'denied'
+  1670→                      ? 'Notifications are blocked by your browser'
+  1671→                      : 'Enable browser notifications for new emails'}
+  1672→                  </p>
+  1673→                  <p className="text-[11px] text-gray-500 mt-0.5">
+  1674→                    {permissionStatus === 'denied'
+  1675→                      ? 'Go to your browser settings to allow notifications for this site'
+  1676→                      : 'Allow EzyMail to send you desktop notifications when you receive new emails'}
+  1677→                  </p>
+  1678→                  {permissionStatus === 'default' && (
+  1679→                    <button
+  1680→                      onClick={handleRequestPermission}
+  1681→                      disabled={requesting}
+  1682→                      className="mt-2 px-3 py-1.5 text-xs font-medium bg-[#4285F4] hover:bg-[#1a73e8] text-white rounded-lg transition-colors disabled:opacity-50"
+  1683→                    >
+  1684→                      {requesting ? 'Requesting...' : 'Enable Notifications'}
+  1685→                    </button>
+  1686→                  )}
+  1687→                </div>
+  1688→              </div>
+  1689→            </div>
+  1690→          )}
+  1691→
+  1692→          {/* Desktop notifications toggle */}
+  1693→          <div className="flex items-center justify-between">
+  1694→            <div className="flex items-center gap-3">
+  1695→              <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+  1696→                <Bell className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+  1697→              </div>
+  1698→              <div>
+  1699→                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Desktop Notifications</p>
+  1700→                <p className="text-xs text-gray-500">Show browser push notifications for new emails</p>
+  1701→              </div>
+  1702→            </div>
+  1703→            <Switch
+  1704→              checked={desktopNotif}
+  1705→              onCheckedChange={setDesktopNotif}
+  1706→              className="data-[state=checked]:bg-[#4285F4]"
+  1707→              disabled={permissionStatus === 'unsupported'}
+  1708→            />
+  1709→          </div>
+  1710→
+  1711→          {/* Sound toggle */}
+  1712→          <div className="flex items-center justify-between">
+  1713→            <div className="flex items-center gap-3">
+  1714→              <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+  1715→                <Volume2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+  1716→              </div>
+  1717→              <div>
+  1718→                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Notification Sound</p>
+  1719→                <p className="text-xs text-gray-500">Play a sound when new emails arrive</p>
+  1720→              </div>
+  1721→            </div>
+  1722→            <Switch
+  1723→              checked={soundNotif}
+  1724→              onCheckedChange={setSoundNotif}
+  1725→              className="data-[state=checked]:bg-[#4285F4]"
+  1726→            />
+  1727→          </div>
+  1728→
+  1729→          {/* Info about how it works */}
+  1730→          <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+  1731→            <div className="flex items-start gap-2">
+  1732→              <AlertTriangle className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+  1733→              <p className="text-[11px] text-gray-400 leading-relaxed">
+  1734→                EzyMail checks for new emails every 15 seconds while the app is open.
+  1735→                Desktop notifications only appear when EzyMail is in the background.
+  1736→                {permissionStatus === 'denied' && ' To re-enable, go to your browser\'s site settings and reset notification permissions.'}
+  1737→              </p>
+  1738→            </div>
+  1739→          </div>
+  1740→        </CardContent>
+  1741→      </Card>
+  1742→    </motion.div>
+  1743→  )
+  1744→}
+  1745→
+  1746→// ─── Preferences Tab ───────────────────────────────────────────────────────
+  1747→
+  1748→function PreferencesTabContent({
+  1749→  emailDensity, setEmailDensity,
+  1750→  previewLines, setPreviewLines,
+  1751→  conversationView, setConversationView,
+  1752→  theme, setTheme,
+  1753→  desktopNotif, setDesktopNotif,
+  1754→  soundNotif, setSoundNotif,
+  1755→  dateFormat, setDateFormat,
+  1756→  savingPrefs, handleSavePreferences,
+  1757→  signatureEditor, savingSignature, handleSaveSignature,
+  1758→}: {
+  1759→  emailDensity: 'comfortable' | 'cozy' | 'compact'
+  1760→  setEmailDensity: (v: 'comfortable' | 'cozy' | 'compact') => void
+  1761→  previewLines: 'none' | '1' | '2' | '3'
+  1762→  setPreviewLines: (v: 'none' | '1' | '2' | '3') => void
+  1763→  conversationView: boolean
+  1764→  setConversationView: (v: boolean) => void
+  1765→  theme: string
+  1766→  setTheme: (v: string) => void
+  1767→  desktopNotif: boolean
+  1768→  setDesktopNotif: (v: boolean) => void
+  1769→  soundNotif: boolean
+  1770→  setSoundNotif: (v: boolean) => void
+  1771→  dateFormat: '12h' | '24h'
+  1772→  setDateFormat: (v: '12h' | '24h') => void
+  1773→  savingPrefs: boolean
+  1774→  handleSavePreferences: () => void
+  1775→  signatureEditor: ReturnType<typeof useEditor> | null
+  1776→  savingSignature: boolean
+  1777→  handleSaveSignature: () => void
+  1778→}) {
+  1779→  return (
+  1780→    <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-5 pb-8">
+  1781→      {/* Email Density & Display */}
+  1782→      <motion.div className="space-y-3" {...fadeInUp}>
+  1783→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Email Display</h3>
+  1784→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+  1785→          <CardContent className="p-4 space-y-4">
+  1786→            <div>
+  1787→              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Email Density</Label>
+  1788→              <p className="text-[11px] text-gray-500 mt-0.5">Choose how compact emails appear in your inbox</p>
+  1789→            </div>
+  1790→            <RadioGroup value={emailDensity} onValueChange={(v) => setEmailDensity(v as typeof emailDensity)} className="space-y-1">
+  1791→              {[
+  1792→                { value: 'comfortable' as const, label: 'Comfortable', desc: 'More spacing, relaxed reading' },
+  1793→                { value: 'cozy' as const, label: 'Cozy', desc: 'Balanced spacing' },
+  1794→                { value: 'compact' as const, label: 'Compact', desc: 'More emails visible at once' },
+  1795→              ].map((opt) => (
+  1796→                <div key={opt.value} className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+  1797→                  <RadioGroupItem value={opt.value} id={`density-${opt.value}`} className="data-[state=checked]:border-[#4285F4] data-[state=checked]:text-[#4285F4]" />
+  1798→                  <Label htmlFor={`density-${opt.value}`} className="cursor-pointer flex-1">
+  1799→                    <span className="text-sm font-medium">{opt.label}</span>
+  1800→                    <span className="text-[11px] text-gray-500 ml-2">{opt.desc}</span>
+  1801→                  </Label>
+  1802→                </div>
+  1803→              ))}
+  1804→            </RadioGroup>
+  1805→            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+  1806→              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Preview Lines</Label>
+  1807→              <p className="text-[11px] text-gray-500 mt-0.5 mb-2">How many lines of preview to show</p>
+  1808→              <RadioGroup value={previewLines} onValueChange={(v) => setPreviewLines(v as typeof previewLines)} className="flex gap-2">
+  1809→                {(['none', '1', '2', '3'] as const).map((val) => (
+  1810→                  <div key={val} className="flex items-center space-x-2">
+  1811→                    <RadioGroupItem value={val} id={`preview-${val}`} className="data-[state=checked]:border-[#4285F4] data-[state=checked]:text-[#4285F4]" />
+  1812→                    <Label htmlFor={`preview-${val}`} className="text-sm cursor-pointer">
+  1813→                      {val === 'none' ? 'None' : val}
+  1814→                    </Label>
+  1815→                  </div>
+  1816→                ))}
+  1817→              </RadioGroup>
+  1818→            </div>
+  1819→          </CardContent>
+  1820→        </Card>
+  1821→      </motion.div>
+  1822→
+  1823→      {/* Mail Behavior */}
+  1824→      <motion.div className="space-y-3" {...fadeInUp}>
+  1825→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Mail Behavior</h3>
+  1826→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+  1827→          <CardContent className="p-0">
+  1828→            <div className="flex items-center justify-between px-4 py-3.5">
+  1829→              <div className="flex items-center gap-3">
+  1830→                <div className="w-9 h-9 rounded-lg bg-[#4285F4]/10 flex items-center justify-center">
+  1831→                  <Globe className="w-4 h-4 text-[#4285F4]" />
+  1832→                </div>
+  1833→                <div>
+  1834→                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
+  1835→                  <p className="text-[11px] text-gray-500">Group emails as threads</p>
+  1836→                </div>
+  1837→              </div>
+  1838→              <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />
+  1839→            </div>
+  1840→          </CardContent>
+  1841→        </Card>
+  1842→      </motion.div>
+  1843→
+  1844→      {/* Appearance & Theme */}
+  1845→      <motion.div className="space-y-3" {...fadeInUp}>
+  1846→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Appearance</h3>
+  1847→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+  1848→          <CardContent className="p-4 space-y-4">
+  1849→            <div>
+  1850→              <Label className="text-sm font-medium text-[#1F1F1F] dark:text-white">Theme</Label>
+  1851→              <p className="text-[11px] text-gray-500 mt-0.5">Choose your preferred theme</p>
+  1852→            </div>
+  1853→            <div className="grid grid-cols-3 gap-2">
+  1854→              {([
+  1855→                { value: 'light', icon: Sun, label: 'Light' },
+  1856→                { value: 'dark', icon: Moon, label: 'Dark' },
+  1857→                { value: 'system', icon: Monitor, label: 'System' },
+  1858→              ] as const).map((opt) => (
+  1859→                <button
+  1860→                  key={opt.value}
+  1861→                  type="button"
+  1862→                  onClick={() => setTheme(opt.value)}
+  1863→                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+  1864→                    theme === opt.value
+  1865→                      ? 'border-[#4285F4] bg-[#4285F4]/5 text-[#4285F4]'
+  1866→                      : 'border-gray-100 dark:border-gray-800 text-gray-500 hover:border-gray-300 dark:hover:border-gray-700'
+  1867→                  }`}
+  1868→                >
+  1869→                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+  1870→                    theme === opt.value ? 'bg-[#4285F4]/10' : 'bg-gray-50 dark:bg-gray-900'
+  1871→                  }`}>
+  1872→                    <opt.icon className="w-5 h-5" />
+  1873→                  </div>
+  1874→                  <span className="text-xs font-medium">{opt.label}</span>
+  1875→                </button>
+  1876→              ))}
+  1877→            </div>
+  1878→          </CardContent>
+  1879→        </Card>
+  1880→      </motion.div>
+  1881→
+  1882→      {/* Notifications */}
+  1883→      <NotificationSettings
+  1884→        desktopNotif={desktopNotif}
+  1885→        setDesktopNotif={setDesktopNotif}
+  1886→        soundNotif={soundNotif}
+  1887→        setSoundNotif={setSoundNotif}
+  1888→      />
+  1889→
+  1890→      {/* Date Format */}
+  1891→      <motion.div className="space-y-3" {...fadeInUp}>
+  1892→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Date & Time</h3>
+  1893→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
+  1894→          <CardContent className="p-0">
+  1895→            <div className="flex items-center justify-between px-4 py-3.5">
+  1896→              <div className="flex items-center gap-3">
+  1897→                <div className="w-9 h-9 rounded-lg bg-[#FBBC05]/10 flex items-center justify-center">
+  1898→                  <Clock className="w-4 h-4 text-[#E37400]" />
+  1899→                </div>
+  1900→                <div>
+  1901→                  <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Time Format</p>
+  1902→                  <p className="text-[11px] text-gray-500">12-hour or 24-hour clock</p>
+  1903→                </div>
+  1904→              </div>
+  1905→              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
+  1906→                <button
+  1907→                  type="button"
+  1908→                  onClick={() => setDateFormat('12h')}
+  1909→                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+  1910→                    dateFormat === '12h'
+  1911→                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+  1912→                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+  1913→                  }`}
+  1914→                >
+  1915→                  12h
+  1916→                </button>
+  1917→                <button
+  1918→                  type="button"
+  1919→                  onClick={() => setDateFormat('24h')}
+  1920→                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+  1921→                    dateFormat === '24h'
+  1922→                      ? 'bg-white dark:bg-gray-800 shadow-sm text-[#4285F4]'
+  1923→                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+  1924→                  }`}
+  1925→                >
+  1926→                  24h
+  1927→                </button>
+  1928→              </div>
+  1929→            </div>
+  1930→          </CardContent>
+  1931→        </Card>
+  1932→      </motion.div>
+  1933→
+  1934→      <motion.div {...fadeInUp}>
+  1935→        <Button
+  1936→          onClick={handleSavePreferences}
+  1937→          disabled={savingPrefs}
+  1938→          className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
+  1939→        >
+  1940→          {savingPrefs ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Preferences</>}
+  1941→        </Button>
+  1942→      </motion.div>
+  1943→
+  1944→      {/* Signature */}
+  1945→      <motion.div className="space-y-3" {...fadeInUp}>
+  1946→        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Email Signature</h3>
+  1947→        <Card className="border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+  1948→          <div className="rounded-t-xl border border-b-0 border-gray-100 dark:border-gray-800 overflow-hidden">
+  1949→            {/* Toolbar */}
+  1950→            <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80">
+  1951→              <button
+  1952→                type="button"
+  1953→                onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
+  1954→                className={`p-1.5 rounded-lg transition-colors ${
+  1955→                  signatureEditor?.isActive('bold') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+  1956→                }`}
+  1957→                aria-label="Bold"
+  1958→              >
+  1959→                <Bold className="w-4 h-4" />
+  1960→              </button>
+  1961→              <button
+  1962→                type="button"
+  1963→                onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
+  1964→                className={`p-1.5 rounded-lg transition-colors ${
+  1965→                  signatureEditor?.isActive('italic') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+  1966→                }`}
+  1967→                aria-label="Italic"
+  1968→              >
+  1969→                <Italic className="w-4 h-4" />
+  1970→              </button>
+  1971→              <button
+  1972→                type="button"
+  1973→                onClick={() => {
+  1974→                  const url = window.prompt('Enter URL:')
+  1975→                  if (url) signatureEditor?.chain().focus().setLink({ href: url }).run()
+  1976→                }}
+  1977→                className={`p-1.5 rounded-lg transition-colors ${
+  1978→                  signatureEditor?.isActive('link') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+  1979→                }`}
+  1980→                aria-label="Link"
+  1981→              >
+  1982→                <LinkIcon className="w-4 h-4" />
+  1983→              </button>
+  1984→              <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
+  1985→              <button
+  1986→                type="button"
+  1987→                onClick={() => signatureEditor?.chain().focus().toggleBulletList().run()}
+  1988→                className={`p-1.5 rounded-lg transition-colors ${
+  1989→                  signatureEditor?.isActive('bulletList') ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+  1990→                }`}
+  1991→                aria-label="Bullet list"
+  1992→              >
+  1993→                <List className="w-4 h-4" />
+  1994→              </button>
+  1995→            </div>
+  1996→            <EditorContent editor={signatureEditor} />
+  1997→          </div>
+  1998→        </Card>
+  1999→        <Button
+  2000→          onClick={handleSaveSignature}
+
+[showing lines 1-2000 of 2107; use offset=2001 with limit to continue reading]

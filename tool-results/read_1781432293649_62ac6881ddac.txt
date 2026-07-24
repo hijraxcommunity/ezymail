@@ -1,0 +1,595 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useRef } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { Mail, Eye, EyeOff, Loader2, Check, ArrowLeft, ArrowRight, User, Lock, Calendar, Shield, X, Building2 } from 'lucide-react'
+     6→import { useForm } from 'react-hook-form'
+     7→import { zodResolver } from '@hookform/resolvers/zod'
+     8→import { z } from 'zod'
+     9→import { toast } from 'sonner'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Input } from '@/components/ui/input'
+    12→import { Checkbox } from '@/components/ui/checkbox'
+    13→import { useAppStore } from '@/store/use-app-store'
+    14→
+    15→const MONTHS = [
+    16→  'January', 'February', 'March', 'April', 'May', 'June',
+    17→  'July', 'August', 'September', 'October', 'November', 'December'
+    18→]
+    19→
+    20→function generateDays(month: number, year: number) {
+    21→  if (!month || !year) return Array.from({ length: 31 }, (_, i) => i + 1)
+    22→  const daysInMonth = new Date(year, month, 0).getDate()
+    23→  return Array.from({ length: daysInMonth }, (_, i) => i + 1)
+    24→}
+    25→
+    26→function generateYears() {
+    27→  const currentYear = new Date().getFullYear()
+    28→  return Array.from({ length: 100 }, (_, i) => currentYear - 13 - i)
+    29→}
+    30→
+    31→function getPasswordStrength(password: string) {
+    32→  if (!password) return { score: 0, label: '', color: '' }
+    33→  let score = 0
+    34→  if (password.length >= 8) score++
+    35→  if (/[a-z]/.test(password)) score++
+    36→  if (/[A-Z]/.test(password)) score++
+    37→  if (/[0-9]/.test(password)) score++
+    38→  if (/[^a-zA-Z0-9]/.test(password)) score++
+    39→  if (score <= 2) return { score, label: 'Weak', color: 'bg-red-500' }
+    40→  if (score <= 3) return { score, label: 'Medium', color: 'bg-amber-500' }
+    41→  return { score, label: 'Strong', color: 'bg-emerald-500' }
+    42→}
+    43→
+    44→const nameSchema = z.object({
+    45→  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+    46→  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+    47→})
+    48→
+    49→const passwordSchema = z.object({
+    50→  password: z.string()
+    51→    .min(8, 'Password must be at least 8 characters')
+    52→    .regex(/[A-Z]/, 'Must contain an uppercase letter')
+    53→    .regex(/[a-z]/, 'Must contain a lowercase letter')
+    54→    .regex(/[0-9]/, 'Must contain a number'),
+    55→  confirmPassword: z.string(),
+    56→}).refine(data => data.password === data.confirmPassword, {
+    57→  message: 'Passwords do not match',
+    58→  path: ['confirmPassword'],
+    59→})
+    60→
+    61→type NameValues = z.infer<typeof nameSchema>
+    62→type PasswordValues = z.infer<typeof passwordSchema>
+    63→
+    64→const STEPS = [
+    65→  { id: 1, label: 'Name', icon: User },
+    66→  { id: 2, label: 'Birthday', icon: Calendar },
+    67→  { id: 3, label: 'Password', icon: Lock },
+    68→  { id: 4, label: 'Review', icon: Shield },
+    69→]
+    70→
+    71→export function RegisterForm() {
+    72→  const { setUser, setAuthView } = useAppStore()
+    73→  const [step, setStep] = useState(1)
+    74→  const [isLoading, setIsLoading] = useState(false)
+    75→  const [showPassword, setShowPassword] = useState(false)
+    76→  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+    77→
+    78→  // Step 1: Name
+    79→  const [firstName, setFirstName] = useState('')
+    80→  const [lastName, setLastName] = useState('')
+    81→
+    82→  // Step 2: Birthday
+    83→  const [month, setMonth] = useState(0)
+    84→  const [day, setDay] = useState(0)
+    85→  const [year, setYear] = useState(0)
+    86→
+    87→  // Email: user-chosen username part (before @ezy.af)
+    88→  const [emailUsername, setEmailUsername] = useState('')
+    89→  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+    90→
+    91→  // Step 3: Password
+    92→  const [agreedToTerms, setAgreedToTerms] = useState(false)
+    93→
+    94→  // Forms (must be called before .watch())
+    95→  const nameForm = useForm<NameValues>({
+    96→    resolver: zodResolver(nameSchema),
+    97→    defaultValues: { firstName: '', lastName: '' },
+    98→  })
+    99→  const passwordForm = useForm<PasswordValues>({
+   100→    resolver: zodResolver(passwordSchema),
+   101→    defaultValues: { password: '', confirmPassword: '' },
+   102→  })
+   103→  const passwordValue = passwordForm.watch('password')
+   104→  const passwordStrength = getPasswordStrength(passwordValue || '')
+   105→
+   106→  // Build the full email from username + @ezy.af
+   107→  const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
+   108→
+   109→  // Validate username (letters, numbers, dots, underscores, hyphens)
+   110→  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
+   111→
+   112→  // Check availability (debounced)
+   113→  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   114→  useEffect(() => {
+   115→    if (!fullEmail || !isValidUsername) {
+   116→      setEmailStatus('idle')
+   117→      return
+   118→    }
+   119→    setEmailStatus('checking')
+   120→    if (checkTimerRef.current) clearTimeout(checkTimerRef.current)
+   121→    checkTimerRef.current = setTimeout(async () => {
+   122→      try {
+   123→        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(fullEmail)}`)
+   124→        const data = await res.json()
+   125→        setEmailStatus(data.available ? 'available' : 'taken')
+   126→      } catch {
+   127→        setEmailStatus('idle')
+   128→      }
+   129→    }, 600)
+   130→    return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
+   131→  }, [fullEmail, isValidUsername])
+   132→
+   133→  const handleNameNext = () => {
+   134→    const fn = nameForm.getValues('firstName')
+   135→    const ln = nameForm.getValues('lastName')
+   136→    if (fn.length < 2 || ln.length < 2) {
+   137→      toast.error('Please enter your first and last name (min 2 chars each)')
+   138→      return
+   139→    }
+   140→    if (!fullEmail || !isValidUsername) {
+   141→      toast.error('Please enter a valid email username')
+   142→      return
+   143→    }
+   144→    if (emailStatus === 'taken') {
+   145→      toast.error('Your chosen email is taken. Please pick another one')
+   146→      return
+   147→    }
+   148→    setFirstName(fn)
+   149→    setLastName(ln)
+   150→    setStep(2)
+   151→  }
+   152→
+   153→  const handleDobNext = () => {
+   154→    if (!month || !day || !year) {
+   155→      toast.error('Please fill in your complete date of birth')
+   156→      return
+   157→    }
+   158→    const dob = new Date(year, month - 1, day)
+   159→    const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+   160→    if (age < 13) {
+   161→      toast.error('You must be at least 13 years old')
+   162→      return
+   163→    }
+   164→    setStep(3)
+   165→  }
+   166→
+   167→  const handlePasswordNext = () => {
+   168→    passwordForm.trigger().then(valid => {
+   169→      if (valid) setStep(4)
+   170→    })
+   171→  }
+   172→
+   173→  const handleRegister = async () => {
+   174→    if (!agreedToTerms) {
+   175→      toast.error('You must agree to the terms and conditions')
+   176→      return
+   177→    }
+   178→    if (!fullEmail || emailStatus === 'taken') {
+   179→      toast.error('Please choose an available email address')
+   180→      return
+   181→    }
+   182→    setIsLoading(true)
+   183→    try {
+   184→      const res = await fetch('/api/auth/register', {
+   185→        method: 'POST',
+   186→        headers: { 'Content-Type': 'application/json' },
+   187→        body: JSON.stringify({
+   188→          firstName,
+   189→          lastName,
+   190→          dateOfBirth: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+   191→          email: fullEmail,
+   192→          password: passwordForm.getValues('password'),
+   193→        }),
+   194→      })
+   195→      const result = await res.json()
+   196→      if (!res.ok) {
+   197→        toast.error(result.error || 'Registration failed')
+   198→        return
+   199→      }
+   200→      toast.success('Account created successfully!')
+   201→      setUser(result.user)
+   202→    } catch {
+   203→      toast.error('Something went wrong. Please try again.')
+   204→    } finally {
+   205→      setIsLoading(false)
+   206→    }
+   207→  }
+   208→
+   209→  return (
+   210→    <div className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-white dark:bg-gray-900 sm:bg-transparent">
+   211→      <motion.div
+   212→        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+   213→        animate={{ opacity: 1, y: 0, scale: 1 }}
+   214→        transition={{ duration: 0.5, ease: 'easeOut' }}
+   215→        className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial"
+   216→      >
+   217→        <div className="bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 p-6 sm:p-8 flex-1 flex flex-col justify-center sm:justify-start overflow-y-auto">
+   218→          {/* Logo */}
+   219→          <div className="flex items-center justify-center gap-2 mb-6">
+   220→            <img src="/favicon-32.png" alt="EzyMail" className="w-10 h-10 rounded-xl" />
+   221→            <h1 className="text-2xl font-bold">
+   222→              <span className="text-[#4285F4]">Ezy</span>
+   223→              <span className="text-[#34A853]">Mail</span>
+   224→            </h1>
+   225→          </div>
+   226→
+   227→          {/* Personal / Business Tab Switcher */}
+   228→          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
+   229→            <button
+   230→              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-[#1F1F1F] dark:text-white bg-white dark:bg-gray-700 shadow-sm transition-all"
+   231→            >
+   232→              <User className="w-3.5 h-3.5" />
+   233→              Personal
+   234→            </button>
+   235→            <button
+   236→              onClick={() => setAuthView('business-register')}
+   237→              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#1F1F1F] dark:hover:text-white transition-all"
+   238→            >
+   239→              <Building2 className="w-3.5 h-3.5" />
+   240→              Business
+   241→            </button>
+   242→          </div>
+   243→
+   244→          {/* Progress Steps */}
+   245→          <div className="flex items-center justify-between mb-8 px-2 sm:px-4">
+   246→            {STEPS.map((s, i) => {
+   247→              const StepIcon = s.icon
+   248→              const isActive = step === s.id
+   249→              const isCompleted = step > s.id
+   250→              return (
+   251→                <div key={s.id} className="flex items-center">
+   252→                  <div className="flex flex-col items-center">
+   253→                    <div
+   254→                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+   255→                        isCompleted
+   256→                          ? 'bg-[#34A853] text-white'
+   257→                          : isActive
+   258→                          ? 'bg-[#4285F4] text-white shadow-lg shadow-[#4285F4]/30'
+   259→                          : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+   260→                      }`}
+   261→                    >
+   262→                      {isCompleted ? <Check className="w-4 h-4 sm:w-5 sm:h-5" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+   263→                    </div>
+   264→                    <span className={`text-[10px] sm:text-xs mt-1 font-medium ${
+   265→                      isActive ? 'text-[#4285F4]' : isCompleted ? 'text-[#34A853]' : 'text-gray-400'
+   266→                    }`}>
+   267→                      {s.label}
+   268→                    </span>
+   269→                  </div>
+   270→                  {i < STEPS.length - 1 && (
+   271→                    <div className={`w-6 sm:w-12 h-0.5 mx-1 sm:mx-2 transition-all duration-300 ${
+   272→                      step > s.id ? 'bg-[#34A853]' : 'bg-gray-200 dark:bg-gray-700'
+   273→                    }`} />
+   274→                  )}
+   275→                </div>
+   276→              )
+   277→            })}
+   278→          </div>
+   279→
+   280→          {/* Step Content */}
+   281→          <AnimatePresence mode="wait">
+   282→            {/* STEP 1: Name + Email */}
+   283→            {step === 1 && (
+   284→              <motion.div
+   285→                key="step1"
+   286→                initial={{ opacity: 0, x: 20 }}
+   287→                animate={{ opacity: 1, x: 0 }}
+   288→                exit={{ opacity: 0, x: -20 }}
+   289→                transition={{ duration: 0.25 }}
+   290→              >
+   291→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   292→                  What&apos;s your name?
+   293→                </h2>
+   294→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   295→                  Choose your name and pick your email address
+   296→                </p>
+   297→                <div className="space-y-4">
+   298→                  <div className="space-y-2">
+   299→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">First name</label>
+   300→                    <Input
+   301→                      {...nameForm.register('firstName')}
+   302→                      placeholder="John"
+   303→                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+   304→                      autoFocus
+   305→                    />
+   306→                    {nameForm.formState.errors.firstName && (
+   307→                      <p className="text-xs text-red-500">{nameForm.formState.errors.firstName.message}</p>
+   308→                    )}
+   309→                  </div>
+   310→                  <div className="space-y-2">
+   311→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Last name</label>
+   312→                    <Input
+   313→                      {...nameForm.register('lastName')}
+   314→                      placeholder="Doe"
+   315→                      className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+   316→                    />
+   317→                    {nameForm.formState.errors.lastName && (
+   318→                      <p className="text-xs text-red-500">{nameForm.formState.errors.lastName.message}</p>
+   319→                    )}
+   320→                  </div>
+   321→
+   322→                  {/* EMAIL CHOOSER */}
+   323→                  <div className="space-y-2">
+   324→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+   325→                      <Mail className="w-3.5 h-3.5 inline mr-1" />
+   326→                      Email address
+   327→                    </label>
+   328→                    <div className="relative">
+   329→                      <Input
+   330→                        value={emailUsername}
+   331→                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
+   332→                        placeholder="yourname"
+   333→                        className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20 pr-20"
+   334→                      />
+   335→                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none font-medium select-none">
+   336→                        @ezy.af
+   337→                      </span>
+   338→                    </div>
+   339→                    {/* Status indicator */}
+   340→                    {fullEmail && isValidUsername && (
+   341→                      <div className="flex items-center gap-1.5">
+   342→                        {emailStatus === 'checking' && (
+   343→                          <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+   344→                        )}
+   345→                        {emailStatus === 'available' && (
+   346→                          <>
+   347→                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+   348→                            <span className="text-xs text-emerald-500 font-medium">{fullEmail} is available</span>
+   349→                          </>
+   350→                        )}
+   351→                        {emailStatus === 'taken' && (
+   352→                          <>
+   353→                            <X className="w-3.5 h-3.5 text-red-500" />
+   354→                            <span className="text-xs text-red-500 font-medium">{fullEmail} is taken</span>
+   355→                          </>
+   356→                        )}
+   357→                      </div>
+   358→                    )}
+   359→                  </div>
+   360→                </div>
+   361→              </motion.div>
+   362→            )}
+   363→
+   364→            {/* STEP 2: Birthday */}
+   365→            {step === 2 && (
+   366→              <motion.div
+   367→                key="step2"
+   368→                initial={{ opacity: 0, x: 20 }}
+   369→                animate={{ opacity: 1, x: 0 }}
+   370→                exit={{ opacity: 0, x: -20 }}
+   371→                transition={{ duration: 0.25 }}
+   372→              >
+   373→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   374→                  When&apos;s your birthday?
+   375→                </h2>
+   376→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   377→                  You must be 13 or older to use EzyMail
+   378→                </p>
+   379→                <div className="space-y-4">
+   380→                  <div className="space-y-2">
+   381→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
+   382→                    <select
+   383→                      value={month}
+   384→                      onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
+   385→                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+   386→                    >
+   387→                      <option value={0}>Select month</option>
+   388→                      {MONTHS.map((m, i) => (
+   389→                        <option key={m} value={i + 1}>{m}</option>
+   390→                      ))}
+   391→                    </select>
+   392→                  </div>
+   393→                  <div className="grid grid-cols-2 gap-4">
+   394→                    <div className="space-y-2">
+   395→                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
+   396→                      <select
+   397→                        value={day}
+   398→                        onChange={(e) => setDay(Number(e.target.value))}
+   399→                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+   400→                      >
+   401→                        <option value={0}>Day</option>
+   402→                        {generateDays(month, year || new Date().getFullYear() - 20).map(d => (
+   403→                          <option key={d} value={d}>{d}</option>
+   404→                        ))}
+   405→                      </select>
+   406→                    </div>
+   407→                    <div className="space-y-2">
+   408→                      <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
+   409→                      <select
+   410→                        value={year}
+   411→                        onChange={(e) => setYear(Number(e.target.value))}
+   412→                        className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+   413→                      >
+   414→                        <option value={0}>Year</option>
+   415→                        {generateYears().map(y => (
+   416→                          <option key={y} value={y}>{y}</option>
+   417→                        ))}
+   418→                      </select>
+   419→                    </div>
+   420→                  </div>
+   421→                </div>
+   422→              </motion.div>
+   423→            )}
+   424→
+   425→            {/* STEP 3: Password */}
+   426→            {step === 3 && (
+   427→              <motion.div
+   428→                key="step3"
+   429→                initial={{ opacity: 0, x: 20 }}
+   430→                animate={{ opacity: 1, x: 0 }}
+   431→                exit={{ opacity: 0, x: -20 }}
+   432→                transition={{ duration: 0.25 }}
+   433→              >
+   434→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   435→                  Create a password
+   436→                </h2>
+   437→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   438→                  Use 8+ characters with uppercase, lowercase & numbers
+   439→                </p>
+   440→                <div className="space-y-4">
+   441→                  <div className="space-y-2">
+   442→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Password</label>
+   443→                    <div className="relative">
+   444→                      <Input
+   445→                        {...passwordForm.register('password')}
+   446→                        type={showPassword ? 'text' : 'password'}
+   447→                        placeholder="Create a strong password"
+   448→                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+   449→                        autoFocus
+   450→                      />
+   451→                      <button
+   452→                        type="button"
+   453→                        onClick={() => setShowPassword(!showPassword)}
+   454→                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   455→                      >
+   456→                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   457→                      </button>
+   458→                    </div>
+   459→                    {passwordForm.formState.errors.password && (
+   460→                      <p className="text-xs text-red-500">{passwordForm.formState.errors.password.message}</p>
+   461→                    )}
+   462→                    {passwordValue && (
+   463→                      <div className="space-y-1">
+   464→                        <div className="flex gap-1">
+   465→                          {[1, 2, 3, 4, 5].map(i => (
+   466→                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+   467→                              i <= passwordStrength.score ? passwordStrength.color : 'bg-gray-200 dark:bg-gray-700'
+   468→                            }`} />
+   469→                          ))}
+   470→                        </div>
+   471→                        <p className={`text-xs font-medium ${
+   472→                          passwordStrength.label === 'Weak' ? 'text-red-500' :
+   473→                          passwordStrength.label === 'Medium' ? 'text-amber-500' : 'text-emerald-500'
+   474→                        }`}>{passwordStrength.label}</p>
+   475→                      </div>
+   476→                    )}
+   477→                  </div>
+   478→                  <div className="space-y-2">
+   479→                    <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Confirm password</label>
+   480→                    <div className="relative">
+   481→                      <Input
+   482→                        {...passwordForm.register('confirmPassword')}
+   483→                        type={showConfirmPassword ? 'text' : 'password'}
+   484→                        placeholder="Confirm your password"
+   485→                        className="h-11 rounded-xl pl-3 pr-10 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+   486→                      />
+   487→                      <button
+   488→                        type="button"
+   489→                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+   490→                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   491→                      >
+   492→                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   493→                      </button>
+   494→                    </div>
+   495→                    {passwordForm.formState.errors.confirmPassword && (
+   496→                      <p className="text-xs text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
+   497→                    )}
+   498→                  </div>
+   499→                </div>
+   500→              </motion.div>
+   501→            )}
+   502→
+   503→            {/* STEP 4: Review */}
+   504→            {step === 4 && (
+   505→              <motion.div
+   506→                key="step4"
+   507→                initial={{ opacity: 0, x: 20 }}
+   508→                animate={{ opacity: 1, x: 0 }}
+   509→                exit={{ opacity: 0, x: -20 }}
+   510→                transition={{ duration: 0.25 }}
+   511→              >
+   512→                <h2 className="text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1">
+   513→                  Review your info
+   514→                </h2>
+   515→                <p className="text-sm text-[#444746] dark:text-gray-400 mb-5">
+   516→                  Double check before creating your account
+   517→                </p>
+   518→                <div className="space-y-4 mb-6">
+   519→                  <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 space-y-3">
+   520→                    <div className="flex justify-between items-center">
+   521→                      <span className="text-sm text-gray-500">Name</span>
+   522→                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+   523→                        {firstName} {lastName}
+   524→                      </span>
+   525→                    </div>
+   526→                    <div className="flex justify-between items-center">
+   527→                      <span className="text-sm text-gray-500">Email</span>
+   528→                      <span className={`text-sm font-medium ${fullEmail && isValidUsername && emailStatus !== 'taken' ? 'text-[#4285F4]' : 'text-red-500'}`}>
+   529→                        {fullEmail || 'Not set'}
+   530→                      </span>
+   531→                    </div>
+   532→                    <div className="flex justify-between items-center">
+   533→                      <span className="text-sm text-gray-500">Birthday</span>
+   534→                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+   535→                        {MONTHS[month - 1]} {day}, {year}
+   536→                      </span>
+   537→                    </div>
+   538→                  </div>
+   539→                  <div className="flex items-start gap-2">
+   540→                    <Checkbox
+   541→                      id="terms"
+   542→                      checked={agreedToTerms}
+   543→                      onCheckedChange={(c) => setAgreedToTerms(c === true)}
+   544→                      className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4] mt-0.5"
+   545→                    />
+   546→                    <label htmlFor="terms" className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer leading-relaxed">
+   547→                      I agree to the <span className="text-[#4285F4]">Terms of Service</span> and <span className="text-[#4285F4]">Privacy Policy</span>
+   548→                    </label>
+   549→                  </div>
+   550→                </div>
+   551→              </motion.div>
+   552→            )}
+   553→          </AnimatePresence>
+   554→
+   555→          {/* Navigation */}
+   556→          <div className="flex gap-3 mt-6 sm:mt-8">
+   557→            {step > 1 && (
+   558→              <Button type="button" variant="outline" onClick={() => setStep(step - 1)}
+   559→                className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700">
+   560→                <ArrowLeft className="w-4 h-4 mr-1.5" />
+   561→                <span className="hidden sm:inline">Back</span>
+   562→              </Button>
+   563→            )}
+   564→            {step < 4 ? (
+   565→              <Button type="button"
+   566→                onClick={() => { if (step === 1) handleNameNext(); else if (step === 2) handleDobNext(); else if (step === 3) handlePasswordNext() }}
+   567→                className="h-11 rounded-xl flex-1 bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium">
+   568→                Continue
+   569→                <ArrowRight className="w-4 h-4 ml-1.5" />
+   570→              </Button>
+   571→            ) : (
+   572→              <Button type="button" onClick={handleRegister} disabled={isLoading}
+   573→                className="h-11 rounded-xl flex-1 bg-[#34A853] hover:bg-[#2d9249] text-white font-medium">
+   574→                {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Create Account'}
+   575→              </Button>
+   576→            )}
+   577→          </div>
+   578→
+   579→          {/* Back to login */}
+   580→          <div className="text-center mt-5">
+   581→            <button onClick={() => setAuthView('login')}
+   582→              className="text-sm text-[#444746] dark:text-gray-400 hover:text-[#4285F4] transition-colors">
+   583→              Already have an account? <span className="font-medium text-[#4285F4]">Sign in</span>
+   584→            </button>
+   585→          </div>
+   586→        </div>
+   587→
+   588→        <p className="text-center text-xs text-gray-400 mt-4">
+   589→          &copy; 2025 EzyMail. All rights reserved.
+   590→        </p>
+   591→      </motion.div>
+   592→    </div>
+   593→  )
+   594→}
+   595→
