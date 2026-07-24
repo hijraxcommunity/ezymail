@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
 
     if (folder === 'sent') {
       where.senderId = session.userId;
+    } else if (folder === 'drafts') {
+      where.senderId = session.userId;
     } else {
       where.recipientEmail = session.email;
     }

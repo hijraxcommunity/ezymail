@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const draft = await db.email.create({
       data: {
         senderId: session.userId,
-        recipientEmail: (to || '').trim() || session.email,
+        recipientEmail: session.email,
         cc: cc || null,
         bcc: bcc || null,
         subject: (subject || '').trim() || '(No subject)',
