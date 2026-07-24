@@ -382,8 +382,13 @@ export function ComposeModal() {
         const fwdBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>---------- Forwarded message ----------</p><p>From: ${senderName} &lt;${senderEmail}&gt;</p><p>Date: ${new Date(replyToEmail.createdAt).toLocaleString()}</p><p>Subject: ${replyToEmail.subject || '(No subject)'}</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
         editor.commands.setContent(fwdBody)
       } else {
+        const senderName2 = replyToEmail.sender
+          ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
+          : ''
         if (replyMode === 'reply') {
           setTo(senderEmail)
+          setToChips([{ email: senderEmail, name: senderName2, avatar: replyToEmail.sender?.avatar || null }])
+          setToInput('')
         } else {
           // Reply All: sender goes in To, recipient + CC go in CC
           const recipientEmail = replyToEmail.recipient?.email || ''
@@ -393,6 +398,8 @@ export function ComposeModal() {
           const allCc = [recipientEmail, ...originalCc].filter(e => e && e !== senderEmail)
           const uniqueCc = [...new Set(allCc)]
           setTo(senderEmail)
+          setToChips([{ email: senderEmail, name: senderName2, avatar: replyToEmail.sender?.avatar || null }])
+          setToInput('')
           if (uniqueCc.length > 0) {
             setCc(uniqueCc.join(', '))
             setShowCc(true)
@@ -407,7 +414,13 @@ export function ComposeModal() {
         editor.commands.setContent(quotedBody)
       }
     } else if (replyToEmail) {
-      setTo(replyToEmail.sender?.email || '')
+      const fallbackEmail = replyToEmail.sender?.email || ''
+      const fallbackName = replyToEmail.sender
+        ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
+        : ''
+      setTo(fallbackEmail)
+      setToChips([{ email: fallbackEmail, name: fallbackName, avatar: replyToEmail.sender?.avatar || null }])
+      setToInput('')
       setSubject(`Re: ${replyToEmail.subject || ''}`)
       editor.commands.setContent('')
     } else {
