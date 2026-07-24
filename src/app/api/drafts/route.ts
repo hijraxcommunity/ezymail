@@ -38,9 +38,6 @@ export async function POST(request: NextRequest) {
           sender: {
             select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
           },
-          recipient: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-          },
         },
       });
 
@@ -59,7 +56,7 @@ export async function POST(request: NextRequest) {
     const draft = await db.email.create({
       data: {
         senderId: session.userId,
-        recipientEmail: session.email,
+        recipientEmail: (to || '').trim() || session.email,
         cc: cc || null,
         bcc: bcc || null,
         subject: (subject || '').trim() || '(No subject)',
@@ -70,9 +67,6 @@ export async function POST(request: NextRequest) {
       },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
-        },
-        recipient: {
           select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
         },
       },
@@ -99,6 +93,5 @@ function formatDraft(email: Record<string, unknown>) {
     isDraft: email.isDraft,
     createdAt: email.createdAt,
     sender: email.sender,
-    recipient: email.recipient,
   };
 }
