@@ -466,10 +466,11 @@ export function ComposeModal() {
 
   // ─── Gmail-style auto-draft save ──
   const saveDraftNow = useCallback(async () => {
+    if (!editor) return
     const toStr = toChips.map(c => c.email).join(', ') || to
     const ccStr = ccChips.map(c => c.email).join(', ') || cc
     const bccStr = bccChips.map(c => c.email).join(', ') || bcc
-    const html = editor?.getHTML() || ''
+    const html = editor.getHTML() || ''
     const plainBody = html.replace(/<[^>]*>/g, '').trim()
     const hasContent = toStr.trim() || subject.trim() || plainBody
     if (!hasContent) return
@@ -492,6 +493,10 @@ export function ComposeModal() {
     } catch { /* silent */ }
   }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail])
 
+  // Stable ref to saveDraftNow so the debounce effect doesn't reset when it recreates
+  const saveDraftNowRef = useRef(saveDraftNow)
+  saveDraftNowRef.current = saveDraftNow
+
   // Debounced auto-save: saves 3s after user stops typing/changing fields
   useEffect(() => {
     if (!composeOpen || !editor) return
@@ -499,12 +504,12 @@ export function ComposeModal() {
     if (editDraftEmail) savedDraftIdRef.current = editDraftEmail.id
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => {
-      saveDraftNow()
+      saveDraftNowRef.current()
     }, 3000)
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     }
-  }, [composeOpen, to, toChips, cc, ccChips, bcc, bccChips, subject, editor?.getHTML(), editDraftEmail, saveDraftNow])
+  }, [composeOpen, to, toChips, cc, ccChips, bcc, bccChips, subject, editDraftEmail, editor?.state.doc])
 
   // Save draft on close, then close
   const handleClose = useCallback(async () => {
