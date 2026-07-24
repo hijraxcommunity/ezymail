@@ -511,10 +511,10 @@ export function ComposeModal() {
     }
   }, [composeOpen, to, toChips, cc, ccChips, bcc, bccChips, subject, editDraftEmail, editor?.state.doc])
 
-  // Save draft on close, then close
-  const handleClose = useCallback(async () => {
+  // Save draft on close (fire-and-forget, don't block close)
+  const handleClose = useCallback(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    await saveDraftNow()
+    saveDraftNow()
     if (editDraftEmail) {
       setCurrentFolder('drafts')
     }
