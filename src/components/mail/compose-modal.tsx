@@ -1440,16 +1440,6 @@ export function ComposeModal() {
 
                 <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
 
-                <ToolbarButton
-                  title="Insert Image"
-                  onClick={handleImage}
-                  disabled={!editor}
-                >
-                  <ImageIcon className="w-4 h-4" />
-                </ToolbarButton>
-
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
-
                 {/* Templates button */}
                 <Popover open={showTemplatesPopover} onOpenChange={setShowTemplatesPopover}>
                   <PopoverTrigger asChild>
@@ -1495,14 +1485,6 @@ export function ComposeModal() {
                   </PopoverContent>
                 </Popover>
 
-                {/* Priority toggle */}
-                <ToolbarButton
-                  title={priority === 'high' ? 'High Priority (click to change)' : 'Set High Priority'}
-                  active={priority === 'high'}
-                  onClick={() => setPriority(prev => prev === 'high' ? 'normal' : 'high')}
-                >
-                  <Flag className="w-4 h-4" />
-                </ToolbarButton>
               </div>
 
               {/* Editor */}
