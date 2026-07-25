@@ -862,7 +862,7 @@ export function EmailDetail() {
                                       <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                                         <Mail className="w-3 h-3 text-gray-500" />
                                       </div>
-                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{ccData.join(', ')}</p>
+                                      <p className="text-sm text-gray-600 dark:text-gray-300 md:truncate max-md:[white-space:normal] max-md:[overflow-wrap:anywhere] max-md:[word-break:break-word]">{ccData.join(', ')}</p>
                                       <button
                                         onClick={() => { navigator.clipboard.writeText(ccData.join(', ')); toast.success('CC emails copied') }}
                                         className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
@@ -882,7 +882,7 @@ export function EmailDetail() {
                                       <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                                         <Mail className="w-3 h-3 text-gray-500" />
                                       </div>
-                                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{bccData.join(', ')}</p>
+                                      <p className="text-sm text-gray-600 dark:text-gray-300 md:truncate max-md:[white-space:normal] max-md:[overflow-wrap:anywhere] max-md:[word-break:break-word]">{bccData.join(', ')}</p>
                                       <button
                                         onClick={() => { navigator.clipboard.writeText(bccData.join(', ')); toast.success('BCC emails copied') }}
                                         className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
