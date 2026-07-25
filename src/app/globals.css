@@ -371,7 +371,7 @@ html, body {
 }
 
 .tiptap p {
-  margin-bottom: 0.125rem;
+  margin-bottom: 0;
 }
 
 .tiptap p:last-child {
