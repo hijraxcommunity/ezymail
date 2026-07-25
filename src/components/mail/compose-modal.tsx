@@ -255,6 +255,16 @@ export function ComposeModal() {
     if (v && emailRegex.test(v)) addToChip(v, type)
   }
 
+  const handleChipPaste = (e: React.ClipboardEvent<HTMLInputElement>, type: 'to' | 'cc' | 'bcc') => {
+    const pasted = e.clipboardData.getData('text')
+    const parts = pasted.split(/[,;\s]+/).map(s => s.trim().toLowerCase()).filter(s => emailRegex.test(s))
+    if (parts.length === 0) return
+    e.preventDefault()
+    const setInput = type === 'to' ? setToInput : type === 'cc' ? setCcInput : setBccInput
+    setInput('')
+    parts.forEach(email => addToChip(email, type))
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSendRef = useRef<PendingSendData | null>(null)
@@ -1216,6 +1226,7 @@ export function ComposeModal() {
                     value={toInput}
                     onChange={e => setToInput(e.target.value)}
                     onKeyDown={e => handleChipKeyDown(e, 'to')}
+                    onPaste={e => handleChipPaste(e, 'to')}
                     onBlur={() => handleChipBlur('to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
                     className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
@@ -1292,6 +1303,7 @@ export function ComposeModal() {
                           if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
                         }}
                         onKeyDown={e => handleChipKeyDown(e, 'cc')}
+                        onPaste={e => handleChipPaste(e, 'cc')}
                         onBlur={() => handleChipBlur('cc')}
                         placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
@@ -1344,6 +1356,7 @@ export function ComposeModal() {
                           if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
                         }}
                         onKeyDown={e => handleChipKeyDown(e, 'bcc')}
+                        onPaste={e => handleChipPaste(e, 'bcc')}
                         onBlur={() => handleChipBlur('bcc')}
                         placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
