@@ -1186,7 +1186,7 @@ export function ComposeModal() {
             {/* Fields */}
             <div className="shrink-0 border-b border-gray-200 dark:border-gray-700">
               {/* To */}
-              <div className="flex items-center px-4 gap-2 min-h-[44px]">
+              <div className="flex items-center px-4 gap-2 min-h-[36px] py-1">
                 <span className="text-sm text-gray-500 shrink-0 w-8">To</span>
                 <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
                   {toChips.map(chip => {
@@ -1229,7 +1229,7 @@ export function ComposeModal() {
                     onPaste={e => handleChipPaste(e, 'to')}
                     onBlur={() => handleChipBlur('to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
-                    className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
+                    className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                   />
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
@@ -1264,7 +1264,7 @@ export function ComposeModal() {
               {/* CC */}
               {showCc && (
                 <div className="border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center px-4 gap-2 min-h-[44px]">
+                  <div className="flex items-center px-4 gap-2 min-h-[36px] py-1">
                     <span className="text-sm text-gray-500 shrink-0 w-8">CC</span>
                     <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
                       {ccChips.map(chip => {
@@ -1306,7 +1306,7 @@ export function ComposeModal() {
                         onPaste={e => handleChipPaste(e, 'cc')}
                         onBlur={() => handleChipBlur('cc')}
                         placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
-                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
+                        className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
                     </div>
                   </div>
@@ -1317,7 +1317,7 @@ export function ComposeModal() {
               {/* BCC */}
               {showBcc && (
                 <div className="border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center px-4 gap-2 min-h-[44px]">
+                  <div className="flex items-center px-4 gap-2 min-h-[36px] py-1">
                     <span className="text-sm text-gray-500 shrink-0 w-8">BCC</span>
                     <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
                       {bccChips.map(chip => {
@@ -1359,7 +1359,7 @@ export function ComposeModal() {
                         onPaste={e => handleChipPaste(e, 'bcc')}
                         onBlur={() => handleChipBlur('bcc')}
                         placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
-                        className="border-0 shadow-none focus-visible:ring-0 h-10 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
+                        className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
                     </div>
                   </div>
