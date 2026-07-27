@@ -788,7 +788,7 @@ export function SettingsPanel() {
 
               {/* App Version Footer */}
               <motion.p {...fadeInUp} className="text-center text-[11px] text-gray-400 dark:text-gray-600 pt-4">
-                EzyMail v1.0 &middot; Made with love
+                EzyMail v1.0 &middot; From HijraX
               </motion.p>
             </motion.div>
           ) : (
