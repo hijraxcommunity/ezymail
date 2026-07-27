@@ -69,8 +69,13 @@ export function MailSidebar() {
 
   const sidebarContent = (
     <div className="flex flex-col h-full min-h-0">
+      {/* Mobile-only Logo Header */}
+      <div className="md:hidden flex items-center gap-2.5 px-4 pt-4 pb-2">
+        <img src="/logo.svg" alt="EzyMail" className="w-7 h-7 shrink-0" />
+        <span className="text-base font-semibold text-[#1F1F1F] dark:text-white">EzyMail</span>
+      </div>
       {/* Compose Button */}
-      <div className="p-3 pb-2">
+      <div className="p-3 pb-2 md:p-3 md:pb-2">
         <Button
           onClick={() => {
             setComposeOpen(true)
