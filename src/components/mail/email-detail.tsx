@@ -253,6 +253,8 @@ export function EmailDetail() {
 
   useEffect(() => {
     if (selectedEmailId) {
+      setShowSnoozeModal(false)
+      setShowCustomSnooze(false)
       fetchEmail()
     } else {
       setEmail(null)
