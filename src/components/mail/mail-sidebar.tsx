@@ -148,7 +148,7 @@ export function MailSidebar() {
       {/* Footer */}
       <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-gray-800">
         <p className="text-[10px] text-gray-400 dark:text-gray-600 leading-tight">EzyMail v1.0</p>
-        <p className="text-[10px] text-gray-400 dark:text-gray-600 leading-tight mt-0.5">Made with ♥</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-600 leading-tight mt-0.5">From HijraX</p>
       </div>
     </div>
   )
