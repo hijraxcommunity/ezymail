@@ -165,8 +165,8 @@ export function MailSidebar() {
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
           {/* Mobile-only Logo */}
-          <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
-            <img src="/logo.svg" alt="EzyMail" className="w-8 h-8 drop-shadow-sm shrink-0" />
+          <div className="flex items-center gap-2.5 px-4 pt-4 pb-1.5">
+            <img src="/logo.png" alt="EzyMail" className="w-10 h-10 drop-shadow-sm shrink-0" />
             <span className="text-lg font-bold tracking-tight">
               <span className="text-[#4285F4]">Ezy</span><span className="text-[#1F1F1F] dark:text-white">Mail</span>
             </span>
