@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, CalendarDays, MessageSquare, Pencil } from 'lucide-react'
+import { Star, Paperclip, Archive, ArchiveRestore, Trash2, Clock, MessageSquare, Pencil } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
@@ -393,8 +393,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 )}
               </div>
               {email.snoozedUntil && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
-                  <CalendarDays className="w-2.5 h-2.5" />
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mb-0.5">
                   {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
                 </Badge>
               )}
@@ -422,8 +421,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             </button>
 
             {email.snoozedUntil && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
-                <CalendarDays className="w-2.5 h-2.5" />
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shrink-0">
               </Badge>
             )}
           </div>
@@ -529,8 +527,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             )}
           </div>
           {email.snoozedUntil && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mb-0.5">
-              <CalendarDays className="w-2.5 h-2.5" />
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mb-0.5">
               {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
             </Badge>
           )}
@@ -559,8 +556,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
         </button>
 
         {email.snoozedUntil && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 shrink-0">
-            <CalendarDays className="w-2.5 h-2.5" />
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shrink-0">
           </Badge>
         )}
       </div>
