@@ -392,11 +392,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                   </span>
                 )}
               </div>
-              {email.snoozedUntil && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mb-0.5">
-                  {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
-                </Badge>
-              )}
               <div className="flex items-center gap-2">
                 <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
                   {snippet}
@@ -405,6 +400,11 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                   <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 )}
               </div>
+              {email.snoozedUntil && (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mt-0.5">
+                  {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+                </Badge>
+              )}
             </div>
 
             {/* Star toggle - mobile — PRD 10: 44px touch target */}
@@ -420,10 +420,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
             </button>
 
-            {email.snoozedUntil && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shrink-0">
-              </Badge>
-            )}
           </div>
         </motion.div>
       </div>
@@ -526,12 +522,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               </span>
             )}
           </div>
-          {email.snoozedUntil && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mb-0.5">
-              {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
-            </Badge>
-          )}
-
           <div className="flex items-center gap-2">
             <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
               {snippet}
@@ -540,6 +530,11 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
             )}
           </div>
+          {email.snoozedUntil && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mt-0.5">
+              {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+            </Badge>
+          )}
         </div>
 
         {/* Star toggle - desktop */}
@@ -555,10 +550,6 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
           <Star className={`w-4 h-4 ${email.isStarred ? 'fill-amber-500' : ''}`} />
         </button>
 
-        {email.snoozedUntil && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shrink-0">
-          </Badge>
-        )}
       </div>
     </motion.div>
   )
