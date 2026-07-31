@@ -96,7 +96,7 @@ export function AuthLayout() {
         <div className="w-full sm:max-w-md h-full sm:h-auto sm:min-h-0 min-h-screen sm:min-h-0 flex flex-col sm:flex-initial bg-white dark:bg-gray-900 sm:rounded-2xl sm:shadow-xl sm:shadow-black/5 overflow-y-auto">
 
           {/* Mobile-only logo (hidden on desktop — left panel has it) */}
-          <div className="flex lg:hidden items-center justify-center gap-2 mb-6 pt-6 sm:pt-0">
+          <div className="flex lg:hidden items-center justify-center gap-2 mb-6 pt-6 lg:pt-0">
             <img src="/logo.png" alt="EzyMail" className="w-10 h-10" />
             <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
