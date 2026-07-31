@@ -1228,6 +1228,7 @@ export function ComposeModal() {
                     onKeyDown={e => handleChipKeyDown(e, 'to')}
                     onPaste={e => handleChipPaste(e, 'to')}
                     onBlur={() => handleChipBlur('to')}
+                    onPaste={e => handleChipPaste(e, 'to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
                     className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                   />
@@ -1305,6 +1306,7 @@ export function ComposeModal() {
                         onKeyDown={e => handleChipKeyDown(e, 'cc')}
                         onPaste={e => handleChipPaste(e, 'cc')}
                         onBlur={() => handleChipBlur('cc')}
+                        onPaste={e => handleChipPaste(e, 'cc')}
                         placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
@@ -1358,6 +1360,7 @@ export function ComposeModal() {
                         onKeyDown={e => handleChipKeyDown(e, 'bcc')}
                         onPaste={e => handleChipPaste(e, 'bcc')}
                         onBlur={() => handleChipBlur('bcc')}
+                        onPaste={e => handleChipPaste(e, 'bcc')}
                         placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
