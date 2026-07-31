@@ -100,7 +100,7 @@ export function AuthLayout() {
             <img src="/logo.png" alt="EzyMail" className="w-10 h-10" />
             <h1 className="text-2xl font-bold">
               <span className="text-[#4285F4]">Ezy</span>
-              <span className="text-[#34A853]">Mail</span>
+              <span className="text-[#1F1F1F] dark:text-white">Mail</span>
             </h1>
           </div>
 
