@@ -265,6 +265,17 @@ export function ComposeModal() {
     parts.forEach(email => addToChip(email, type))
   }
 
+  // Mobile fallback: detect multi-email paste via onChange (mobile often skips onPaste)
+  const handleChipChange = (value: string, type: 'to' | 'cc' | 'bcc') => {
+    const setInput = type === 'to' ? setToInput : type === 'cc' ? setCcInput : setBccInput
+    setInput(value)
+    const parts = value.split(/[,;]+/).map(s => s.trim().toLowerCase()).filter(s => emailRegex.test(s))
+    if (parts.length >= 2) {
+      setInput('')
+      parts.forEach(email => addToChip(email, type))
+    }
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSendRef = useRef<PendingSendData | null>(null)
@@ -1224,11 +1235,10 @@ export function ComposeModal() {
                   })}
                   <Input
                     value={toInput}
-                    onChange={e => setToInput(e.target.value)}
+                    onChange={e => handleChipChange(e.target.value, 'to')}
                     onKeyDown={e => handleChipKeyDown(e, 'to')}
                     onPaste={e => handleChipPaste(e, 'to')}
                     onBlur={() => handleChipBlur('to')}
-                    onPaste={e => handleChipPaste(e, 'to')}
                     placeholder={toChips.length === 0 ? 'recipient' : ''}
                     className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                   />
@@ -1300,13 +1310,12 @@ export function ComposeModal() {
                       <Input
                         value={ccInput}
                         onChange={e => {
-                          setCcInput(e.target.value)
+                          handleChipChange(e.target.value, 'cc')
                           if (errors.cc) setErrors(prev => { const n = { ...prev }; delete n.cc; return n })
                         }}
                         onKeyDown={e => handleChipKeyDown(e, 'cc')}
                         onPaste={e => handleChipPaste(e, 'cc')}
                         onBlur={() => handleChipBlur('cc')}
-                        onPaste={e => handleChipPaste(e, 'cc')}
                         placeholder={ccChips.length === 0 ? 'CC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
@@ -1354,13 +1363,12 @@ export function ComposeModal() {
                       <Input
                         value={bccInput}
                         onChange={e => {
-                          setBccInput(e.target.value)
+                          handleChipChange(e.target.value, 'bcc')
                           if (errors.bcc) setErrors(prev => { const n = { ...prev }; delete n.bcc; return n })
                         }}
                         onKeyDown={e => handleChipKeyDown(e, 'bcc')}
                         onPaste={e => handleChipPaste(e, 'bcc')}
                         onBlur={() => handleChipBlur('bcc')}
-                        onPaste={e => handleChipPaste(e, 'bcc')}
                         placeholder={bccChips.length === 0 ? 'BCC recipients' : ''}
                         className="border-0 shadow-none focus-visible:ring-0 h-8 text-sm p-0 flex-1 min-w-[80px] bg-transparent dark:bg-transparent"
                       />
