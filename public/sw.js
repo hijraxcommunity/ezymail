@@ -45,7 +45,7 @@ self.addEventListener('notificationclick', (event) => {
 })
 
 // ─── Cache ──────────────────────────────────────────────────────────────
-const CACHE_NAME = 'ezymail-v3';
+const CACHE_NAME = 'ezymail-v4';
 const STATIC_ASSETS = [
   '/',
   '/offline.html',

@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useAppStore, type MailView } from '@/store/use-app-store'
+import { useAppStore } from '@/store/use-app-store'
 import { toast } from 'sonner'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { MailHeader } from '@/components/mail/mail-header'
@@ -111,7 +111,6 @@ export default function HomePage() {
     selectedEmailId,
     composeOpen,
     currentFolder,
-    currentFolderId,
     emails,
     user,
     setSelectedEmailId,
@@ -183,92 +182,17 @@ export default function HomePage() {
       : 'EzyMail - Email made Ezy'
   }, [isAuthenticated, emails])
 
-  // ─── Mobile back button: navigate within app instead of closing PWA ──
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    const handlePopState = (e: PopStateEvent) => {
-      const store = useAppStore.getState()
-      // Close overlays first (compose > contacts > settings > admin > email detail)
-      if (store.composeOpen) {
-        useAppStore.setState({ requestComposeClose: true })
-        history.pushState(null, '', location.href)
-        return
-      }
-      if (store.contactsView) {
-        store.setContactsView(false)
-        history.pushState(null, '', location.href)
-        return
-      }
-      if (store.settingsView) {
-        store.setSettingsView(null)
-        history.pushState(null, '', location.href)
-        return
-      }
-      if (store.adminView) {
-        store.setAdminView(null)
-        history.pushState(null, '', location.href)
-        return
-      }
-      if (store.selectedEmailId) {
-        store.setSelectedEmailId(null)
-        return
-      }
-      // Navigate back to previous folder using browser history state
-      const state = e.state as { folder?: string; folderId?: string | null } | null
-      if (state && state.folder) {
-        if (state.folderId) {
-          store.setCurrentFolderId(state.folderId)
-        } else {
-          store.setCurrentFolder(state.folder as MailView)
-        }
-      } else if (store.currentFolder !== 'inbox') {
-        // No folder state in history but not on inbox — go to inbox
-        store.setCurrentFolder('inbox')
-      }
-      // If already at inbox (the root), let the browser handle it (exit app)
-    }
-
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [isAuthenticated])
-
-  // Push history entry when entering a "sub-page" so back button works
-  useEffect(() => {
-    if (!isAuthenticated) return
-    const prevId = selectedEmailId
-    const prevCompose = composeOpen
-    const prevContacts = contactsView
-    const prevSettings = settingsView
-    const prevAdmin = adminView
-
-    // Any of these opening means we're entering a sub-page
-    if (selectedEmailId || composeOpen || contactsView || settingsView || adminView) {
-      history.pushState(null, '', location.href)
-    }
-  }, [isAuthenticated, selectedEmailId, composeOpen, contactsView, settingsView, adminView])
-
-  // Push history entry when switching folders so back button can navigate between them
-  useEffect(() => {
-    if (!isAuthenticated) return
-    // Skip if this folder change was triggered by back navigation
-    // (the browser already positioned us at the correct history entry)
-    const hs = window.history.state as { folder?: string; folderId?: string | null } | null
-    if (hs && hs.folder === currentFolder && hs.folderId === currentFolderId) return
-    window.history.pushState({ folder: currentFolder, folderId: currentFolderId }, '')
-  }, [isAuthenticated, currentFolder, currentFolderId])
-
   // ─── Auth views ──────────────────────────────────────────────────────────
   if (isCheckingAuth) {
     return (
-      <div className="min-h-dvh bg-white flex flex-col items-center justify-between py-24">
+      <div className="min-h-dvh bg-white flex flex-col items-center justify-between py-20">
         <div />
-        <div className="flex flex-col items-center gap-4">
-          <img src="/logo.png" alt="EzyMail" className="w-24 h-24 rounded-2xl" />
+        <div className="flex flex-col items-center gap-3">
+          <img src="/logo.png" alt="EzyMail" className="w-20 h-20 rounded-2xl" />
           <p className="font-bold text-2xl tracking-tight text-[#1F1F1F]">EzyMail</p>
           <p className="text-xs text-gray-400">Email made Ezy</p>
         </div>
-        <p className="text-xs text-gray-400 pb-10">From <span className="font-semibold text-gray-500">HijraX</span></p>
+        <p className="text-xs text-gray-400 pb-8">From <span className="font-semibold text-gray-500">HijraX</span></p>
       </div>
     )
   }
