@@ -63,7 +63,7 @@ export async function sendPushNotification({
               body: subject || '(No subject)',
             },
             data: {
-              url: '/',
+              url: `/inbox?id=${emailId}`,
               emailId,
               tag: `email-${emailId}`,
             },

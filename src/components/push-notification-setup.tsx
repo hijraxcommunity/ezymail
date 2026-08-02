@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { Bell, BellOff, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import toast from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
 
 type PushStatus = 'unknown' | 'unsupported' | 'prompt' | 'granted' | 'denied' | 'subscribed' | 'loading' | 'error'
 
 export function PushNotificationSetup() {
-  const { isAuthenticated, user } = useAppStore()
+  const { isAuthenticated, user, setSelectedEmailId } = useAppStore()
   const statusRef = useRef<PushStatus>('unknown')
   const tokenRef = useRef<string | null>(null)
 
@@ -57,8 +56,8 @@ export function PushNotificationSetup() {
 
     try {
       // Dynamic import so Firebase isn't bundled for non-auth users
-      const { getFirebaseMessaging, app } = await import('@/lib/firebase')
-      const { getToken } = await import('firebase/messaging')
+      const { getFirebaseMessaging } = await import('@/lib/firebase')
+      const { getToken, onMessage } = await import('firebase/messaging')
 
       const messaging = await getFirebaseMessaging()
       if (!messaging) {
@@ -85,6 +84,24 @@ export function PushNotificationSetup() {
 
       if (token) {
         await subscribeToken(token)
+
+        // Foreground message handler — show notification + navigate to email when tapped
+        onMessage(messaging, (payload) => {
+          const data = payload.data || {}
+          const emailId = data.emailId || ''
+          const title = payload.notification?.title || 'New Email'
+          const body = payload.notification?.body || 'You received a new message'
+
+          toast(title, {
+            description: body,
+            duration: 6000,
+            action: emailId ? {
+              label: 'View',
+              onClick: () => setSelectedEmailId(emailId),
+            } : undefined,
+          })
+        })
+
         if (!silent) toast.success('Push notifications enabled')
       } else {
         statusRef.current = 'error'
@@ -96,7 +113,7 @@ export function PushNotificationSetup() {
       // Only show error toast when user explicitly requested (not on auto-subscribe)
       if (!silent) toast.error('Failed to enable push notifications')
     }
-  }, [subscribeToken])
+  }, [subscribeToken, setSelectedEmailId])
 
   useEffect(() => {
     if (!isAuthenticated || !user) return
@@ -104,7 +121,6 @@ export function PushNotificationSetup() {
     // Check if Firebase is fully configured (VAPID key required for push)
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
     if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !vapidKey) {
-      // Firebase not fully configured — use native browser notifications (existing behavior)
       return
     }
     // Extra guard: VAPID key must not be a placeholder or empty
@@ -143,11 +159,6 @@ export function PushNotificationSetup() {
     statusRef.current = 'unknown'
   }, [isAuthenticated, unsubscribeToken])
 
-  // Don't render anything if not authenticated or Firebase not configured
-  if (!isAuthenticated || !process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
-    return null
-  }
-
-// Don't render any UI — notification toggle lives in Settings.
+  // Don't render anything
   return null
 }
