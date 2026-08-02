@@ -13,39 +13,75 @@ firebase.initializeApp({
 
 // Handle FCM background messages
 firebase.messaging().onBackgroundMessage((payload) => {
+  const data = payload.data || {}
   const notificationTitle = payload.notification?.title || 'New Email'
-  const notificationOptions = {
-    body: payload.notification?.body || '',
+  const notificationBody = payload.notification?.body || 'You received a new message'
+  const emailId = data.emailId || ''
+
+  // Build URL to open specific email in app
+  const urlToOpen = emailId ? `/inbox?id=${emailId}` : '/inbox'
+
+  self.registration.showNotification(notificationTitle, {
+    body: notificationBody,
     icon: '/logo.png',
     badge: '/logo.png',
-    data: payload.data || {},
-    tag: payload.data?.tag || 'ezy-email',
+    data: { url: urlToOpen, emailId },
+    tag: data.tag || 'ezy-email',
     renotify: true,
-  }
-  self.registration.showNotification(notificationTitle, notificationOptions)
+  })
 })
 
-// ─── Notification click — open/focus the app ─────────────────────────────
+// ─── Notification click — open/focus the app and navigate to email ─────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const urlToOpen = event.notification.data?.url || '/'
+  const urlToOpen = event.notification.data?.url || '/inbox'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If app is already open, focus it and navigate to the email
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(urlToOpen)
           return client.focus()
         }
       }
+      // If app is closed, open it
       return self.clients.openWindow(urlToOpen)
     })
   )
 })
 
+// ─── Push event (raw Web Push fallback if FCM compat layer doesn't handle it) ──
+self.addEventListener('push', (event) => {
+  // FCM compat layer handles most push events via onBackgroundMessage above.
+  // This is a safety net for non-FCM push events.
+  if (event.data) {
+    try {
+      const data = event.data.json()
+      // Only handle if FCM didn't already show a notification
+      if (!data.from || !data.from.includes('firebase')) {
+        const emailId = data.emailId || ''
+        const urlToOpen = emailId ? `/inbox?id=${emailId}` : '/inbox'
+        event.waitUntil(
+          self.registration.showNotification(data.title || 'New Email', {
+            body: data.body || 'You received a new message',
+            icon: '/logo.png',
+            badge: '/logo.png',
+            data: { url: urlToOpen, emailId },
+            tag: 'ezy-email',
+            renotify: true,
+          })
+        )
+      }
+    } catch {
+      // Not JSON, ignore
+    }
+  }
+})
+
 // ─── Cache ──────────────────────────────────────────────────────────────
-const CACHE_NAME = 'ezymail-v4';
+const CACHE_NAME = 'ezymail-v5';
 const STATIC_ASSETS = [
   '/',
   '/offline.html',

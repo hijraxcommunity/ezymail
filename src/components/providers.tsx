@@ -17,11 +17,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   )
 
-  // Register service worker
+  // Register service worker and check for updates
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
+        .then((registration) => {
+          // Check for SW updates periodically (every 30 min)
+          setInterval(() => {
+            registration.update().catch(() => {})
+          }, 30 * 60 * 1000)
+        })
         .catch(() => {})
     }
   }, [])
