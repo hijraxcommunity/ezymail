@@ -2,12 +2,12 @@ import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getMessaging, isSupported } from 'firebase/messaging'
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+  apiKey: 'AIzaSyDgnA1cUv6JuRZDAfaSz9R4ev_pY1xC_vM',
+  authDomain: 'customer-database-88e9f.firebaseapp.com',
+  projectId: 'customer-database-88e9f',
+  storageBucket: 'customer-database-88e9f.firebasestorage.app',
+  messagingSenderId: '961040699391',
+  appId: '1:961040699391:web:9b47f3bbcfe82186ae21ca',
 }
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()

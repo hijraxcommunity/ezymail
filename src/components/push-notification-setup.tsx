@@ -118,13 +118,9 @@ export function PushNotificationSetup() {
   useEffect(() => {
     if (!isAuthenticated || !user) return
 
-    // Check if Firebase is fully configured (VAPID key required for push)
+    // Firebase config is hardcoded — only VAPID key needed for token generation
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !vapidKey) {
-      return
-    }
-    // Extra guard: VAPID key must not be a placeholder or empty
-    if (vapidKey.length < 20) {
+    if (!vapidKey || vapidKey.length < 20) {
       return
     }
 
