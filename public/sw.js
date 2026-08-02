@@ -91,6 +91,8 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Force new SW to activate immediately instead of waiting
+  self.skipWaiting()
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
