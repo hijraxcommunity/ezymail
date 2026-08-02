@@ -52,36 +52,8 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-// ─── Push event (raw Web Push fallback if FCM compat layer doesn't handle it) ──
-self.addEventListener('push', (event) => {
-  // FCM compat layer handles most push events via onBackgroundMessage above.
-  // This is a safety net for non-FCM push events.
-  if (event.data) {
-    try {
-      const data = event.data.json()
-      // Only handle if FCM didn't already show a notification
-      if (!data.from || !data.from.includes('firebase')) {
-        const emailId = data.emailId || ''
-        const urlToOpen = emailId ? `/inbox?id=${emailId}` : '/inbox'
-        event.waitUntil(
-          self.registration.showNotification(data.title || 'New Email', {
-            body: data.body || 'You received a new message',
-            icon: '/logo.png',
-            badge: '/logo.png',
-            data: { url: urlToOpen, emailId },
-            tag: 'ezy-email',
-            renotify: true,
-          })
-        )
-      }
-    } catch {
-      // Not JSON, ignore
-    }
-  }
-})
-
 // ─── Cache ──────────────────────────────────────────────────────────────
-const CACHE_NAME = 'ezymail-v5';
+const CACHE_NAME = 'ezymail-v6';
 const STATIC_ASSETS = [
   '/',
   '/offline.html',
