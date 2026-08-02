@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import toast from 'sonner'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
 
 type PushStatus = 'unknown' | 'unsupported' | 'prompt' | 'granted' | 'denied' | 'subscribed' | 'loading' | 'error'
