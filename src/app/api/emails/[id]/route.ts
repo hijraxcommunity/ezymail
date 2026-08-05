@@ -67,7 +67,37 @@ export async function GET(
       email.readAt = new Date();
     }
 
-    return NextResponse.json({ email });
+    // Fetch full thread: find root threadId, then get all emails in that thread
+    const threadId = email.threadId || email.id;
+    const thread = await db.email.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { threadId },
+              { id: threadId },
+            ],
+          },
+          {
+            OR: [
+              { senderId: session.userId },
+              { recipientEmail: session.email },
+            ],
+          },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        sender: {
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+        },
+        recipient: {
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+        },
+      },
+    });
+
+    return NextResponse.json({ email, thread });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get email error:', message);

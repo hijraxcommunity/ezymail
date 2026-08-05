@@ -49,6 +49,23 @@ export async function POST(
     // Determine reply recipient (reply goes to the other party)
     const replyRecipientEmail = isSender ? parentEmail.recipientEmail : parentEmail.sender.email;
 
+    // Determine threadId: walk up to root email
+    let rootId = parentEmail.id
+    let currentParentId = parentEmail.parentEmailId
+    while (currentParentId) {
+      const ancestor = await db.email.findUnique({
+        where: { id: currentParentId },
+        select: { id: true, parentEmailId: true, threadId: true },
+      })
+      if (!ancestor) break
+      rootId = ancestor.id
+      if (ancestor.threadId) {
+        rootId = ancestor.threadId
+        break
+      }
+      currentParentId = ancestor.parentEmailId
+    }
+
     // Create reply email in the recipient's inbox
     const reply = await db.email.create({
       data: {
@@ -61,6 +78,7 @@ export async function POST(
         bodyHtml: bodyHtml || '',
         folder: 'inbox',
         parentEmailId: parentEmail.id,
+        threadId: parentEmail.threadId || rootId,
       },
       include: {
         sender: {

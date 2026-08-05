@@ -98,7 +98,23 @@ export async function GET(request: NextRequest) {
       db.email.count({ where }),
     ]);
 
-    const formattedEmails = emails.map((email) => ({
+    // Group by thread: show only the latest email per thread in inbox
+    const seenThreads = new Set<string | null>()
+    const filteredEmails: typeof emails = []
+    const threadCounts: Record<string, number> = {}
+
+    for (const email of emails) {
+      // Skip emails that are part of a thread already shown
+      // (replies have threadId pointing to the root)
+      if (email.threadId && email.threadId !== email.id && seenThreads.has(email.threadId)) {
+        threadCounts[email.threadId] = (threadCounts[email.threadId] || 0) + 1
+        continue
+      }
+      seenThreads.add(email.threadId || email.id)
+      filteredEmails.push(email)
+    }
+
+    const formattedEmails = filteredEmails.map((email) => ({
       id: email.id,
       senderId: email.senderId,
       recipientEmail: email.recipientEmail,
@@ -110,6 +126,7 @@ export async function GET(request: NextRequest) {
       isArchived: email.isArchived,
       folder: email.folder,
       parentEmailId: email.parentEmailId,
+      threadId: email.threadId,
       readAt: email.readAt,
       snoozedUntil: email.snoozedUntil,
       scheduledAt: email.scheduledAt,
@@ -119,6 +136,7 @@ export async function GET(request: NextRequest) {
       sender: email.sender,
       recipient: email.recipient,
       replyCount: email.replies.length,
+      threadCount: (threadCounts[email.threadId || email.id] || 0) + email.replies.length,
     }));
 
     return NextResponse.json({
@@ -216,6 +234,26 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Determine threadId
+    let threadId: string | null = null
+    if (replyToId) {
+      // Reply: inherit threadId from parent email
+      const parentEmail = await db.email.findUnique({
+        where: { id: replyToId },
+        select: { threadId: true },
+      })
+      threadId = parentEmail?.threadId || replyToId
+    } else {
+      // New email: generate threadId
+      threadId = inboxEmail.id
+    }
+
+    // Set threadId on the inbox email
+    await db.email.update({
+      where: { id: inboxEmail.id },
+      data: { threadId },
+    })
+
     // Create email in sender's sent folder
     // The sent copy should NOT be part of the reply thread (no parentEmailId)
     // Only the inbox copy participates in the thread to avoid duplicates
@@ -228,6 +266,7 @@ export async function POST(request: NextRequest) {
         bodyHtml: bodyHtml || '',
         attachments: attachmentsJson,
         folder: 'sent',
+        threadId,
         sentAt: isScheduled ? null : new Date(),
         scheduledAt: isScheduled ? new Date(scheduledAt) : null,
         priority: emailPriority,
