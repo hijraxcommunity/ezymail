@@ -86,6 +86,7 @@ model Email {
   isStarred       Boolean  @default(false)
   isArchived      Boolean  @default(false)
   folder          String   @default("inbox")
+  threadId        String?
   parentEmailId   String?
   readAt          DateTime?
   snoozedUntil    DateTime?
@@ -110,6 +111,7 @@ model Email {
   @@index([createdAt])
   @@index([scheduledAt])
   @@index([parentEmailId])
+  @@index([threadId])
 }
 
 model Folder {
