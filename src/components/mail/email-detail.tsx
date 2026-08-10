@@ -67,51 +67,58 @@ function getInitials(user: { firstName?: string; lastName?: string } | null | un
 
 /**
  * Detects and strips quoted content from email HTML.
- * Matches patterns like:
- *   <div style="border-left:2px solid #ccc;..."><p>On [date], [name] wrote:</p>...
- *   <div style="border-left:2px solid #ccc;..."><p>---------- Forwarded message ----------</p>...
+ *
+ * IMPORTANT: TipTap editor strips <div style="border-left:..."> wrappers,
+ * so stored bodyHtml never has border-left divs. Instead the markers are
+ * plain <p> tags:
+ *   <p>On 8/10/2026, 5:30 PM, Name wrote:</p>
+ *   <p>---------- Forwarded message ----------</p>
+ *
+ * We also handle raw HTML (border-left divs) for any legacy/external emails.
  * Returns { clean, quoted } so we can optionally show the quoted part.
  */
 function stripQuotedHtml(html: string): { clean: string; quoted: string | null } {
   if (!html) return { clean: html, quoted: null }
 
-  // Strategy: find the position of the quoted block and split there.
-  // Quoted blocks start with <div style="border-left:2px solid #ccc;...">
-  // and contain "On ... wrote:" or "---------- Forwarded message ----------"
-
-  // Find the last occurrence of the border-left quote div
-  // We search for the <div that has border-left style and comes after 2+ <br> tags
   let quoteIndex = -1
 
-  // Pattern: two+ <br> tags followed by a <div with border-left style
-  const brThenDivPattern = /(?:<br\s*\/?>\s*){2,}<div\s[^>]*style="[^"]*border-left[^"]*"[^>]*>/gi
-  let brMatch = brThenDivPattern.exec(html)
-  while (brMatch !== null) {
-    quoteIndex = brMatch.index
-    brMatch = brThenDivPattern.exec(html)
+  // Pattern A (TipTap output): <p>On [date], [name] wrote:</p>
+  const onWrote = /<p>\s*On\s+[^<]*?wrote\s*:\s*<\/p>/i
+  const m1 = onWrote.exec(html)
+  if (m1 && m1.index > 0 && (quoteIndex === -1 || m1.index < quoteIndex)) {
+    quoteIndex = m1.index
   }
 
-  // If not found via <br> pattern, try finding any <div with border-left that contains "wrote" or "Forwarded"
-  if (quoteIndex === -1) {
-    const divPattern = /<div\s[^>]*style="[^"]*border-left[^"]*"[^>]*>[\s\S]{0,200}(?:wrote|Forwarded\s+message|Original\s+Message)/i
-    const divMatch = divPattern.exec(html)
-    if (divMatch && divMatch.index > 0) {
-      quoteIndex = divMatch.index
-    }
+  // Pattern B (TipTap output): <p>---------- Forwarded message ----------</p>
+  const fwd = /<p>\s*-{5,}\s*Forwarded\s+message\s*-{5,}\s*<\/p>/i
+  const m2 = fwd.exec(html)
+  if (m2 && m2.index > 0 && (quoteIndex === -1 || m2.index < quoteIndex)) {
+    quoteIndex = m2.index
   }
 
-  // Also check for "-----Original Message-----" without a div wrapper
-  if (quoteIndex === -1) {
-    const origPattern = /[_\-]{5,}\s*Original\s+Message[_\-]{5,}/i
-    const origMatch = origPattern.exec(html)
-    if (origMatch && origMatch.index > 0) {
-      quoteIndex = origMatch.index
-    }
+  // Pattern C (raw HTML): <div style="border-left:...">
+  const divBorder = /<div\s[^>]*style="[^"]*border-left[^"]*"[^>]*>/i
+  const m3 = divBorder.exec(html)
+  if (m3 && m3.index > 0 && (quoteIndex === -1 || m3.index < quoteIndex)) {
+    quoteIndex = m3.index
+  }
+
+  // Pattern D (raw text marker): -----Original Message-----
+  const origMsg = /-{5,}\s*Original\s+Message\s*-{5,}/i
+  const m4 = origMsg.exec(html)
+  if (m4 && m4.index > 0 && (quoteIndex === -1 || m4.index < quoteIndex)) {
+    quoteIndex = m4.index
   }
 
   if (quoteIndex > 0) {
-    const clean = html.substring(0, quoteIndex).replace(/(<br\s*\/?>\s*)+$/, '')
-    return { clean: clean.trim() || html, quoted: html.substring(quoteIndex) }
+    // Strip trailing empty <p>, <br>, whitespace before the quote block
+    const before = html.substring(0, quoteIndex)
+    const clean = before
+      .replace(/(\s*(?:<p>\s*(?:<br\s*\/?>)?\s*<\/p>|<br\s*\/?>)\s*)+$/, '')
+      .trim()
+    if (clean.length > 0) {
+      return { clean, quoted: html.substring(quoteIndex) }
+    }
   }
 
   return { clean: html, quoted: null }
