@@ -63,6 +63,120 @@ function getInitials(user: { firstName?: string; lastName?: string } | null | un
   return `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase() || fallback
 }
 
+/* ─── Strip quoted text from email HTML (Gmail-style thread) ─── */
+
+/**
+ * Detects and strips quoted content from email HTML.
+ * Matches patterns like:
+ *   <div style="border-left:2px solid #ccc;..."><p>On [date], [name] wrote:</p>...
+ *   <div style="border-left:2px solid #ccc;..."><p>---------- Forwarded message ----------</p>...
+ * Returns { clean, quoted } so we can optionally show the quoted part.
+ */
+function stripQuotedHtml(html: string): { clean: string; quoted: string | null } {
+  if (!html) return { clean: html, quoted: null }
+
+  // Strategy: find the position of the quoted block and split there.
+  // Quoted blocks start with <div style="border-left:2px solid #ccc;...">
+  // and contain "On ... wrote:" or "---------- Forwarded message ----------"
+
+  // Find the last occurrence of the border-left quote div
+  // We search for the <div that has border-left style and comes after 2+ <br> tags
+  let quoteIndex = -1
+
+  // Pattern: two+ <br> tags followed by a <div with border-left style
+  const brThenDivPattern = /(?:<br\s*\/?>\s*){2,}<div\s[^>]*style="[^"]*border-left[^"]*"[^>]*>/gi
+  let brMatch = brThenDivPattern.exec(html)
+  while (brMatch !== null) {
+    quoteIndex = brMatch.index
+    brMatch = brThenDivPattern.exec(html)
+  }
+
+  // If not found via <br> pattern, try finding any <div with border-left that contains "wrote" or "Forwarded"
+  if (quoteIndex === -1) {
+    const divPattern = /<div\s[^>]*style="[^"]*border-left[^"]*"[^>]*>[\s\S]{0,200}(?:wrote|Forwarded\s+message|Original\s+Message)/i
+    const divMatch = divPattern.exec(html)
+    if (divMatch && divMatch.index > 0) {
+      quoteIndex = divMatch.index
+    }
+  }
+
+  // Also check for "-----Original Message-----" without a div wrapper
+  if (quoteIndex === -1) {
+    const origPattern = /[_\-]{5,}\s*Original\s+Message[_\-]{5,}/i
+    const origMatch = origPattern.exec(html)
+    if (origMatch && origMatch.index > 0) {
+      quoteIndex = origMatch.index
+    }
+  }
+
+  if (quoteIndex > 0) {
+    const clean = html.substring(0, quoteIndex).replace(/(<br\s*\/?>\s*)+$/, '')
+    return { clean: clean.trim() || html, quoted: html.substring(quoteIndex) }
+  }
+
+  return { clean: html, quoted: null }
+}
+
+/** Strip quoted text from plain text body */
+function stripQuotedText(text: string): string {
+  if (!text) return text
+  // Match "On [date], [name] wrote:" line and everything after
+  const quoteMatch = text.match(/\nOn\s+.+\s+wrote:\s*[\s\S]*$/i)
+  if (quoteMatch && quoteMatch.index !== undefined && quoteMatch.index > 0) {
+    return text.substring(0, quoteMatch.index).trim() || text
+  }
+  // Match "-----Original Message-----" and everything after
+  const origMatch = text.match(/\n[_\-]{5,}\s*Original\s+Message[_\-]{5,}[\s\S]*$/i)
+  if (origMatch && origMatch.index !== undefined && origMatch.index > 0) {
+    return text.substring(0, origMatch.index).trim() || text
+  }
+  return text
+}
+
+/** Small component to show/hide quoted text */
+function QuotedTextToggle({ quotedHtml }: { quotedHtml: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="mt-2">
+      {!show ? (
+        <button
+          type="button"
+          onClick={() => setShow(true)}
+          className="text-xs text-[#4285F4] hover:text-[#1a73e8] dark:text-[#8AB4F8] dark:hover:text-[#4285F4] cursor-pointer flex items-center gap-1"
+        >
+          <ChevronRight className="w-3 h-3" />
+          Show quoted text
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setShow(false)}
+            className="text-xs text-[#4285F4] hover:text-[#1a73e8] dark:text-[#8AB4F8] dark:hover:text-[#4285F4] cursor-pointer flex items-center gap-1 mb-1"
+          >
+            <ChevronDown className="w-3 h-3" />
+            Hide quoted text
+          </button>
+          <div
+            className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+              [&_p]:my-0.5
+              [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+              [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+              [&_img]:max-w-full [&_img]:rounded-lg
+              [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+              [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+              [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+              [&_table]:border-collapse [&_table]:w-full
+              [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+              [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+            dangerouslySetInnerHTML={{ __html: quotedHtml }}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ─── Gmail-style Thread Reply (flat, no box) ─── */
 
 function ThreadMessage({
@@ -82,6 +196,11 @@ function ThreadMessage({
     try { return message.attachments ? JSON.parse(message.attachments) : [] }
     catch { return [] }
   })()
+
+  // Strip quoted text for display
+  const rawHtml = message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>'
+  const { clean: cleanHtml, quoted: quotedHtml } = stripQuotedHtml(rawHtml)
+  const previewText = stripQuotedText(message.body?.replace(/<[^>]*>/g, '') || '').replace(/\n/g, ' ').substring(0, 120) || '...'
 
   return (
     <>
@@ -104,7 +223,7 @@ function ThreadMessage({
           </div>
           {!isExpanded && (
             <p className="text-xs text-gray-500 truncate mt-0.5 ml-9">
-              {message.body?.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').substring(0, 120) || '...'}
+              {previewText}
             </p>
           )}
         </div>
@@ -140,8 +259,9 @@ function ThreadMessage({
                   [&_table]:border-collapse [&_table]:w-full
                   [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
                   [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
-                dangerouslySetInnerHTML={{ __html: message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>' }}
+                dangerouslySetInnerHTML={{ __html: cleanHtml || '<p>No content</p>' }}
               />
+              {quotedHtml && <QuotedTextToggle quotedHtml={quotedHtml} />}
               {attachments.length > 0 && (
                 <div className="mt-3"><AttachmentGallery attachments={attachments} /></div>
               )}
@@ -924,22 +1044,31 @@ export function EmailDetail() {
                       </AnimatePresence>
 
                       <div>
-                        <div
-                          className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
-                            [&_p]:my-0.5 [&>*:first-child]:mt-0
-                            [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
-                            [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
-                            [&_img]:max-w-full [&_img]:rounded-lg
-                            [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
-                            [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
-                            [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
-                            [&_table]:border-collapse [&_table]:w-full
-                            [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
-                            [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
-                          dangerouslySetInnerHTML={{
-                            __html: msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || '<p>No content</p>',
-                          }}
-                        />
+                        {(() => {
+                          const rawHtml = msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || '<p>No content</p>'
+                          const { clean: selectedCleanHtml, quoted: selectedQuotedHtml } = stripQuotedHtml(rawHtml)
+                          return (
+                            <>
+                              <div
+                                className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
+                                  [&_p]:my-0.5 [&>*:first-child]:mt-0
+                                  [&_a]:text-[#4285F4] [&_a]:underline [&_a:hover]:text-[#1a73e8]
+                                  [&_blockquote]:border-l-2 [&_blockquote]:border-[#D3E3FD] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-500
+                                  [&_img]:max-w-full [&_img]:rounded-lg
+                                  [&_pre]:bg-gray-100 [&_pre]:dark:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto
+                                  [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:dark:bg-gray-800 [&_code]:rounded [&_code]:px-1
+                                  [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
+                                  [&_table]:border-collapse [&_table]:w-full
+                                  [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:p-2
+                                  [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-800 [&_th]:p-2"
+                                dangerouslySetInnerHTML={{
+                                  __html: selectedCleanHtml || '<p>No content</p>',
+                                }}
+                              />
+                              {selectedQuotedHtml && <QuotedTextToggle quotedHtml={selectedQuotedHtml} />}
+                            </>
+                          )
+                        })()}
                         {(() => {
                           try {
                             const atts = msg.attachments ? JSON.parse(msg.attachments) : []
