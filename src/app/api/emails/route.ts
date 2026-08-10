@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Create email in sender's sent folder
-    // The sent copy should NOT be part of the reply thread (no parentEmailId)
+    // The sent copy should NOT be part of the reply thread (no parentEmailId, no threadId)
     // Only the inbox copy participates in the thread to avoid duplicates
     const sentEmail = await db.email.create({
       data: {
@@ -266,7 +266,6 @@ export async function POST(request: NextRequest) {
         bodyHtml: bodyHtml || '',
         attachments: attachmentsJson,
         folder: 'sent',
-        threadId,
         sentAt: isScheduled ? null : new Date(),
         scheduledAt: isScheduled ? new Date(scheduledAt) : null,
         priority: emailPriority,

@@ -97,7 +97,20 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({ email, thread });
+    // Deduplicate thread: if the same sender sent two emails with the same body
+    // within 5 seconds (inbox + sent copy), keep only the inbox copy
+    const dedupedThread = thread.filter((msg, idx, arr) => {
+      // Keep if no earlier message has the same sender+body+time
+      const timeBucket = Math.floor(new Date(msg.createdAt).getTime() / 5000);
+      const key = `${msg.senderId}:${msg.body?.slice(0, 200)}:${timeBucket}`;
+      const firstIdx = arr.findIndex(m => {
+        const tb = Math.floor(new Date(m.createdAt).getTime() / 5000);
+        return `${m.senderId}:${m.body?.slice(0, 200)}:${tb}` === key;
+      });
+      return firstIdx === idx;
+    });
+
+    return NextResponse.json({ email, thread: dedupedThread });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get email error:', message);
