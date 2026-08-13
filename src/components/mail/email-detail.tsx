@@ -199,10 +199,14 @@ function ThreadMessage({
   const name = message.sender
     ? `${message.sender.firstName} ${message.sender.lastName}`
     : 'Unknown'
+  const [showInfo, setShowInfo] = useState(false)
   const attachments: Array<{ name: string; url: string; size?: string | number }> = (() => {
     try { return message.attachments ? JSON.parse(message.attachments) : [] }
     catch { return [] }
   })()
+
+  const senderEm = message.sender?.email || message.recipientEmail || ''
+  const recipEm = message.recipient?.email || message.recipientEmail || ''
 
   // Strip quoted text for display
   const rawHtml = message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>'
@@ -254,6 +258,95 @@ function ThreadMessage({
             className="overflow-hidden"
           >
             <div className="pb-3">
+              {/* ─── "to me" toggle + info box ─── */}
+              <div className="ml-10 mb-1">
+                <button
+                  type="button"
+                  onClick={() => setShowInfo(!showInfo)}
+                  className="flex items-center gap-1 shrink-0 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
+                >
+                  <span>to me</span>
+                  <motion.span
+                    animate={{ rotate: showInfo ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </motion.span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showInfo && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mx-10 rounded-xl border border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900/80 p-3 sm:p-3.5 space-y-2.5 mb-2">
+                      {/* From */}
+                      <div className="flex items-start gap-3">
+                        <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">From</span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <Mail className="w-3 h-3 text-gray-500" />
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{senderEm}</p>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(senderEm); toast.success('Email copied') }}
+                            className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                            title="Copy email"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* To */}
+                      <div className="flex items-start gap-3">
+                        <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">To</span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <Mail className="w-3 h-3 text-gray-500" />
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1">{recipEm}</p>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(recipEm); toast.success('Email copied') }}
+                            className="shrink-0 p-1 rounded-md text-gray-400 hover:text-[#4285F4] hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                            title="Copy email"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Date */}
+                      <div className="flex items-start gap-3">
+                        <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right">Date</span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div className="w-6 h-6 rounded-full shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                            </svg>
+                          </div>
+                          <p className="text-sm text-[#1F1F1F] dark:text-white">{format(new Date(message.createdAt), 'd MMM yyyy, h:mm a')}</p>
+                        </div>
+                      </div>
+
+                      {/* Encryption */}
+                      <div className="flex items-start gap-3">
+                        <span className="text-xs font-medium text-gray-400 w-9 shrink-0 pt-0.5 text-right"></span>
+                        <div className="flex items-center gap-1.5">
+                          <Lock className="w-3 h-3 text-gray-400" />
+                          <span className="text-xs text-gray-500">Standard encryption (TLS).</span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div
                 className="email-body prose prose-sm max-w-none text-[#1F1F1F] dark:text-gray-200 break-words
                   [&_p]:my-0.5 [&>*:first-child]:mt-0
