@@ -482,11 +482,10 @@ export function EmailDetail() {
     }
   }, [selectedEmailId, fetchEmail])
 
-  // Auto-expand latest message in thread when email loads
+  // Expand all thread messages by default when email loads
   useEffect(() => {
     if (thread.length > 0) {
-      const latestId = thread[thread.length - 1].id
-      setExpandedReplies(new Set([latestId]))
+      setExpandedReplies(new Set(thread.map(m => m.id)))
     } else {
       setExpandedReplies(new Set())
     }
