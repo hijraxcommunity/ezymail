@@ -184,7 +184,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/emails/[id] - Move to trash
+// DELETE /api/emails/[id] - Move to trash (or permanently delete if already in trash)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -210,7 +210,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not authorized to delete this email' }, { status: 403 });
     }
 
-    // Move to trash
+    // If already in trash, permanently delete
+    if (email.folder === 'trash') {
+      await db.email.delete({ where: { id } });
+      return NextResponse.json({ success: true, permanentlyDeleted: true });
+    }
+
+    // Otherwise, move to trash
     const updatedEmail = await db.email.update({
       where: { id },
       data: { folder: 'trash' },
