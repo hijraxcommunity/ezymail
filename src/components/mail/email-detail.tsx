@@ -242,18 +242,20 @@ function ThreadMessage({
             </span>
           </div>
           <div className="mt-0.5">
-            <span
-              onClick={(e) => { e.stopPropagation(); setShowInfoBox(!showInfoBox) }}
-              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
-            >
-              {toLabel}
-              <motion.span
-                animate={{ rotate: showInfoBox ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
+            {isExpanded && (
+              <span
+                onClick={(e) => { e.stopPropagation(); setShowInfoBox(!showInfoBox) }}
+                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
               >
-                <ChevronDown className="w-3 h-3" />
-              </motion.span>
-            </span>
+                {toLabel}
+                <motion.span
+                  animate={{ rotate: showInfoBox ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronDown className="w-3 h-3" />
+                </motion.span>
+              </span>
+            )}
           </div>
           {!isExpanded && (
             <p className="text-xs text-gray-500 truncate mt-0.5 ml-9">
