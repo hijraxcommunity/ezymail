@@ -334,13 +334,15 @@ function ThreadMessage({
               </Avatar>
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8}>
+          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8} onOpenAutoFocus={(e) => e.preventDefault()}>
+            <div onClick={(e) => e.stopPropagation()}>
             <SenderProfileCard
               sender={message.sender}
               recipientEmail={message.recipientEmail}
               onSendEmail={onSendToSender || (() => {})}
               onScheduleEmail={onScheduleToSender || (() => {})}
             />
+            </div>
           </PopoverContent>
         </Popover>
         <div className="flex-1 min-w-0">
@@ -1132,7 +1134,8 @@ export function EmailDetail() {
                               </Avatar>
                             </button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8}>
+                          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8} onOpenAutoFocus={(e) => e.preventDefault()}>
+                            <div onClick={(e) => e.stopPropagation()}>
                             <SenderProfileCard
                               sender={msg.sender}
                               recipientEmail={msg.recipientEmail}
@@ -1144,6 +1147,7 @@ export function EmailDetail() {
                                 setTimeout(() => document.querySelector<HTMLButtonElement>('[data-schedule-toggle]')?.click(), 100)
                               }}
                             />
+                            </div>
                           </PopoverContent>
                         </Popover>
                         <div className="flex-1 min-w-0">
