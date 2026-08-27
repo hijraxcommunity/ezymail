@@ -1137,12 +1137,10 @@ export function EmailDetail() {
                               sender={msg.sender}
                               recipientEmail={msg.recipientEmail}
                               onSendEmail={() => {
-                                const fakeEmail = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
-                                setReplyToEmail(fakeEmail)
+                                setReplyToEmail(msg)
                               }}
                               onScheduleEmail={() => {
-                                const fakeEmail = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
-                                setReplyToEmail(fakeEmail)
+                                setReplyToEmail(msg)
                                 setTimeout(() => document.querySelector<HTMLButtonElement>('[data-schedule-toggle]')?.click(), 100)
                               }}
                             />
@@ -1335,12 +1333,10 @@ export function EmailDetail() {
                       onToggle={() => toggleReply(msg.id)}
                       currentUserId={user?.id}
                       onSendToSender={() => {
-                        const fe = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
-                        setReplyToEmail(fe)
+                        setReplyToEmail(msg)
                       }}
                       onScheduleToSender={() => {
-                        const fe = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
-                        setReplyToEmail(fe)
+                        setReplyToEmail(msg)
                         setTimeout(() => document.querySelector<HTMLButtonElement>('[data-schedule-toggle]')?.click(), 100)
                       }}
                     />
