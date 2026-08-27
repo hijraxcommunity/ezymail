@@ -6,7 +6,8 @@ import {
   ArrowLeft, Star, Archive, ArchiveRestore, Trash2, Reply, ReplyAll,
   Paperclip, Forward, FileText, Download, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
-  ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase
+  ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase,
+  UserPlus, Send, CalendarClock
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -184,6 +185,90 @@ function QuotedTextToggle({ quotedHtml }: { quotedHtml: string }) {
   )
 }
 
+/* ─── Sender Profile Card (Gmail-style) ─── */
+
+function SenderProfileCard({
+  sender,
+  recipientEmail,
+  onSendEmail,
+  onScheduleEmail,
+}: {
+  sender: { id: string; email: string; firstName: string; lastName: string; avatar: string | null } | null
+  recipientEmail: string
+  onSendEmail: () => void
+  onScheduleEmail: () => void
+}) {
+  const [isAdding, setIsAdding] = useState(false)
+  const name = sender ? `${sender.firstName} ${sender.lastName}` : 'Unknown'
+  const emailAddr = sender?.email || recipientEmail
+  const initials = getInitials(sender)
+
+  const handleAddContact = async () => {
+    if (!emailAddr) return
+    setIsAdding(true)
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: emailAddr }),
+      })
+      if (res.ok) {
+        toast.success(`Added ${name} to contacts`)
+      } else if (res.status === 409) {
+        toast.info(`${name} is already in your contacts`)
+      } else {
+        toast.error('Failed to add contact')
+      }
+    } catch {
+      toast.error('Failed to add contact')
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  return (
+    <div className="w-80 sm:w-96 p-4 space-y-4">
+      {/* Identity row */}
+      <div className="flex items-start gap-3">
+        <Avatar className="w-14 h-14 shrink-0">
+          <AvatarImage src={sender?.avatar || undefined} />
+          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-lg font-semibold">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-semibold text-[#202124] dark:text-white truncate leading-tight">{name}</p>
+          <p className="text-sm text-[#5f6368] dark:text-gray-400 truncate mt-0.5">{emailAddr}</p>
+        </div>
+        <button
+          onClick={handleAddContact}
+          disabled={isAdding}
+          className="shrink-0 p-1.5 rounded-full text-[#5f6368] hover:text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 transition-colors cursor-pointer mt-0.5"
+          title="Add to contacts"
+        >
+          <UserPlus className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSendEmail}
+          className="flex-1 flex items-center justify-center gap-2 bg-[#D3E3FD] hover:bg-[#C2DBFC] dark:bg-[#4285F4]/15 dark:hover:bg-[#4285F4]/25 text-[#1a73e8] dark:text-[#8AB4F8] rounded-full px-5 py-2.5 text-sm font-medium transition-colors cursor-pointer"
+        >
+          <Send className="w-4 h-4" />
+          Send Email
+        </button>
+        <button
+          onClick={onScheduleEmail}
+          className="shrink-0 flex items-center justify-center w-10 h-10 rounded-full border border-[#dadce0] dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 text-[#5f6368] dark:text-gray-400 transition-colors cursor-pointer"
+          title="Schedule email"
+        >
+          <CalendarClock className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Gmail-style Thread Reply (flat, no box) ─── */
 
 function ThreadMessage({
@@ -191,11 +276,15 @@ function ThreadMessage({
   isExpanded,
   onToggle,
   currentUserId,
+  onSendToSender,
+  onScheduleToSender,
 }: {
   message: EmailWithSender
   isExpanded: boolean
   onToggle: () => void
   currentUserId?: string
+  onSendToSender?: () => void
+  onScheduleToSender?: () => void
 }) {
   const initials = getInitials(message.sender)
   const name = message.sender
@@ -228,15 +317,32 @@ function ThreadMessage({
   return (
     <>
       {/* Clickable header row */}
-      <button
-        type="button"
-        onClick={onToggle}
+      <div
         className="w-full flex items-center gap-2.5 py-2 text-left cursor-pointer group"
+        onClick={onToggle}
       >
-        <Avatar className="w-8 h-8 shrink-0">
-          <AvatarImage src={message.sender?.avatar || undefined} />
-          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
-        </Avatar>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 cursor-pointer rounded-full focus:outline-none focus:ring-2 focus:ring-[#4285F4]/40"
+            >
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={message.sender?.avatar || undefined} />
+                <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">{initials}</AvatarFallback>
+              </Avatar>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8}>
+            <SenderProfileCard
+              sender={message.sender}
+              recipientEmail={message.recipientEmail}
+              onSendEmail={onSendToSender || (() => {})}
+              onScheduleEmail={onScheduleToSender || (() => {})}
+            />
+          </PopoverContent>
+        </Popover>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate">{name}</span>
@@ -273,7 +379,7 @@ function ThreadMessage({
             <ChevronRight className="w-4 h-4" />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Info box */}
       <AnimatePresence>
@@ -1015,12 +1121,33 @@ export function EmailDetail() {
                     /* Selected email — always fully shown */
                     <div className="py-1">
                       <div className="flex items-center gap-2.5 mb-1">
-                        <Avatar className="w-8 h-8 shrink-0">
-                          <AvatarImage src={msg.sender?.avatar || undefined} />
-                          <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">
-                            {getInitials(msg.sender)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="shrink-0 cursor-pointer rounded-full focus:outline-none focus:ring-2 focus:ring-[#4285F4]/40">
+                              <Avatar className="w-8 h-8">
+                                <AvatarImage src={msg.sender?.avatar || undefined} />
+                                <AvatarFallback className="bg-gradient-to-br from-[#4285F4] to-[#34A853] text-white text-[10px] font-semibold">
+                                  {getInitials(msg.sender)}
+                                </AvatarFallback>
+                              </Avatar>
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900" align="start" sideOffset={8}>
+                            <SenderProfileCard
+                              sender={msg.sender}
+                              recipientEmail={msg.recipientEmail}
+                              onSendEmail={() => {
+                                const fakeEmail = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
+                                setReplyToEmail(fakeEmail)
+                              }}
+                              onScheduleEmail={() => {
+                                const fakeEmail = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
+                                setReplyToEmail(fakeEmail)
+                                setTimeout(() => document.querySelector<HTMLButtonElement>('[data-schedule-toggle]')?.click(), 100)
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-[#1F1F1F] dark:text-white truncate">
@@ -1207,6 +1334,15 @@ export function EmailDetail() {
                       isExpanded={isExpanded}
                       onToggle={() => toggleReply(msg.id)}
                       currentUserId={user?.id}
+                      onSendToSender={() => {
+                        const fe = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
+                        setReplyToEmail(fe)
+                      }}
+                      onScheduleToSender={() => {
+                        const fe = { ...msg, senderId: user?.id || '', recipient: msg.sender, recipientEmail: msg.sender?.email || msg.recipientEmail, sender: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, avatar: user.avatar } : null } as EmailWithSender
+                        setReplyToEmail(fe)
+                        setTimeout(() => document.querySelector<HTMLButtonElement>('[data-schedule-toggle]')?.click(), 100)
+                      }}
                     />
                   )}
                 </div>

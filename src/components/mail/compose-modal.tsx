@@ -1598,6 +1598,7 @@ export function ComposeModal() {
                 type="button"
                 disabled={!editor || isUploading}
                 onClick={() => setShowSchedulePopover(true)}
+                data-schedule-toggle
                 className="inline-flex items-center justify-center h-9 gap-1.5 text-sm font-medium text-[#4285F4] hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/10 rounded-xl px-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Clock className="w-4 h-4" />
