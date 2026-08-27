@@ -207,6 +207,9 @@ function ThreadMessage({
   })()
   const [showInfoBox, setShowInfoBox] = useState(false)
 
+  // Auto-close info box when collapsing
+  useEffect(() => { if (!isExpanded) setShowInfoBox(false) }, [isExpanded])
+
   const isSentByMe = message.senderId === currentUserId
   const toLabel = isSentByMe
     ? `to ${message.recipient?.firstName || message.recipientEmail || 'me'}`
