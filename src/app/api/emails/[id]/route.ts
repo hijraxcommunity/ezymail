@@ -19,26 +19,26 @@ export async function GET(
       where: { id },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         replies: {
           orderBy: { createdAt: 'asc' },
           include: {
             sender: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
             },
             recipient: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
             },
           },
         },
         parentEmail: {
           include: {
             sender: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
             },
           },
         },
@@ -89,10 +89,10 @@ export async function GET(
       orderBy: { createdAt: 'asc' },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });
@@ -168,10 +168,10 @@ export async function PUT(
       data: updateData,
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });
@@ -222,10 +222,10 @@ export async function DELETE(
       data: { folder: 'trash' },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });

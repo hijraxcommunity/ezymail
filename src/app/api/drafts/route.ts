@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         },
         include: {
           sender: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
           },
         },
       });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });

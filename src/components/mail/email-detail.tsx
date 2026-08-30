@@ -193,7 +193,7 @@ function SenderProfileCard({
   onSendEmail,
   onScheduleEmail,
 }: {
-  sender: { id: string; email: string; firstName: string; lastName: string; avatar: string | null } | null
+  sender: { id: string; email: string; firstName: string; lastName: string; avatar: string | null; bio?: string } | null
   recipientEmail: string
   onSendEmail: () => void
   onScheduleEmail: () => void
@@ -237,6 +237,9 @@ function SenderProfileCard({
         <div className="flex-1 min-w-0">
           <p className="text-base font-semibold text-[#202124] dark:text-white truncate leading-tight">{name}</p>
           <p className="text-sm text-[#5f6368] dark:text-gray-400 truncate mt-0.5">{emailAddr}</p>
+          {sender?.bio && (
+            <p className="text-xs text-[#5f6368] dark:text-gray-400 mt-1 line-clamp-2 leading-snug">{sender.bio}</p>
+          )}
         </div>
         <button
           onClick={handleAddContact}
