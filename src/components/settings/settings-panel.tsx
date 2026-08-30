@@ -972,16 +972,6 @@ function ProfileTabContent({
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Personal Information</h3>
         <Card className="border-gray-100 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="displayName" className="text-sm text-gray-600 dark:text-gray-400">Display Name</Label>
-              <Input
-                id="displayName"
-                value={profile.displayName || ''}
-                onChange={(e) => update('displayName', e.target.value)}
-                placeholder="How others see you"
-                className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="firstName" className="text-sm text-gray-600 dark:text-gray-400">First Name *</Label>
