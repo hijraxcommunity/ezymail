@@ -1022,10 +1022,13 @@ function ProfileTabContent({
               <Textarea
                 id="bio"
                 value={profile.bio || ''}
-                onChange={(e) => update('bio', e.target.value)}
-                placeholder="Tell others about yourself"
+                onChange={(e) => {
+                  if (e.target.value.length <= 60) update('bio', e.target.value)
+                }}
+                placeholder="Tell others about yourself (max 60 chars)"
                 className="rounded-xl min-h-[70px] resize-none border-gray-200 dark:border-gray-700"
               />
+              <p className="text-[11px] text-gray-400">{(profile.bio || '').length}/60</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

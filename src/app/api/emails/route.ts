@@ -85,10 +85,10 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         include: {
           sender: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
           },
           recipient: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
           },
           replies: {
             select: { id: true },
@@ -226,10 +226,10 @@ export async function POST(request: NextRequest) {
       },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });
@@ -272,10 +272,10 @@ export async function POST(request: NextRequest) {
       },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });

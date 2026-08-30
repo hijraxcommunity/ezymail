@@ -48,10 +48,10 @@ export async function POST(
       },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });
@@ -93,10 +93,10 @@ export async function DELETE(
       data: { snoozedUntil: null },
       include: {
         sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true },
+          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
       },
     });

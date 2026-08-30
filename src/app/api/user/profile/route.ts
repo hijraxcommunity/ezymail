@@ -105,7 +105,7 @@ export async function PUT(request: NextRequest) {
       updateData.avatar = avatar;
     }
     if (bio !== undefined) {
-      updateData.bio = bio;
+      updateData.bio = bio.slice(0, 60);
     }
     if (phone !== undefined) {
       updateData.phone = phone;
