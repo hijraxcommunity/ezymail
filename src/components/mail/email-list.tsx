@@ -48,6 +48,9 @@ export function EmailList() {
     searchQuery,
     searchTotal,
     searchOperators,
+    settingsView,
+    contactsView,
+    adminView,
     setSelectedEmailId,
     setEmails,
     setIsLoading,
@@ -119,6 +122,28 @@ export function EmailList() {
   useEffect(() => {
     fetchEmails()
   }, [fetchEmails])
+
+  // ─── Auto-refresh when navigating back from an opened email ──────────────
+  // Refetches the list so newly arrived emails appear without a manual reload
+  const prevSelectedRef = useRef(selectedEmailId)
+  useEffect(() => {
+    if (prevSelectedRef.current && !selectedEmailId) {
+      fetchEmails()
+    }
+    prevSelectedRef.current = selectedEmailId
+  }, [selectedEmailId, fetchEmails])
+
+  // ─── Auto-refresh when returning from another in-app page ────────────────
+  // Covers settings / contacts / admin panels: refetch when the overlay page
+  // closes so newly arrived emails are visible without a manual reload
+  const prevOverlayRef = useRef(false)
+  useEffect(() => {
+    const overlayOpen = Boolean(settingsView || contactsView || adminView)
+    if (prevOverlayRef.current && !overlayOpen) {
+      fetchEmails()
+    }
+    prevOverlayRef.current = overlayOpen
+  }, [settingsView, contactsView, adminView, fetchEmails])
 
   // Pull-to-refresh touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
