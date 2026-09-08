@@ -167,6 +167,53 @@ export default function HomePage() {
     fetchEmails()
   }, [fetchEmails])
 
+  // ─── Native-like back navigation (mobile hardware/browser back) ──────────
+  // One history "guard" entry: pressing back closes the topmost in-app view
+  // (compose → email detail → sidebar → settings/contacts/admin panels) one
+  // at a time, like a native app. At the base view, the first back shows a
+  // toast and the second back within 2.5s exits — never closing the app on a
+  // single accidental press.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    window.history.pushState({ ezView: true }, '')
+    let lastBaseBackAt = 0
+    const onPopState = () => {
+      // Always read fresh state — avoids stale closures, no re-subscription needed
+      const s = useAppStore.getState()
+      if (s.composeOpen || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
+        lastBaseBackAt = 0 // In-app navigation resets the exit timer
+        if (s.composeOpen) {
+          s.setComposeOpen(false)
+        } else if (s.selectedEmailId) {
+          s.setSelectedEmailId(null)
+        } else if (s.sidebarOpen) {
+          s.setSidebarOpen(false)
+        } else if (s.settingsView) {
+          s.setSettingsView(null)
+        } else if (s.contactsView) {
+          s.setContactsView(false)
+        } else if (s.adminView) {
+          s.setAdminView(false)
+        }
+      } else {
+        // Base view — second back within 2.5s exits, like a native app
+        const now = Date.now()
+        if (lastBaseBackAt && now - lastBaseBackAt < 2500) {
+          window.history.back() // Leave the app (no-op if there is no earlier page)
+          // If the app is the first page, back() can't leave — restore the guard
+          setTimeout(() => window.history.pushState({ ezView: true }, ''), 200)
+          return
+        }
+        lastBaseBackAt = now
+        toast('Press back again to exit')
+      }
+      // Always restore the guard so the next back press keeps navigating in-app
+      window.history.pushState({ ezView: true }, '')
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [isAuthenticated])
+
   // ─── Email notifications ──────────────────────────────────────────────────
   useNotifications()
 
