@@ -31,8 +31,28 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAppStore, type Template } from '@/store/use-app-store'
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
-const MAX_TOTAL_SIZE = 50 * 1024 * 1024 // 50MB
+// Attachment limits are capped by the deployment platform's 4.5MB request-body
+// limit: attachments travel base64-encoded (+~33%) inside a single JSON request,
+// so 3MB of files (~4MB on the wire) is the largest payload that can be delivered.
+const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3MB per file
+const MAX_TOTAL_SIZE = 3 * 1024 * 1024 // 3MB across all attachments in one email
+const MAX_FILES = 2
+
+// Shared validation for newly selected/dropped files. Returns an error message or null.
+function validateNewFiles(newFiles: File[], currentCount: number, currentTotal: number): string | null {
+  const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
+  if (oversized.length > 0) {
+    return `${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB per-file limit`
+  }
+  if (currentCount + newFiles.length > MAX_FILES) {
+    return `You can attach up to ${MAX_FILES} files per email`
+  }
+  const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
+  if (newTotal > MAX_TOTAL_SIZE) {
+    return `Total attachment size cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`
+  }
+  return null
+}
 
 interface PendingSendData {
   to: string
@@ -599,6 +619,12 @@ export function ComposeModal() {
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
       if (data.replyToId) payload.replyToId = data.replyToId
       if (data.attachments && data.attachments.length > 0) {
+        // Pre-flight guard: reject over-limit payloads instantly instead of a slow upload that ends in failure
+        const totalSize = data.attachments.reduce((s, a) => s + (a.size || 0), 0)
+        if (data.attachments.length > MAX_FILES || totalSize > MAX_TOTAL_SIZE) {
+          toast.error(`Attachments exceed the ${MAX_FILES}-file / ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit. Please remove some attachments and try again.`)
+          return
+        }
         payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
       }
       if (data.priority === 'high') payload.priority = 'high'
@@ -828,6 +854,12 @@ export function ComposeModal() {
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
       if (data.replyToId) payload.replyToId = data.replyToId
       if (data.attachments && data.attachments.length > 0) {
+        // Pre-flight guard: reject over-limit payloads instantly instead of a slow upload that ends in failure
+        const totalSize = data.attachments.reduce((s, a) => s + (a.size || 0), 0)
+        if (data.attachments.length > MAX_FILES || totalSize > MAX_TOTAL_SIZE) {
+          toast.error(`Attachments exceed the ${MAX_FILES}-file / ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit. Please remove some attachments and try again.`)
+          return null
+        }
         payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
       }
       if (data.priority === 'high') payload.priority = 'high'
@@ -986,15 +1018,10 @@ export function ComposeModal() {
     dragCounterRef.current = 0
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const newFiles = Array.from(e.dataTransfer.files)
-      const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
-      if (oversized.length > 0) {
-        toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
-        return
-      }
       const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
-      const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
-      if (newTotal > MAX_TOTAL_SIZE) {
-        toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+      const error = validateNewFiles(newFiles, attachments.length, currentTotal)
+      if (error) {
+        toast.error(error)
         return
       }
       setAttachments(prev => [...prev, ...newFiles])
@@ -1558,16 +1585,10 @@ export function ComposeModal() {
                 onChange={e => {
                   if (e.target.files && e.target.files.length > 0) {
                     const newFiles = Array.from(e.target.files)
-                    const oversized = newFiles.filter(f => f.size > MAX_FILE_SIZE)
-                    if (oversized.length > 0) {
-                      toast.error(`${oversized.length} file(s) exceed the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`)
-                      if (fileInputRef.current) fileInputRef.current.value = ''
-                      return
-                    }
                     const currentTotal = attachments.reduce((sum, f) => sum + f.size, 0)
-                    const newTotal = currentTotal + newFiles.reduce((sum, f) => sum + f.size, 0)
-                    if (newTotal > MAX_TOTAL_SIZE) {
-                      toast.error(`Total attachments cannot exceed ${MAX_TOTAL_SIZE / 1024 / 1024}MB`)
+                    const error = validateNewFiles(newFiles, attachments.length, currentTotal)
+                    if (error) {
+                      toast.error(error)
                       if (fileInputRef.current) fileInputRef.current.value = ''
                       return
                     }
