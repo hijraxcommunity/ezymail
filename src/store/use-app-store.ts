@@ -64,6 +64,15 @@ export interface Rule {
   updatedAt: string;
 }
 
+// Attachment object as stored in email.attachments JSON (base64 data embedded)
+export interface AttachmentFile {
+  name: string;
+  url: string;
+  size?: string | number;
+  type?: string;
+  data?: string;
+}
+
 export interface SavedSearch {
   id: string;
   name: string;
@@ -140,6 +149,9 @@ interface AppState {
 
   // Contacts
   contactsView: boolean;
+
+  // Attachment viewer (full-screen document viewer, opened from email detail)
+  attachmentViewer: AttachmentFile | null;
 
   // Folder navigation history (for mobile back button)
   folderHistory: { folder: MailView; folderId: string | null }[];
@@ -219,6 +231,9 @@ interface AppState {
 
   // Actions - Contacts
   setContactsView: (view: boolean) => void;
+
+  // Actions - Attachment viewer
+  setAttachmentViewer: (attachment: AttachmentFile | null) => void;
 
   // Actions - Mobile
   setSidebarOpen: (open: boolean) => void;
@@ -302,6 +317,9 @@ export const useAppStore = create<AppState>()(
 
       // Contacts
       contactsView: false,
+
+      // Attachment viewer
+      attachmentViewer: null,
 
       // Folder navigation history
       folderHistory: [{ folder: 'inbox' as MailView, folderId: null }],
@@ -428,6 +446,7 @@ export const useAppStore = create<AppState>()(
       setSettingsView: (view) => set({ settingsView: view, adminView: null }),
       setAdminView: (view) => set({ adminView: view, settingsView: null }),
       setContactsView: (view) => set({ contactsView: view }),
+      setAttachmentViewer: (attachment) => set({ attachmentViewer: attachment }),
 
       // Actions - Mobile
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -511,6 +530,7 @@ export const useAppStore = create<AppState>()(
         settingsView: null,
         adminView: null,
         contactsView: false,
+        attachmentViewer: null,
         currentFolder: 'inbox',
         currentPage: 1,
         sidebarOpen: false,

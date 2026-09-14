@@ -10,6 +10,7 @@ import { MailSidebar } from '@/components/mail/mail-sidebar'
 import { EmailList } from '@/components/mail/email-list'
 import { EmailDetail } from '@/components/mail/email-detail'
 import { ComposeModal } from '@/components/mail/compose-modal'
+import { AttachmentViewer } from '@/components/mail/attachment-viewer'
 import { MobileNav } from '@/components/mail/mobile-nav'
 import { SettingsPanel } from '@/components/settings/settings-panel'
 import { AdminPanel } from '@/components/admin/admin-panel'
@@ -180,10 +181,12 @@ export default function HomePage() {
     const onPopState = () => {
       // Always read fresh state — avoids stale closures, no re-subscription needed
       const s = useAppStore.getState()
-      if (s.composeOpen || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
+      if (s.composeOpen || s.attachmentViewer || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
         lastBaseBackAt = 0 // In-app navigation resets the exit timer
         if (s.composeOpen) {
           s.setComposeOpen(false)
+        } else if (s.attachmentViewer) {
+          s.setAttachmentViewer(null)
         } else if (s.selectedEmailId) {
           s.setSelectedEmailId(null)
         } else if (s.sidebarOpen) {
@@ -302,6 +305,9 @@ export default function HomePage() {
 
       {/* Compose modal */}
       <ComposeModal />
+
+      {/* Full-screen attachment / document viewer */}
+      <AttachmentViewer />
 
       {/* Settings / Admin slide-in panels */}
       <AnimatePresence>
