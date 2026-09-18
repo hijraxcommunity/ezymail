@@ -492,6 +492,24 @@ export function AttachmentViewer() {
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300 rtl-flip" />
               </button>
+              {/* Balances the two action buttons on the right so the title stays centered */}
+              <div className="w-[76px] shrink-0" aria-hidden="true" />
+              <div className="flex-1 min-w-0 text-center px-1">
+                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate" title={att.name}>
+                  {att.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {formatFileSize(att.size) || extLabel(att)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDownload(att)}
+                aria-label="Download"
+                className="h-9 w-9 shrink-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <Download className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -502,7 +520,9 @@ export function AttachmentViewer() {
                     <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44">
+                {/* z-[110]: portal content must sit ABOVE the z-[100] viewer overlay,
+                    otherwise the menu opens invisibly behind it */}
+                <DropdownMenuContent align="end" className="w-44 z-[110]">
                   <DropdownMenuLabel>Document actions</DropdownMenuLabel>
                   <DropdownMenuItem onClick={() => handleDownload(att)}>
                     <Download className="mr-2 h-4 w-4" /> Download
@@ -515,15 +535,6 @@ export function AttachmentViewer() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="flex-1 min-w-0 text-center px-1">
-                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate" title={att.name}>
-                  {att.name}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formatFileSize(att.size) || extLabel(att)}
-                </p>
-              </div>
-              <div className="w-[76px] shrink-0" aria-hidden="true" />
             </div>
           </header>
 
