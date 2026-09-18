@@ -24,24 +24,11 @@ export async function GET(
         recipient: {
           select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
-        replies: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-            },
-            recipient: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-            },
-          },
-        },
-        parentEmail: {
-          include: {
-            sender: {
-              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-            },
-          },
-        },
+        // NOTE: `replies` / `parentEmail` includes were removed on purpose.
+        // The conversation is rendered from `thread` below (which always contains
+        // the opened email), so `email.replies` was only a never-triggered
+        // fallback (guarded with `|| []` on the client) and `parentEmail` was
+        // unused - both duplicated full rows incl. heavy attachment columns.
       },
     });
 
@@ -110,7 +97,28 @@ export async function GET(
       return firstIdx === idx;
     });
 
-    return NextResponse.json({ email, thread: dedupedThread });
+    // Strip inline base64 `data` from attachments in the response - keep
+    // {name, url, size, type}. Every client consumer falls back to `url`
+    // (/api/attachments serves the bytes with a 24h immutable cache).
+    // Sending multi-MB data URLs here - duplicated again for the same email
+    // inside `thread` - is what made opening emails slow.
+    const slimAttachments = (raw?: string | null): string | null | undefined => {
+      if (!raw) return raw;
+      try {
+        const list = JSON.parse(raw);
+        if (!Array.isArray(list)) return raw;
+        return JSON.stringify(list.map(({ data: _drop, ...rest }) => rest));
+      } catch {
+        return raw;
+      }
+    };
+    email.attachments = slimAttachments(email.attachments);
+    const slimThread = dedupedThread.map((msg) => ({
+      ...msg,
+      attachments: slimAttachments(msg.attachments),
+    }));
+
+    return NextResponse.json({ email, thread: slimThread });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get email error:', message);
