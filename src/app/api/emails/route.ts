@@ -83,7 +83,29 @@ export async function GET(request: NextRequest) {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
+        // Explicit select: the list must NOT fetch the heavy `attachments` column
+        // (base64 data URLs, up to several MB per email). Pulling it on every
+        // folder switch made navigation slow once real attachment emails exist.
+        // The list response never included it; the detail endpoint still does.
+        select: {
+          id: true,
+          senderId: true,
+          recipientEmail: true,
+          subject: true,
+          body: true,
+          bodyHtml: true,
+          isRead: true,
+          isStarred: true,
+          isArchived: true,
+          folder: true,
+          parentEmailId: true,
+          threadId: true,
+          readAt: true,
+          snoozedUntil: true,
+          scheduledAt: true,
+          sentAt: true,
+          priority: true,
+          createdAt: true,
           sender: {
             select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
           },
