@@ -69,7 +69,7 @@ async function attachmentToBlob(att: AttachmentFile): Promise<Blob | null> {
 
 /* ─── Actions (Download / Share / Print) ──────────────────────────────────── */
 
-async function handleDownload(att: AttachmentFile) {
+export async function handleDownload(att: AttachmentFile) {
   const blob = await attachmentToBlob(att)
   if (!blob) {
     toast.error('Download failed. Please try again.')
@@ -492,9 +492,8 @@ export function AttachmentViewer() {
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300 rtl-flip" />
               </button>
-              {/* Balances the two action buttons on the right so the title stays centered */}
-              <div className="w-[76px] shrink-0" aria-hidden="true" />
-              <div className="flex-1 min-w-0 text-center px-1">
+              {/* Filename sits next to the back arrow (Gmail-style), actions stay on the right */}
+              <div className="flex-1 min-w-0 px-1">
                 <p className="text-sm font-medium text-[#1F1F1F] dark:text-white truncate" title={att.name}>
                   {att.name}
                 </p>
