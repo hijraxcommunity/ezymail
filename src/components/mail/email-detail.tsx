@@ -7,7 +7,7 @@ import {
   Paperclip, Forward, FileText, Download, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
   ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase,
-  UserPlus, Send, CalendarClock
+  UserPlus, Send, CalendarClock, Image as ImageIcon
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -43,6 +43,7 @@ import { Separator } from '@/components/ui/separator'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
+import { handleDownload } from '@/components/mail/attachment-viewer'
 
 /* ─── Helpers ─── */
 
@@ -523,15 +524,26 @@ function AttachmentGallery({ attachments }: { attachments: Array<{ name: string;
       {images.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {images.map((att, idx) => (
-            <button key={idx} type="button" onClick={() => setAttachmentViewer(att)}
-              aria-label={`Open ${att.name}`}
-              className="group relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-square flex items-center justify-center cursor-pointer">
-              <img src={att.data || att.url} alt={att.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <p className="text-[10px] text-white truncate">{att.name}</p>
+            <div key={idx} className="group relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-square">
+              <button type="button" onClick={() => setAttachmentViewer(att)}
+                aria-label={`Open ${att.name}`}
+                className="absolute inset-0 w-full h-full cursor-pointer">
+                <img src={att.data || att.url} alt={att.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+              </button>
+              {/* Gmail-style bottom bar: file icon + name + download */}
+              <div className="absolute bottom-0 inset-x-0 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-2 py-1.5">
+                <div className="w-6 h-6 rounded-md bg-[#D3E3FD] dark:bg-[#4285F4]/25 flex items-center justify-center shrink-0">
+                  <ImageIcon className="w-3.5 h-3.5 text-[#4285F4]" />
+                </div>
+                <span className="flex-1 min-w-0 text-xs text-white truncate" title={att.name}>{att.name}</span>
+                <button type="button" onClick={() => handleDownload(att)}
+                  aria-label={`Download ${att.name}`}
+                  className="w-7 h-7 rounded-md hover:bg-white/15 flex items-center justify-center shrink-0 transition-colors cursor-pointer">
+                  <Download className="w-4 h-4 text-white" />
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
