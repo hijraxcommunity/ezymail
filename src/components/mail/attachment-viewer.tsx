@@ -407,42 +407,111 @@ function ZoomableImage({ src, alt, onDownload }: { src: string; alt: string; onD
   )
 }
 
-/* ─── PDF preview (browser-native, authenticated same-origin URL) ─────────── */
+/* ─── PDF preview (pdf.js canvas rendering — works on every browser/device.
+       Native <iframe> PDFs are NOT rendered by iOS Safari or Android Chrome
+       (users just saw a blank box and could only download); pdf.js draws the
+       pages to canvas exactly like Gmail's mobile viewer. ──────────────────── */
 
-function PdfFrame({ src, name, onDownload }: { src: string; name: string; onDownload: () => void }) {
-  const [loaded, setLoaded] = useState(false)
-  const [failed, setFailed] = useState(false)
+function PdfFrame({ att, onDownload }: { att: AttachmentFile; onDownload: () => void }) {
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [progress, setProgress] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null)
 
-  // Fail-safe: surface the error state if the document never loads
   useEffect(() => {
-    const timer = setTimeout(() => setFailed(true), 20000)
-    return () => clearTimeout(timer)
-  }, [src, attempt])
+    let cancelled = false
+    let pdfDoc: { destroy: () => Promise<void> } | null = null
+    setStatus('loading')
+    setProgress('')
 
-  if (failed) {
-    return (
-      <ViewerError
-        onRetry={() => {
-          setAttempt((n) => n + 1)
-          setLoaded(false)
-          setFailed(false)
-        }}
-        onDownload={onDownload}
-      />
-    )
+    // Fail-safe: surface the error state if the document never finishes
+    const failSafe = setTimeout(() => {
+      if (!cancelled) setStatus((s) => (s === 'loading' ? 'error' : s))
+    }, 30000)
+
+    const render = async () => {
+      try {
+        const blob = await attachmentToBlob(att)
+        if (cancelled) return
+        if (!blob) throw new Error('Attachment could not be loaded')
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+        const data = new Uint8Array(await blob.arrayBuffer())
+        const doc = await pdfjs.getDocument({ data }).promise
+        if (cancelled) {
+          doc.destroy().catch(() => {})
+          return
+        }
+        pdfDoc = doc
+
+        const container = containerRef.current
+        if (!container) return
+        container.replaceChildren()
+
+        // Fit page to container width, render at device pixel ratio for crisp text
+        const pageWidth = Math.max(container.clientWidth - 24, 200)
+        const dpr = Math.min(window.devicePixelRatio || 1, 2)
+
+        for (let n = 1; n <= doc.numPages; n++) {
+          if (cancelled) return
+          setProgress(`page ${n} of ${doc.numPages}`)
+          const page = await doc.getPage(n)
+          if (cancelled) return
+          const base = page.getViewport({ scale: 1 })
+          const viewport = page.getViewport({ scale: (pageWidth / base.width) * dpr })
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.floor(viewport.width)
+          canvas.height = Math.floor(viewport.height)
+          canvas.style.cssText =
+            `display:block;margin:0 auto 12px;width:${pageWidth}px;height:auto;max-width:100%;` +
+            'border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.25);background:#fff'
+          const ctx = canvas.getContext('2d')
+          if (!ctx) continue
+          container.appendChild(canvas)
+          const task = page.render({ canvasContext: ctx, viewport })
+          renderTaskRef.current = task
+          await task.promise
+        }
+        if (!cancelled) setStatus('ok')
+      } catch {
+        // Cancelled renders (unmount/retry) reject here too — only real
+        // failures flip the state, cancellation is handled by `cancelled`
+        if (!cancelled) setStatus('error')
+      }
+    }
+
+    render()
+
+    return () => {
+      cancelled = true
+      clearTimeout(failSafe)
+      try {
+        renderTaskRef.current?.cancel()
+      } catch {
+        // Already finished
+      }
+      try {
+        pdfDoc?.destroy()
+      } catch {
+        // Never opened
+      }
+    }
+  }, [att, attempt])
+
+  if (status === 'error') {
+    return <ViewerError onRetry={() => setAttempt((n) => n + 1)} onDownload={onDownload} />
   }
 
   return (
     <>
-      {!loaded && <LoadingOverlay />}
-      <iframe
-        key={`${src}#${attempt}`}
-        src={src}
-        title={name}
-        className="w-full h-full border-0 bg-transparent"
-        onLoad={() => setLoaded(true)}
+      <div
+        ref={containerRef}
+        className="absolute inset-0 overflow-y-auto overscroll-contain px-3 py-4"
       />
+      {status === 'loading' && (
+        <LoadingOverlay label={`Loading document${progress ? ` — ${progress}` : '...'}`} />
+      )}
     </>
   )
 }
@@ -543,7 +612,7 @@ export function AttachmentViewer() {
               <ZoomableImage key={att.url} src={att.data || att.url} alt={att.name} onDownload={() => handleDownload(att)} />
             )}
             {kind === 'pdf' && (
-              <PdfFrame key={att.url} src={att.url} name={att.name} onDownload={() => handleDownload(att)} />
+              <PdfFrame key={att.url} att={att} onDownload={() => handleDownload(att)} />
             )}
             {kind === 'other' && <UnsupportedState att={att} />}
           </div>
