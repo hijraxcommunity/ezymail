@@ -550,18 +550,26 @@ function AttachmentGallery({ attachments }: { attachments: Array<{ name: string;
       {docs.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {docs.map((att, idx) => (
-            <button key={idx} type="button" onClick={() => setAttachmentViewer(att)}
-              aria-label={`Open ${att.name}`}
-              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-[#4285F4]/30 hover:bg-[#D3E3FD]/30 dark:hover:bg-[#4285F4]/5 transition-colors group text-left cursor-pointer">
-              <div className="w-10 h-10 rounded-lg bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center shrink-0">
+            <div key={idx}
+              className="relative flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-[#4285F4]/30 hover:bg-[#D3E3FD]/30 dark:hover:bg-[#4285F4]/5 transition-colors group">
+              {/* Tap-to-open layer covers the whole row */}
+              <button type="button" onClick={() => setAttachmentViewer(att)}
+                aria-label={`Open ${att.name}`}
+                className="absolute inset-0 w-full h-full rounded-xl cursor-pointer" />
+              <div className="relative w-10 h-10 rounded-lg bg-[#D3E3FD] dark:bg-[#4285F4]/20 flex items-center justify-center shrink-0 pointer-events-none">
                 <FileText className="w-5 h-5 text-[#4285F4]" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="relative flex-1 min-w-0 pointer-events-none">
                 <p className="text-sm font-medium truncate text-[#1F1F1F] dark:text-white group-hover:text-[#4285F4] transition-colors">{att.name}</p>
                 {att.size && <p className="text-xs text-gray-500">{formatFileSize(att.size)}</p>}
               </div>
-              <Download className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
+              {/* Always-visible download button (right side of the row) */}
+              <button type="button" onClick={() => handleDownload(att)}
+                aria-label={`Download ${att.name}`}
+                className="relative h-9 w-9 rounded-lg hover:bg-[#D3E3FD] dark:hover:bg-[#4285F4]/20 flex items-center justify-center shrink-0 transition-colors cursor-pointer">
+                <Download className="w-5 h-5 text-[#4285F4]" />
+              </button>
+            </div>
           ))}
         </div>
       )}
