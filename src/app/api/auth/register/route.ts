@@ -7,6 +7,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { firstName, lastName, dateOfBirth, password, email } = body;
 
+    // WhatsApp number (optional for backward compatibility — required by the
+    // personal signup form). Stored on the user record for future recovery.
+    const phoneCountryCode = typeof body.phoneCountryCode === 'string' ? body.phoneCountryCode.replace(/\D/g, '') : '';
+    const phoneNumber = typeof body.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
+    let normalizedPhone: string | null = null;
+    if (phoneCountryCode || phoneNumber) {
+      if (phoneCountryCode.length < 1 || phoneCountryCode.length > 4) {
+        return NextResponse.json({ error: 'Please enter a valid country code (e.g. 93)' }, { status: 400 });
+      }
+      if (phoneNumber.length < 6 || phoneNumber.length > 14) {
+        return NextResponse.json({ error: 'Please enter a valid phone number (at least 6 digits)' }, { status: 400 });
+      }
+      normalizedPhone = `+${phoneCountryCode}${phoneNumber}`;
+    }
+
     // Validate fields
     if (!firstName || !firstName.trim()) {
       return NextResponse.json({ error: 'First name is required' }, { status: 400 });
@@ -91,16 +106,40 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
-    const user = await db.user.create({
-      data: {
-        email: userEmail,
-        passwordHash,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        dateOfBirth: dateOfBirth,
-      },
-    });
+    // Create user (phone column is part of the schema; fall back gracefully
+    // if the production database has not been migrated yet — signup must
+    // never break because of the new field)
+    let user;
+    try {
+      user = await db.user.create({
+        data: {
+          email: userEmail,
+          passwordHash,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          dateOfBirth: dateOfBirth,
+          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        },
+      });
+    } catch (err) {
+      if (
+        normalizedPhone &&
+        err && typeof err === 'object' && 'code' in err &&
+        (err as { code?: string }).code === 'P2022'
+      ) {
+        user = await db.user.create({
+          data: {
+            email: userEmail,
+            passwordHash,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            dateOfBirth: dateOfBirth,
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     // Create session
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '';
