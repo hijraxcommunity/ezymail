@@ -84,6 +84,10 @@ export function RegisterForm() {
   const [day, setDay] = useState(0)
   const [year, setYear] = useState(0)
 
+  // Step 2: WhatsApp number (country code defaults to 93 — Afghanistan)
+  const [phoneCode, setPhoneCode] = useState('93')
+  const [phoneNumber, setPhoneNumber] = useState('')
+
   // Email: user-chosen username part (before @ezy.af)
   const [emailUsername, setEmailUsername] = useState('')
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
@@ -161,6 +165,20 @@ export function RegisterForm() {
       toast.error('You must be at least 13 years old')
       return
     }
+    // WhatsApp number is required — it is used to verify the account
+    // if the password is ever forgotten
+    const code = phoneCode.replace(/\D/g, '')
+    const digits = phoneNumber.replace(/\D/g, '')
+    if (code.length < 1 || code.length > 4) {
+      toast.error('Please enter a valid country code (e.g. 93)')
+      return
+    }
+    if (digits.length < 6 || digits.length > 14) {
+      toast.error('Please enter a valid WhatsApp number (at least 6 digits)')
+      return
+    }
+    setPhoneCode(code)
+    setPhoneNumber(digits)
     setStep(3)
   }
 
@@ -190,6 +208,8 @@ export function RegisterForm() {
           dateOfBirth: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
           email: fullEmail,
           password: passwordForm.getValues('password'),
+          phoneCountryCode: phoneCode.replace(/\D/g, ''),
+          phone: phoneNumber.replace(/\D/g, ''),
         }),
       })
       const result = await res.json()
@@ -414,6 +434,35 @@ export function RegisterForm() {
                     </div>
                   </div>
                 </div>
+
+                {/* WhatsApp number — verified during forgot password */}
+                <div className="space-y-2 mt-6">
+                  <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+                    WhatsApp number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative w-24 shrink-0">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">+</span>
+                      <Input
+                        value={phoneCode}
+                        onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        inputMode="numeric"
+                        placeholder="93"
+                        className="h-11 rounded-xl pl-7 pr-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                      />
+                    </div>
+                    <Input
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                      inputMode="tel"
+                      placeholder="7XX XXX XXX"
+                      className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Used to verify your identity when you forget your password
+                  </p>
+                </div>
               </motion.div>
             )}
 
@@ -530,6 +579,12 @@ export function RegisterForm() {
                       <span className="text-sm text-gray-500">Birthday</span>
                       <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
                         {MONTHS[month - 1]} {day}, {year}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">WhatsApp number</span>
+                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">
+                        +{phoneCode} {phoneNumber}
                       </span>
                     </div>
                   </div>
