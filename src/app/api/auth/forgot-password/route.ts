@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
-import { createHash } from 'crypto';
+import { createHash, randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
+import { sendWhatsAppOTP } from '@/lib/whatsapp/openwa';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'ezymail-super-secret-key-change-in-production-2024'
@@ -10,6 +11,11 @@ const JWT_SECRET = new TextEncoder().encode(
 
 // Verification is only valid for 10 minutes after the number is confirmed
 const RESET_TOKEN_TTL_SECONDS = 10 * 60;
+
+// The WhatsApp OTP code lives exactly as long as the reset token would: 10 minutes
+const OTP_TTL_SECONDS = 10 * 60;
+// Brute-force protection: after this many wrong codes a pending OTP is dropped
+const OTP_MAX_ATTEMPTS = 5;
 
 // Simple in-memory rate limit for recovery attempts (per IP)
 const globalForForgot = globalThis as unknown as {
@@ -55,6 +61,56 @@ function markTokenUsed(token: string): boolean {
 // Never reveal which detail was wrong — one generic message for every failure
 const GENERIC_ERROR = 'We could not verify your details. Check your email and WhatsApp number and try again.';
 
+const OTP_SEND_FAILURE = 'Unable to send the verification code. Please try again later.';
+
+// Pending password-recovery OTPs keyed by user id, stored with the same
+// mechanism/pattern as the used-token set below: in-memory, TTL-bounded,
+// only the sha256 hash of the code is kept — never the code itself.
+const globalForRecoveryOtps = globalThis as unknown as {
+  recoveryOtps: Map<string, { hash: string; expiresAt: number; attempts: number; consumed: boolean }>;
+};
+if (!globalForRecoveryOtps.recoveryOtps) {
+  globalForRecoveryOtps.recoveryOtps = new Map();
+}
+function storeOtp(userId: string, otp: string): void {
+  const otps = globalForRecoveryOtps.recoveryOtps;
+  // A new request replaces any previous code for the same account
+  otps.set(userId, {
+    hash: createHash('sha256').update(`${otp}:${userId}`).digest('hex'),
+    expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
+    attempts: 0,
+    consumed: false,
+  });
+  if (otps.size > 500) {
+    const now = Date.now();
+    for (const [k, rec] of otps) if (rec.expiresAt < now) otps.delete(k);
+  }
+}
+function clearOtp(userId: string): void {
+  globalForRecoveryOtps.recoveryOtps.delete(userId);
+}
+type OtpCheckResult = 'ok' | 'missing' | 'expired' | 'locked' | 'invalid';
+function checkOtp(userId: string, otp: string): OtpCheckResult {
+  const rec = globalForRecoveryOtps.recoveryOtps.get(userId);
+  if (!rec) return 'missing';
+  if (rec.consumed) return 'missing';
+  if (Date.now() > rec.expiresAt) {
+    clearOtp(userId);
+    return 'expired';
+  }
+  if (rec.attempts >= OTP_MAX_ATTEMPTS) {
+    clearOtp(userId);
+    return 'locked';
+  }
+  const submitted = createHash('sha256').update(`${otp}:${userId}`).digest('hex');
+  if (submitted !== rec.hash) {
+    rec.attempts++;
+    return 'invalid';
+  }
+  rec.consumed = true;
+  return 'ok';
+}
+
 // Compare two phone numbers tolerantly: digits only, with or without the
 // country code / leading zero (e.g. +93 700 123 456 ≡ 93700123456 ≡ 0700123456)
 function phoneMatches(registered: string, submitted: string): boolean {
@@ -83,7 +139,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const action = body?.action;
 
-    // ── Step 1: verify the account's WhatsApp number ──
+    // ── Step 1: verify the account's WhatsApp number, then send an OTP ──
     if (action === 'verify') {
       const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
       const phone = typeof body.phone === 'string' ? body.phone : '';
@@ -97,26 +153,74 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
       }
 
-      // Short-lived, purpose-scoped token authorizing exactly one reset
+      const masked = user.phone.length > 6
+        ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3)
+        : user.phone;
+
+      // Generate a 6-digit code, store only its hash, deliver it via OpenWA
+      const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
+      storeOtp(user.id, otp);
+      try {
+        await sendWhatsAppOTP(user.phone, otp);
+      } catch (error: unknown) {
+        // Nothing verifiable exists for the user until a code is delivered
+        clearOtp(user.id);
+        // Log the failure class only — never the OTP, the API key or internals
+        console.error(
+          'WhatsApp OTP delivery failed:',
+          error instanceof Error ? error.message : 'unknown error'
+        );
+        return NextResponse.json({ error: OTP_SEND_FAILURE }, { status: 503 });
+      }
+
+      return NextResponse.json({
+        otpSent: true,
+        maskedPhone: masked,
+        expiresIn: OTP_TTL_SECONDS,
+      });
+    }
+
+    // ── Step 2: verify the 6-digit code received on WhatsApp ──
+    if (action === 'verify-otp') {
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      const otp = typeof body.otp === 'string' ? body.otp.replace(/\D/g, '') : '';
+
+      if (!email || otp.length !== 6) {
+        return NextResponse.json({ error: 'Enter the 6-digit code from your WhatsApp message.' }, { status: 400 });
+      }
+
+      const user = await db.user.findUnique({ where: { email }, select: { id: true } });
+      if (!user) {
+        return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
+      }
+
+      const result = checkOtp(user.id, otp);
+      if (result === 'expired' || result === 'missing') {
+        return NextResponse.json({ error: 'This code has expired. Please request a new one.' }, { status: 400 });
+      }
+      if (result === 'locked') {
+        return NextResponse.json({ error: 'Too many incorrect attempts. Please request a new code.' }, { status: 429 });
+      }
+      if (result === 'invalid') {
+        return NextResponse.json({ error: 'Incorrect code. Please try again.' }, { status: 400 });
+      }
+
+      // Exact same short-lived, purpose-scoped, single-use token as before —
+      // the only difference is that it is now issued AFTER the code check.
       const resetToken = await new SignJWT({ purpose: 'password-reset', userId: user.id })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(`${RESET_TOKEN_TTL_SECONDS}s`)
         .sign(JWT_SECRET);
 
-      const masked = user.phone.length > 6
-        ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3)
-        : user.phone;
-
       return NextResponse.json({
         verified: true,
         resetToken,
         expiresIn: RESET_TOKEN_TTL_SECONDS,
-        maskedPhone: masked,
       });
     }
 
-    // ── Step 2: set the new password with the verified token ──
+    // ── Step 3: set the new password with the verified token ──
     if (action === 'reset') {
       const resetToken = typeof body.resetToken === 'string' ? body.resetToken : '';
       const password = typeof body.password === 'string' ? body.password : '';
