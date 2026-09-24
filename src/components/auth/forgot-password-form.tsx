@@ -5,16 +5,19 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, KeyRound, Mail, Phone, Eye, EyeOff, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp'
+import { Loader2, KeyRound, Mail, Phone, Eye, EyeOff, CheckCircle2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 
-type Step = 'identify' | 'reset' | 'done'
+type Step = 'identify' | 'otp' | 'reset' | 'done'
 
 export function ForgotPasswordForm() {
   const { setAuthView } = useAppStore()
   const [step, setStep] = useState<Step>('identify')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [maskedPhone, setMaskedPhone] = useState('')
+  const [otp, setOtp] = useState('')
   const [resetToken, setResetToken] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -43,9 +46,62 @@ export function ForgotPasswordForm() {
         toast.error(data.error || 'We could not verify your details.')
         return
       }
+      setMaskedPhone(data.maskedPhone || '')
+      setOtp('')
+      setStep('otp')
+      toast.success('Verification code sent to your WhatsApp')
+    } catch {
+      toast.error('Something went wrong. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (otp.replace(/\D/g, '').length !== 6) {
+      toast.error('Enter the 6-digit code from your WhatsApp message')
+      return
+    }
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify-otp', email, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'We could not verify the code.')
+        return
+      }
       setResetToken(data.resetToken)
       setStep('reset')
-      toast.success('WhatsApp number verified — set a new password')
+      toast.success('Code verified — set a new password')
+    } catch {
+      toast.error('Something went wrong. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (isLoading) return
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', email, phone }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Could not send a new code.')
+        return
+      }
+      setMaskedPhone(data.maskedPhone || '')
+      setOtp('')
+      toast.success('A new code was sent to your WhatsApp')
     } catch {
       toast.error('Something went wrong. Please try again.')
     } finally {
@@ -158,6 +214,72 @@ export function ForgotPasswordForm() {
                 )}
               </Button>
             </form>
+          </>
+        )}
+
+        {step === 'otp' && (
+          <>
+            <h2 className="text-xl font-semibold text-[#1F1F1F] dark:text-white text-center mb-2">
+              Enter verification code
+            </h2>
+            <p className="text-sm text-[#444746] dark:text-gray-400 text-center mb-6">
+              We sent a 6-digit code to your WhatsApp number
+              {maskedPhone ? <span className="font-medium text-[#1F1F1F] dark:text-gray-200"> {maskedPhone}</span> : ''}.
+              Enter it below to continue.
+            </p>
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="flex justify-center">
+                <InputOTP
+                  maxLength={6}
+                  value={otp}
+                  onChange={(value) => setOtp(value.replace(/\D/g, ''))}
+                  disabled={isLoading}
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                  </InputOTPGroup>
+                  <InputOTPSeparator />
+                  <InputOTPGroup>
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1.5">
+                <MessageCircle className="w-3.5 h-3.5" />
+                The code expires in 10 minutes
+              </p>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium text-sm transition-all duration-200"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 mr-2" />
+                    Verify Code
+                  </>
+                )}
+              </Button>
+            </form>
+            <div className="text-center mt-3">
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={isLoading}
+                className="text-sm text-[#4285F4] hover:text-[#1a73e8] font-medium transition-colors disabled:opacity-50"
+              >
+                Didn&apos;t receive it? Send a new code
+              </button>
+            </div>
           </>
         )}
 
