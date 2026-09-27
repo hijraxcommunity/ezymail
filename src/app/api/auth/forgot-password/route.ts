@@ -112,17 +112,25 @@ function checkOtp(userId: string, otp: string): OtpCheckResult {
 }
 
 // Compare two phone numbers tolerantly: digits only, with or without the
-// country code / leading zero (e.g. +93 700 123 456 ≡ 93700123456 ≡ 0700123456)
+// country code / leading zero (e.g. +93 700 123 456 ≡ 93700123456 ≡ 0700123456).
+// BOTH sides are normalized so a Settings-saved local number (0700…) also
+// matches when the same number is typed with its country code (93700…).
 function phoneMatches(registered: string, submitted: string): boolean {
-  const a = registered.replace(/\D/g, '');
-  const candidates = new Set<string>();
-  const b = submitted.replace(/\D/g, '');
-  candidates.add(b);
-  if (b.startsWith('0')) candidates.add(b.replace(/^0+/, ''));
-  for (const c of candidates) {
-    if (!c) continue;
-    if (c === a) return true;
-    if (c.length >= 7 && (a.endsWith(c) || c.endsWith(a))) return true;
+  const variants = (raw: string): Set<string> => {
+    const digits = raw.replace(/\D/g, '');
+    const set = new Set<string>([digits]);
+    if (digits.startsWith('0')) set.add(digits.replace(/^0+/, ''));
+    return set;
+  };
+  const saved = variants(registered);
+  const typed = variants(submitted);
+  for (const x of typed) {
+    if (!x) continue;
+    for (const y of saved) {
+      if (!y) continue;
+      if (x === y) return true;
+      if (x.length >= 7 && (y.endsWith(x) || x.endsWith(y))) return true;
+    }
   }
   return false;
 }
