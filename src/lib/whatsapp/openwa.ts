@@ -6,18 +6,24 @@
  * server-side environment (OPENWA_API_KEY) and is never exposed to the
  * browser, API responses or logs.
  *
- * Endpoint/request format per the official OpenWA EASY API documentation
- * (docs.openwa.dev — EASY API middleware):
- *   POST {OPENWA_API_URL}/sendText
+ * Endpoint/request format per the gateway's own live OpenAPI spec
+ * (/api/docs-json, OpenWA API v0.23.5 — full REST API with session-scoped
+ * routes, NOT the EASY API flavor):
+ *   POST {OPENWA_API_URL}/api/sessions/{sessionId}/messages/send-text
  *   headers: Content-Type: application/json, X-API-Key: <key>
- *   body:    { "args": [ "<number>@c.us", "<message>" ] }
+ *   body:    { "chatId": "<number>@c.us", "text": "<message>" }
+ *
+ * A 2xx response means the gateway accepted the message for sending
+ * (201 carries a messageId); WhatsApp delivery is asynchronous by design.
  *
  * The default URL assumes OpenWA runs on the same machine as this backend.
- * In production, set OPENWA_API_URL to the real OpenWA server URL — no code
- * change required.
+ * In production, set OPENWA_API_URL to the real OpenWA server URL and
+ * OPENWA_SESSION_ID to the gateway session name (default: "default") — no
+ * code change required.
  */
 
 const DEFAULT_OPENWA_URL = 'http://localhost:2785';
+const DEFAULT_OPENWA_SESSION = 'default';
 const OPENWA_TIMEOUT_MS = 15_000;
 
 /** Error type that never carries the API key or the OTP value. */
@@ -33,7 +39,7 @@ export class OpenWAError extends Error {
 
 /**
  * Normalize the stored account phone (e.g. "+93700123456") into the OpenWA
- * chatId format documented by the EASY API ("93700123456@c.us").
+ * chatId format ("93700123456@c.us").
  * Reuses the single phone number already stored on the account — this is
  * NOT a second phone-number system.
  */
@@ -56,6 +62,7 @@ function normalizeToChatId(phone: string): string {
 export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise<void> {
   const baseUrl = (process.env.OPENWA_API_URL || DEFAULT_OPENWA_URL).replace(/\/+$/, '');
   const apiKey = process.env.OPENWA_API_KEY;
+  const sessionId = (process.env.OPENWA_SESSION_ID || DEFAULT_OPENWA_SESSION).replace(/\/+$/, '');
 
   if (!apiKey) {
     throw new OpenWAError('OpenWA API key is not configured');
@@ -73,13 +80,13 @@ export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/sendText`, {
+    response = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': apiKey,
       },
-      body: JSON.stringify({ args: [chatId, message] }),
+      body: JSON.stringify({ chatId, text: message }),
       signal: AbortSignal.timeout(OPENWA_TIMEOUT_MS),
       cache: 'no-store',
     });
@@ -92,15 +99,7 @@ export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise
     throw new OpenWAError(`OpenWA request failed with status ${response.status}`, response.status);
   }
 
-  // The EASY API sendText returns the message id string, or literal `false`
-  // when WhatsApp refused the send. Treat `false` as a delivery failure.
-  try {
-    const result: unknown = await response.json();
-    if (result === false) {
-      throw new OpenWAError('OpenWA could not deliver the message');
-    }
-  } catch (error) {
-    if (error instanceof OpenWAError) throw error;
-    // Non-JSON 2xx body — accept the send, nothing sensitive to parse.
-  }
+  // 2xx = the gateway accepted the message for sending (201 carries a
+  // messageId). Delivery itself is asynchronous on WhatsApp's side — the
+  // body is informational only, so nothing needs parsing here.
 }
