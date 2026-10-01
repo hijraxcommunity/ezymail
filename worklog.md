@@ -545,3 +545,20 @@ Work Log:
 Stage Summary:
 - USER FIX: OpenWA dashboard -> Sessions -> ezy-mail -> Start -> scan QR if prompted -> wait for running state -> retry forgot-password
 - Every other layer verified good; this is the final step
+
+---
+Task ID: 18 (cont. 4 — FINAL root cause proven with user's API key)
+Agent: Super Z (main)
+Task: Use user-provided gateway API key to inspect real session state through tunnel
+
+Work Log:
+- GET /api/sessions (with key, via tunnel): [{"id":"0907b310-de46-4d38-bee3-dd636b43c8dd","name":"ezy-mail","status":"ready","phone":"93744238083","connectedAt":"2026-10-01T16:44:04Z",...}] — session READY all along
+- KEY INSIGHT: session has UUID id separate from human name; send endpoint keyed on UUID
+- A/B proof: POST send-text by name "ezy-mail" -> 400 "Session 'ezy-mail' is not active. Start the session first." (the exact prod error); POST by UUID -> 201 {"messageId":"true_1340818325607@lid_3EB0B1E50C76DA82F7EC40_out"} — WhatsApp ACCEPTED, user received test message on their own number
+- ROOT CAUSE (definitive): gateway send endpoint requires session UUID id, not session name; misleading "not active" error returned for name-keyed sends
+- FIX delivered: OPENWA_SESSION_ID=<UUID> in Vercel + Redeploy (config-only, works today); optional code polish = resolve name->id at send time + accept status 'ready' in discovery (needs fresh push token)
+- Told user to regenerate gateway API key (was pasted in chat)
+
+Stage Summary:
+- OTP chain FULLY understood end-to-end; WhatsApp delivery proven working via UUID path
+- Pending user: env UUID + Redeploy (sufficient); optional token for name->id auto-resolution push; key regeneration
