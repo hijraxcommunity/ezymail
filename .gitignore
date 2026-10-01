@@ -60,3 +60,16 @@ server.log
 
 # Database
 *.db
+# local-only, never publish
+/db/
+/tool-results/
+/upload/
+/download/
+/chat_content.json
+/.zscripts/
+/Caddyfile
+/examples/
+/ezymail-repo/
+/mini-services/
+/scripts/
+/tests/
