@@ -96,7 +96,20 @@ export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise
   }
 
   if (!response.ok) {
-    throw new OpenWAError(`OpenWA request failed with status ${response.status}`, response.status);
+    // Capture the gateway's own error words (e.g. "Session not active") so the
+    // Vercel log names the exact cause. Server logs only — the API route maps
+    // this to a generic user-facing message. Truncated; contains no key/OTP.
+    let detail = '';
+    try {
+      const raw = await response.text();
+      detail = raw.replace(/\s+/g, ' ').trim().slice(0, 200);
+    } catch {
+      detail = '';
+    }
+    throw new OpenWAError(
+      `OpenWA request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+      response.status
+    );
   }
 
   // 2xx = the gateway accepted the message for sending (201 carries a
