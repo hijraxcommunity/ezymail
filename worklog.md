@@ -529,3 +529,19 @@ Stage Summary:
 - App side 100% shipped and deployed; config 100% correct (proven by failure classes)
 - Residual failure is gateway-side: session state or recipient validation
 - User checklist: dashboard Sessions page (ezy-mail running?), one curl send-text with their REAL number, retry forgot-password with real account, paste Vercel log line if still failing
+
+---
+Task ID: 18 (cont. 3 — DEFINITIVE root cause from Vercel logs)
+Agent: Super Z (main)
+Task: User pasted runtime logs — exact gateway rejection captured
+
+Work Log:
+- Vercel runtime log (4 occurrences 22:13-22:25): "OpenWA request failed with status 400: {\"message\":\"Session 'ezy-mail' is not active. Start the session first.\",\"error\":\"Bad Request\",\"statusCode\":400}"
+- Decoded: tunnel ALIVE, key VALID, session NAME correct — but the WhatsApp session ezy-mail EXISTS WITHOUT BEING STARTED/CONNECTED (machine reboot -> OpenWA restarted -> session not started, likely needs Start + QR scan)
+- User's "everything is fine" = session visible in dashboard list; listed != active
+- ENTIRE chain now proven: app code (559c984 live) -> Vercel env (URL+key+session) -> tunnel -> gateway route -> ONLY the session start remains
+- No code change needed; decision: no further push (token told to revoke; discovery-on-400 enhancement unnecessary since only one session exists and it must be started anyway)
+
+Stage Summary:
+- USER FIX: OpenWA dashboard -> Sessions -> ezy-mail -> Start -> scan QR if prompted -> wait for running state -> retry forgot-password
+- Every other layer verified good; this is the final step
