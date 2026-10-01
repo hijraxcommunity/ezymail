@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { createHash, randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
-import { sendWhatsAppOTP } from '@/lib/whatsapp/openwa';
+import { sendWhatsAppOTP, OpenWAError } from '@/lib/whatsapp/openwa';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'ezymail-super-secret-key-change-in-production-2024'
@@ -178,7 +178,11 @@ export async function POST(request: NextRequest) {
           'WhatsApp OTP delivery failed:',
           error instanceof Error ? error.message : 'unknown error'
         );
-        return NextResponse.json({ error: OTP_SEND_FAILURE }, { status: 503 });
+        // Coarse failure class (UNREACHABLE / AUTH / SESSION_NOT_FOUND / …) —
+        // lets the owner diagnose instantly from the network tab without
+        // leaking the key, the OTP or the gateway's raw error text.
+        const reason = error instanceof OpenWAError ? error.reason : 'SEND_REJECTED';
+        return NextResponse.json({ error: OTP_SEND_FAILURE, reason }, { status: 503 });
       }
 
       return NextResponse.json({
