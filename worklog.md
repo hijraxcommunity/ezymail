@@ -562,3 +562,16 @@ Work Log:
 Stage Summary:
 - OTP chain FULLY understood end-to-end; WhatsApp delivery proven working via UUID path
 - Pending user: env UUID + Redeploy (sufficient); optional token for name->id auto-resolution push; key regeneration
+
+---
+Task ID: 18 (COMPLETE — user confirmed working)
+Agent: Super Z (main)
+Task: WhatsApp OTP "Unable to send" — RESOLVED end-to-end
+
+Work Log:
+- User confirmed: "Thanks it is working" after setting OPENWA_SESSION_ID=<UUID> in Vercel + Redeploy
+- Final fix chain across tasks 16-18: phone matcher normalization -> gateway dialect (v0.23.5 REST) -> self-healing provider (559c984: discovery, env trim, CC-aware chatId, failure reasons) -> session UUID vs name keying
+- Open items left to user: (a) regenerate gateway API key (was pasted in chat), (b) revoke GitHub push token if not yet done, (c) optional named tunnel wa.ezy.af to stop quick-tunnel URL churn on reboots, (d) if WhatsApp session is ever re-created its UUID changes -> update OPENWA_SESSION_ID or ask for the name->id auto-resolution push
+
+Stage Summary:
+- PRODUCTION OTP FLOW FULLY OPERATIONAL; root cause was gateway keying send endpoint on session UUID, not name; misleading "not active" 400 masked it
