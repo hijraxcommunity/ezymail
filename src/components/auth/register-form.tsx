@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
+import { CountryCodePicker } from './country-code-picker'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -441,16 +442,7 @@ export function RegisterForm() {
                     WhatsApp number <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-2">
-                    <div className="relative w-24 shrink-0">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">+</span>
-                      <Input
-                        value={phoneCode}
-                        onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        inputMode="numeric"
-                        placeholder="93"
-                        className="h-11 rounded-xl pl-7 pr-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
-                      />
-                    </div>
+                    <CountryCodePicker value={phoneCode} onChange={setPhoneCode} />
                     <Input
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
