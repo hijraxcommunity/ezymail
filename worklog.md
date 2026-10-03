@@ -617,3 +617,18 @@ Stage Summary:
 - Data contract preserved: register route still receives phoneCountryCode+phone; forgot-password/business endpoints receive full international "+<dial><national>" — lenient matcher and normalizeToChatId both handle it
 - Local main = 4ac3038, ahead of origin/main by 9 commits (incl. prior junk worklog-only commits) — awaiting push once token gets repo scope
 - NOTE: token ghp_A4ua... shared in chat had NO scopes; flagged to user. Old exposed tokens should still be revoked.
+
+---
+Task ID: 19-completion
+Agent: Super Z
+Task: Push + verify country picker deployment on production
+
+Work Log:
+- User edited their classic GitHub token to add the "repo" scope (verified via X-OAuth-Scopes header: "repo")
+- Pushed main to GitHub: 559c984..4c502af, origin/main now in sync with local
+- Vercel auto-deployed; polled https://ezymail.vercel.app → 200
+- Live browser verification on production: Sign In → Forgot password → picker present ("Afghanistan (+93)"), dropdown lists 195 countries, searched "saudi" → Saudi Arabia +966, picked it → button shows "Saudi Arabia (+966)" with flag image; screenshot at download/production-forgot-picker.png
+
+Stage Summary:
+- Country-picker feature is LIVE on https://ezymail.vercel.app across signup, forgot-password, business signup and business settings
+- Token guidance given: same token now scoped to repo; old exposed tokens should still be revoked
