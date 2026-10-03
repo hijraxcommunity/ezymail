@@ -632,3 +632,23 @@ Work Log:
 Stage Summary:
 - Country-picker feature is LIVE on https://ezymail.vercel.app across signup, forgot-password, business signup and business settings
 - Token guidance given: same token now scoped to repo; old exposed tokens should still be revoked
+
+---
+Task ID: 20
+Agent: Super Z
+Task: Fix flag-picker dropdown UI (clipped by auth card, non-standard) — picker file only
+
+Work Log:
+- User screenshot (720x611): dropdown was absolutely positioned inside the auth card → card's rounded boundary clipped it mid-row and it collided with helper text/button
+- Rewrote ONLY src/components/auth/country-code-picker.tsx: dropdown now renders through Radix Popover portal (shadcn Popover, already in project) to document.body
+  - escapes any card overflow/rounded clipping
+  - align=start, sideOffset=6, collisionPadding=8 → auto-flip + auto-shift at viewport edges (verified: flips up when opened near page bottom)
+  - trigger gets data-[state=open] highlight; panel keeps identical search/keyboard/flag logic
+  - thin custom scrollbar on the country list ([scrollbar-width:thin] + webkit variants)
+- No form/page files touched — all four usages inherit the fix automatically
+- Build passed; browser-verified in dev: panel fully inside viewport at 1280x577 (shorter than user's window), portal has zero overflow-hidden ancestors, shadow-2xl applied (rgba(0,0,0,.25) 0 25px 50px -12px), radius 14px, search/pick flows pass
+- Committed + pushed (main synced); production verified: fits:true, radius 14px, new bundle live; screenshot download/production-picker-uifix.png
+
+Stage Summary:
+- Picker panel is now a standard floating overlay like Google/WhatsApp's, never clipped on any screen size
+- Search/selection/OTP-related behavior unchanged
