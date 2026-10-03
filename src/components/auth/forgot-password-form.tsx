@@ -6,8 +6,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp'
-import { Loader2, KeyRound, Mail, Phone, Eye, EyeOff, CheckCircle2, ShieldCheck, MessageCircle } from 'lucide-react'
+import { Loader2, KeyRound, Mail, Eye, EyeOff, CheckCircle2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
+import { CountryCodePicker } from './country-code-picker'
 
 type Step = 'identify' | 'otp' | 'reset' | 'done'
 
@@ -15,7 +16,9 @@ export function ForgotPasswordForm() {
   const { setAuthView } = useAppStore()
   const [step, setStep] = useState<Step>('identify')
   const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  // WhatsApp number: dial code picked from the country picker + national digits
+  const [phoneDial, setPhoneDial] = useState('93')
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [maskedPhone, setMaskedPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [resetToken, setResetToken] = useState('')
@@ -30,7 +33,7 @@ export function ForgotPasswordForm() {
       toast.error('Please enter your email address')
       return
     }
-    if (phone.replace(/\D/g, '').length < 6) {
+    if (phoneNumber.replace(/\D/g, '').length < 6) {
       toast.error('Please enter your registered WhatsApp number')
       return
     }
@@ -39,7 +42,7 @@ export function ForgotPasswordForm() {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verify', email, phone }),
+        body: JSON.stringify({ action: 'verify', email, phone: `+${phoneDial}${phoneNumber}` }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -92,7 +95,7 @@ export function ForgotPasswordForm() {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verify', email, phone }),
+        body: JSON.stringify({ action: 'verify', email, phone: `+${phoneDial}${phoneNumber}` }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -180,20 +183,20 @@ export function ForgotPasswordForm() {
                 <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
                   WhatsApp number
                 </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <div className="flex gap-2">
+                  <CountryCodePicker value={phoneDial} onChange={setPhoneDial} disabled={isLoading} />
                   <Input
                     type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    inputMode="tel"
-                    placeholder="+93 7XX XXX XXX"
-                    className="h-11 rounded-xl pl-10 pr-3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                    inputMode="numeric"
+                    placeholder="7XX XXX XXX"
+                    className="h-11 flex-1 rounded-xl px-3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
                     disabled={isLoading}
                   />
                 </div>
                 <p className="text-xs text-gray-400">
-                  The number you registered when creating your account (with or without country code)
+                  Pick your country, then enter the number you registered with
                 </p>
               </div>
               <Button

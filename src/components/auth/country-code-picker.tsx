@@ -44,9 +44,11 @@ interface CountryCodePickerProps {
   value: string
   /** Called with the picked country's dial code digits */
   onChange: (dial: string) => void
+  /** Disable the trigger (e.g. while the form is submitting) */
+  disabled?: boolean
 }
 
-export function CountryCodePicker({ value, onChange }: CountryCodePickerProps) {
+export function CountryCodePicker({ value, onChange, disabled = false }: CountryCodePickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -123,8 +125,9 @@ export function CountryCodePicker({ value, onChange }: CountryCodePickerProps) {
         onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
         title={`${selected.name} (+${selected.dial}) — change country`}
-        className="h-11 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 flex items-center justify-center gap-1.5 text-sm hover:border-[#4285F4]/50 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none transition-colors cursor-pointer"
+        className="h-11 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 flex items-center justify-center gap-1.5 text-sm hover:border-[#4285F4]/50 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-gray-200 dark:disabled:hover:border-gray-700"
       >
         <Flag iso2={selected.iso2} size={20} />
         <span className="text-gray-700 dark:text-gray-200 tabular-nums">+{value}</span>

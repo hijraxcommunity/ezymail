@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import {
   Building2,
   Mail,
-  Phone,
   Users,
   ShieldCheck,
   CreditCard,
@@ -34,6 +33,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { CountryCodePicker } from '@/components/auth/country-code-picker'
+import { splitPhone } from '@/lib/countries'
 
 /* ─── Types ─── */
 
@@ -180,6 +181,8 @@ export function BusinessSettings() {
 
   // Editable fields
   const [editBusinessName, setEditBusinessName] = useState('')
+  // Phone: dial code from the country picker + national digits
+  const [editPhoneDial, setEditPhoneDial] = useState('93')
   const [editPhone, setEditPhone] = useState('')
   const [editEmployeeCount, setEditEmployeeCount] = useState('')
 
@@ -203,7 +206,9 @@ export function BusinessSettings() {
         const data = await profileRes.json()
         setProfile(data.user)
         setEditBusinessName(data.user.businessName || '')
-        setEditPhone(data.user.phone || '')
+        const parsedPhone = splitPhone(data.user.phone || '')
+        setEditPhoneDial(parsedPhone.dial)
+        setEditPhone(parsedPhone.national)
         setEditEmployeeCount(data.user.employeeCount || '')
       }
 
@@ -233,7 +238,9 @@ export function BusinessSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           businessName: editBusinessName.trim() || null,
-          phone: editPhone.trim() || null,
+          phone: editPhone.replace(/\D/g, '')
+            ? `+${editPhoneDial}${editPhone.replace(/\D/g, '')}`
+            : null,
           employeeCount: editEmployeeCount.trim() || null,
         }),
       })
@@ -398,12 +405,16 @@ export function BusinessSettings() {
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">
               Phone Number
             </label>
-            <Input
-              value={editPhone}
-              onChange={(e) => setEditPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className="rounded-xl dark:bg-gray-800"
-            />
+            <div className="flex gap-2">
+              <CountryCodePicker value={editPhoneDial} onChange={setEditPhoneDial} />
+              <Input
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                inputMode="numeric"
+                placeholder="700 123 456"
+                className="flex-1 rounded-xl dark:bg-gray-800"
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">
