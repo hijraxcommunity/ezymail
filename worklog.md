@@ -593,3 +593,27 @@ Work Log:
 Stage Summary:
 - Feature complete, visually verified (screenshots), committed locally as 9d747ca, awaiting push token
 - OTP work from task 18 unaffected; register API contract untouched
+
+---
+Task ID: 19
+Agent: Super Z (GLM session continued)
+Task: Fix phone country code feature — WhatsApp/Google-style country picker on all phone inputs (user: "Do not touch anything else")
+
+Work Log:
+- Found prior session work already committed locally (9d747ca): countries.ts full list, country-code-picker.tsx component, picker wired into register-form signup WhatsApp number
+- countries.ts: added DEFAULT_COUNTRY (AF), PREFERRED_BY_DIAL for shared codes (+1→US, +7→RU, +39→IT — same as WhatsApp/Google), splitPhone() conservative parser; findCountryByDial now prefers primary country
+- country-code-picker.tsx: added disabled prop (disables trigger while form submits)
+- forgot-password-form.tsx: WhatsApp number field now = CountryCodePicker + digits-only Input (was free text with Phone icon); submits "+<dial><national>" which matches register-stored format and the lenient phoneMatches()
+- business-register-form.tsx: optional phone = picker + digits-only input; submits "+<dial><national>" or undefined; review screen shows +dial national
+- business-settings.tsx: phone edit = picker + digits input; loads via splitPhone(data.user.phone) (handles "+93…", "00…", "0…", bare digits); saves "+<dial><national>" (compatible with normalizeToChatId + phoneMatches)
+- contacts-panel.tsx phone left untouched (address-book free-text data, not the account country-code feature — per user instruction)
+- New tests: scripts/test-countries.ts (23/23 pass — list integrity, flag emoji, preferred dial resolution, splitPhone edge cases); scripts/test-forgot-picker.sh (browser smoke test via agent-browser)
+- npm run build: SUCCESS; npm run lint: 5 pre-existing problems, identical before/after (baseline verified via git stash) — zero new issues
+- Browser smoke test on real forgot-password form: picker default Afghanistan (+93), 195 countries listed, search by name and dial code works, pick UK → "United Kingdom (+44)" shown, digits-only input verified; screenshot in download/forgot-password-picker.png
+- Committed 4ac3038; push FAILED 403 — user's new classic GitHub token has EMPTY x-oauth-scopes (no repo scope); user must edit token and check "repo" scope, then re-push
+
+Stage Summary:
+- All phone/country-code inputs across the app now use the WhatsApp/Google-style flag+code picker: signup, forgot-password, business signup, business settings
+- Data contract preserved: register route still receives phoneCountryCode+phone; forgot-password/business endpoints receive full international "+<dial><national>" — lenient matcher and normalizeToChatId both handle it
+- Local main = 4ac3038, ahead of origin/main by 9 commits (incl. prior junk worklog-only commits) — awaiting push once token gets repo scope
+- NOTE: token ghp_A4ua... shared in chat had NO scopes; flagged to user. Old exposed tokens should still be revoked.
