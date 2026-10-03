@@ -1,15 +1,21 @@
 'use client'
 
 /**
- * WhatsApp/Google-style country code picker for the signup WhatsApp number.
+ * WhatsApp/Google-style country code picker for phone number fields.
  * Click the flag+code button -> searchable list of every country with its
  * flag and dial code -> picking one sets the dial code.
+ *
+ * The panel renders through a Radix Popover PORTAL (document.body), so it
+ * floats above the form card instead of being clipped by the card's
+ * rounded/overflow boundary, and it auto-flips/auto-shifts to stay inside
+ * the viewport on any screen size.
  * Flags render as images (flagcdn) so they appear on every OS — Windows
  * cannot render flag emoji natively; if the image fails we fall back to
  * the emoji derived from the ISO code.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { COUNTRIES, findCountryByDial, isoToFlagEmoji, type Country } from '@/lib/countries'
 
 function Flag({ iso2, size = 20 }: { iso2: string; size?: number }) {
@@ -52,8 +58,6 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const selected = findCountryByDial(value) ?? COUNTRIES.find((c) => c.dial === '93')!
@@ -70,43 +74,28 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
     )
   }, [query])
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const onDocDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+  // Fresh search/highlight state on every open
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      setQuery('')
+      setHighlight(0)
     }
-    document.addEventListener('mousedown', onDocDown)
-    return () => document.removeEventListener('mousedown', onDocDown)
-  }, [open])
-
-  const toggle = () => {
-    if (open) {
-      setOpen(false)
-      return
-    }
-    // Fresh list state on every open (search + highlight), no effect needed
-    setQuery('')
-    setHighlight(0)
-    setOpen(true)
+    setOpen(next)
   }
 
   // Keep the highlighted row visible while arrowing through the list
   useEffect(() => {
     const el = listRef.current?.children[highlight] as HTMLElement | undefined
     el?.scrollIntoView({ block: 'nearest' })
-  }, [highlight])
+  }, [highlight, open])
 
   const pick = (c: Country) => {
     onChange(c.dial)
     setOpen(false)
   }
 
-  const onListKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      setOpen(false)
-    } else if (e.key === 'ArrowDown') {
+  const onListKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
       e.preventDefault()
       setHighlight((h) => Math.min(h + 1, Math.max(filtered.length - 1, 0)))
     } else if (e.key === 'ArrowUp') {
@@ -119,30 +108,33 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
   }
 
   return (
-    <div ref={rootRef} className="relative w-28 shrink-0">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        title={`${selected.name} (+${selected.dial}) — change country`}
-        className="h-11 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 flex items-center justify-center gap-1.5 text-sm hover:border-[#4285F4]/50 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-gray-200 dark:disabled:hover:border-gray-700"
-      >
-        <Flag iso2={selected.iso2} size={20} />
-        <span className="text-gray-700 dark:text-gray-200 tabular-nums">+{value}</span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
+    <div className="relative w-28 shrink-0">
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            title={`${selected.name} (+${selected.dial}) — change country`}
+            className="h-11 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 flex items-center justify-center gap-1.5 text-sm hover:border-[#4285F4]/50 focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-gray-200 dark:disabled:hover:border-gray-700 data-[state=open]:border-[#4285F4]"
+          >
+            <Flag iso2={selected.iso2} size={20} />
+            <span className="text-gray-700 dark:text-gray-200 tabular-nums">+{value}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </PopoverTrigger>
 
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          collisionPadding={8}
+          className="w-72 rounded-xl border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-0 shadow-2xl overflow-hidden"
+        >
           <div className="p-2 border-b border-gray-100 dark:border-gray-800">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
-                ref={searchRef}
                 autoFocus
                 value={query}
                 onChange={(e) => {
@@ -156,7 +148,12 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
               />
             </div>
           </div>
-          <div ref={listRef} role="listbox" aria-label="Countries" className="max-h-64 overflow-y-auto py-1">
+          <div
+            ref={listRef}
+            role="listbox"
+            aria-label="Countries"
+            className="max-h-64 overflow-y-auto py-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
+          >
             {filtered.length === 0 && (
               <div className="px-3 py-6 text-center text-sm text-gray-400">No country found</div>
             )}
@@ -190,8 +187,8 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
               )
             })}
           </div>
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
     </div>
   )
 }
