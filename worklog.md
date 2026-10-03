@@ -575,3 +575,21 @@ Work Log:
 
 Stage Summary:
 - PRODUCTION OTP FLOW FULLY OPERATIONAL; root cause was gateway keying send endpoint on session UUID, not name; misleading "not active" 400 masked it
+
+---
+Task ID: 19
+Agent: Super Z (main)
+Task: Country code picker feature on signup WhatsApp number field (user request: "like google and whatsapp"; scope: phone country code feature ONLY)
+
+Work Log:
+- Created src/lib/countries.ts: 195 countries (iso2, name, ITU dial), flag emoji derived from iso2 at runtime
+- Created src/components/auth/country-code-picker.tsx: flag+code trigger button, searchable dropdown (name OR dial code search), flag IMAGES via flagcdn w40/w80 (emoji fallback on img error — Windows cannot render flag emoji), keyboard navigation (arrows/enter/escape), outside-click close, dark-mode styling, exact same h-11 rounded-xl design language as the form
+- register-form.tsx: swapped the old plain +93 code input for <CountryCodePicker value={phoneCode} onChange={setPhoneCode} /> — state + submit payload (phoneCountryCode, phone) UNCHANGED, default still +93 Afghanistan
+- Test harness: temporary /picker-test page (deleted after) because local register flow is blocked by no-DB (check-email marks everything 'taken'); browser-verified via agent-browser evals: default +93, 195 options, name search (turk -> Turkey+Turkmenistan), dial search (971 -> UAE), pick -> flag+code in box, state emits dial code, repeat selection; screenshots in download/country-picker-*.png
+- Fixed 2 new lint issues from my file (unused eslint-disable; setState-in-effect -> resets moved to toggle handler + autoFocus)
+- Lint = 5 baseline, build clean; commit 9d747ca (exactly 3 files), NOT pushed — no token in session
+- Note: sandbox kills background servers between tool calls; E2E must run server+flow in ONE bash invocation
+
+Stage Summary:
+- Feature complete, visually verified (screenshots), committed locally as 9d747ca, awaiting push token
+- OTP work from task 18 unaffected; register API contract untouched
