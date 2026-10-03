@@ -216,7 +216,53 @@ export function isoToFlagEmoji(iso2: string): string {
     .join('');
 }
 
+/** App default (EzyMail's primary market) — used by pickers and parsing. */
+export const DEFAULT_COUNTRY: Country =
+  COUNTRIES.find((c) => c.iso2 === 'AF') ?? COUNTRIES[0];
+
+/**
+ * Several countries share one dial code (+1 North America, +7, +39 …).
+ * Like WhatsApp/Google, show the "primary" country's flag for the shared
+ * code when all we know is the dial code itself.
+ */
+const PREFERRED_BY_DIAL: Record<string, string> = {
+  '1': 'US', // North American Numbering Plan → United States
+  '7': 'RU', // Russia / Kazakhstan → Russia
+  '39': 'IT', // Italy / Vatican → Italy
+  '47': 'NO', // Norway (future-proof)
+  '61': 'AU', // Australia / territories
+};
+
 export function findCountryByDial(dial: string): Country | undefined {
   const digits = dial.replace(/\D/g, '');
+  const preferredIso = PREFERRED_BY_DIAL[digits];
+  if (preferredIso) {
+    const preferred = COUNTRIES.find((c) => c.iso2 === preferredIso);
+    if (preferred) return preferred;
+  }
   return COUNTRIES.find((c) => c.dial === digits);
+}
+
+/**
+ * Split a stored/typed phone value into { dial, national } for the picker.
+ * Conservative: only splits the dial code off when the value is clearly
+ * international ("+…" or "00…"); otherwise the digits stay in the national
+ * part with the app default dial, so nothing is ever lost.
+ */
+export function splitPhone(raw: string): { dial: string; national: string } {
+  const trimmed = (raw || '').trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return { dial: DEFAULT_COUNTRY.dial, national: '' };
+
+  if (trimmed.startsWith('+') || digits.startsWith('00')) {
+    const rest = digits.startsWith('00') ? digits.slice(2) : digits;
+    // Dial codes are 1–4 digits: try the longest match first.
+    for (let len = Math.min(4, rest.length - 1); len >= 1; len--) {
+      const match = findCountryByDial(rest.slice(0, len));
+      if (match) {
+        return { dial: match.dial, national: rest.slice(match.dial.length) };
+      }
+    }
+  }
+  return { dial: DEFAULT_COUNTRY.dial, national: digits };
 }

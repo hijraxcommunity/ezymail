@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2,
   Mail,
-  Phone,
   Users,
   Eye,
   EyeOff,
@@ -27,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
+import { CountryCodePicker } from './country-code-picker'
 
 const EMPLOYEE_OPTIONS = [
   { value: '1-10', label: '1–10 employees' },
@@ -82,7 +82,9 @@ export function BusinessRegisterForm() {
   // Step 2: Email
   const [emailPrefix, setEmailPrefix] = useState('')
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
-  const [phone, setPhone] = useState('')
+  // Phone (optional): dial code from the country picker + national digits
+  const [phoneDial, setPhoneDial] = useState('93')
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [employeeCount, setEmployeeCount] = useState('')
 
   // Step 3: Password
@@ -182,7 +184,7 @@ export function BusinessRegisterForm() {
           firstName,
           lastName,
           businessEmail: fullBusinessEmail,
-          phone: phone || undefined,
+          phone: phoneNumber ? `+${phoneDial}${phoneNumber}` : undefined,
           employeeCount: employeeCount || undefined,
           password: passwordForm.getValues('password'),
         }),
@@ -398,13 +400,17 @@ export function BusinessRegisterForm() {
                   <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
                     Phone Number <span className="text-xs text-gray-400 font-normal">(optional)</span>
                   </label>
-                  <Input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                    className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
-                  />
+                  <div className="flex gap-2">
+                    <CountryCodePicker value={phoneDial} onChange={setPhoneDial} />
+                    <Input
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                      inputMode="numeric"
+                      placeholder="7XX XXX XXX"
+                      className="h-11 flex-1 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
@@ -558,10 +564,10 @@ export function BusinessRegisterForm() {
                       {fullBusinessEmail || 'Not set'}
                     </span>
                   </div>
-                  {phone && (
+                  {phoneNumber && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Phone</span>
-                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">{phone}</span>
+                      <span className="text-sm font-medium text-[#1F1F1F] dark:text-white">+{phoneDial} {phoneNumber}</span>
                     </div>
                   )}
                   {employeeCount && (
