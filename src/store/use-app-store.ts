@@ -195,6 +195,10 @@ interface AppState {
   setCurrentFolder: (folder: MailView) => void;
   setCurrentFolderId: (id: string | null) => void;
   setEmails: (emails: EmailWithSender[]) => void;
+  /** Gmail-style pagination: merge the next page into the loaded list.
+   *  Dedupes by id and hides replies whose root email is already visible.
+   *  Returns how many emails were actually added (0 = history exhausted). */
+  appendEmails: (incoming: EmailWithSender[]) => number;
   setSelectedEmailId: (id: string | null) => void;
   setComposeOpen: (open: boolean) => void;
   setReplyToEmail: (email: EmailWithSender | null, mode?: 'reply' | 'replyAll' | 'forward') => void;
@@ -377,6 +381,21 @@ export const useAppStore = create<AppState>()(
         selectedEmailIds: new Set(),
       }),
       setEmails: (emails) => set({ emails }),
+      appendEmails: (incoming) => {
+        if (!incoming.length) return 0
+        const state = get()
+        const seenIds = new Set(state.emails.map((e) => e.id))
+        const seenThreads = new Set(state.emails.map((e) => e.threadId || e.id))
+        const fresh = incoming.filter((e) => {
+          if (seenIds.has(e.id)) return false
+          if (e.threadId && e.threadId !== e.id && seenThreads.has(e.threadId)) return false
+          return true
+        })
+        if (fresh.length > 0) {
+          set({ emails: [...state.emails, ...fresh] })
+        }
+        return fresh.length
+      },
       setSelectedEmailId: (id) => set({ selectedEmailId: id, emailDetailOpen: !!id }),
       setComposeOpen: (open) => set({ composeOpen: open, replyToEmail: null, replyMode: null, editDraftEmail: null, requestComposeClose: false }),
       setReplyToEmail: (email, mode) => set({ replyToEmail: email, composeOpen: true, replyMode: mode || null }),

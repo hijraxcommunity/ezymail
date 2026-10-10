@@ -94,7 +94,7 @@ function getStoredPreferences(): NotificationPreferences {
 // ─── Main Hook ─────────────────────────────────────────────────────────────
 
 export function useNotifications() {
-  const { isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setNewEmailNotification, setSelectedEmailId } = useAppStore()
+  const { isAuthenticated, setCurrentFolder, appendEmails, setTotalEmails, setNewEmailNotification, setSelectedEmailId } = useAppStore()
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prefsRef = useRef<NotificationPreferences>(getStoredPreferences())
@@ -194,7 +194,9 @@ export function useNotifications() {
           const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=${currentPage}&limit=20`)
           if (refreshRes.ok) {
             const refreshData = await refreshRes.json()
-            setEmails(refreshData.emails || [])
+            // Merge instead of replace — keeps already-loaded older messages
+            // (and the user's scroll position) intact
+            appendEmails(refreshData.emails || [])
             setTotalEmails(refreshData.total || 0)
           }
         }
@@ -247,7 +249,7 @@ export function useNotifications() {
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, setCurrentFolder, setEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification])
+  }, [isAuthenticated, setCurrentFolder, appendEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {
@@ -289,7 +291,8 @@ export function useNotifications() {
             .then(res => res.ok ? res.json() : null)
             .then(data => {
               if (data) {
-                setEmails(data.emails || [])
+                // Merge instead of replace — preserves loaded history + scroll
+                appendEmails(data.emails || [])
                 setTotalEmails(data.total || 0)
               }
             })
@@ -300,5 +303,5 @@ export function useNotifications() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [isAuthenticated, pollForNewEmails, setEmails, setTotalEmails])
+  }, [isAuthenticated, pollForNewEmails, appendEmails, setTotalEmails])
 }

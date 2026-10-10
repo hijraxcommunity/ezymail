@@ -53,6 +53,7 @@ export function EmailList() {
     adminView,
     setSelectedEmailId,
     setEmails,
+    appendEmails,
     setIsLoading,
     setCurrentPage,
     setTotalEmails,
@@ -79,6 +80,12 @@ export function EmailList() {
   const touchStartY = useRef<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollSaveRafRef = useRef<number | null>(null)
+  // Gmail-style infinite scroll: older messages auto-append as the user scrolls
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const isLoadingMoreRef = useRef(false) // guards the setPage → fetch gap
+  const noMoreRef = useRef(false) // older history exhausted for this folder
+  const maxPageLoadedRef = useRef(0) // highest page fetched for this folder
+  const lastLoadErrorAtRef = useRef(0) // throttle auto-retries after a failure
 
   const fetchEmails = useCallback(async () => {
     if (!isAuthenticated) return
@@ -86,6 +93,11 @@ export function EmailList() {
       setIsLoading(false)
       return
     }
+    // A new fetch cycle invalidates any pending load-more trigger
+    isLoadingMoreRef.current = false
+    // Page 1 replaces the list (fresh view); deeper pages APPEND to it so
+    // previously loaded messages (and the user's scroll position) are kept
+    const append = currentPage > 1
     setIsLoading(true)
     try {
       const params = new URLSearchParams()
@@ -95,25 +107,44 @@ export function EmailList() {
       const res = await fetch(`/api/emails?${params}`)
       const data = await res.json()
       if (res.ok) {
-        setEmails(data.emails || [])
+        if (append) {
+          const added = appendEmails(data.emails || [])
+          if (currentPage > maxPageLoadedRef.current) {
+            maxPageLoadedRef.current = currentPage
+            // A brand-new page that yielded nothing new means older history
+            // is exhausted (server thread-grouping can shrink pages)
+            if (added === 0) noMoreRef.current = true
+          }
+        } else {
+          maxPageLoadedRef.current = 1
+          noMoreRef.current = false
+          setEmails(data.emails || [])
+        }
         setTotalEmails(data.total || 0)
+      } else {
+        lastLoadErrorAtRef.current = Date.now()
       }
     } catch {
+      lastLoadErrorAtRef.current = Date.now()
       toast.error('Failed to load emails')
     } finally {
       setIsLoading(false)
-      // PRD 5.2: Restore scroll position
-      const saved = scrollPositions[currentFolder]
-      if (saved && saved > 0 && scrollContainerRef.current) {
-        requestAnimationFrame(() => {
-          scrollContainerRef.current?.scrollTo(0, saved)
-        })
+      if (!append) {
+        // PRD 5.2: Restore scroll position (page-1 loads only — appends must
+        // never move the viewport while the user is reading)
+        const saved = scrollPositions[currentFolder]
+        if (saved && saved > 0 && scrollContainerRef.current) {
+          requestAnimationFrame(() => {
+            scrollContainerRef.current?.scrollTo(0, saved)
+          })
+        }
       }
     }
   }, [
     isAuthenticated,
     currentFolder,
     currentPage,
+    appendEmails,
     setEmails,
     setIsLoading,
     setTotalEmails,
@@ -145,6 +176,21 @@ export function EmailList() {
     prevOverlayRef.current = overlayOpen
   }, [settingsView, contactsView, adminView, fetchEmails])
 
+  // ─── Explicit refresh (button / pull-to-refresh) ──────────────────────
+  // Reloads from the newest page like Gmail: pagination resets to page 1 and
+  // the stale deep-scroll memory is cleared so the viewport is not yanked
+  const refreshFromTop = async () => {
+    if (currentFolder === 'search') return
+    noMoreRef.current = false
+    scrollContainerRef.current?.scrollTo(0, 0)
+    if (currentPage !== 1) {
+      setScrollPosition(currentFolder, 0)
+      setCurrentPage(1) // effect refetches page 1 and replaces the list
+    } else {
+      await fetchEmails()
+    }
+  }
+
   // Pull-to-refresh touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     const scrollTop = scrollContainerRef.current?.scrollTop || 0
@@ -172,7 +218,7 @@ export function EmailList() {
       setIsRefreshing(true)
       setPullDistance(0)
       touchStartY.current = null
-      await fetchEmails()
+      await refreshFromTop()
       toast.success('Emails refreshed')
       setIsRefreshing(false)
     } else {
@@ -201,11 +247,34 @@ export function EmailList() {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
   const isSearch = currentFolder === 'search'
-  const hasMore = isSearch ? false : currentPage * 20 < totalEmails
+  const hasMore = !isSearch && !noMoreRef.current && currentPage * 20 < totalEmails
   const selectedCount = selectedEmailIds.size
   const allSelected =
     displayEmails.length > 0 &&
     displayEmails.every((e) => selectedEmailIds.has(e.id))
+
+  // ─── Gmail-style infinite scroll ─────────────────────────────────────────
+  // A sentinel below the last card auto-loads the next page shortly before
+  // the user reaches the bottom, so older messages appear seamlessly
+  useEffect(() => {
+    const el = sentinelRef.current
+    const root = scrollContainerRef.current
+    if (!el || !root || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        if (isLoading || isLoadingMoreRef.current) return
+        if (!hasMore) return
+        // Back off briefly after a failed load to avoid a request storm
+        if (Date.now() - lastLoadErrorAtRef.current < 2000) return
+        isLoadingMoreRef.current = true
+        setCurrentPage(currentPage + 1)
+      },
+      { root, rootMargin: '600px 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, isLoading, currentPage, currentFolder, displayEmails.length, setCurrentPage])
 
   // Bulk actions
   const handleBulkDelete = async () => {
@@ -357,7 +426,7 @@ export function EmailList() {
             variant="ghost"
             size="icon"
             className="h-11 w-11 shrink-0"
-            onClick={fetchEmails}
+            onClick={refreshFromTop}
             disabled={isLoading}
           >
             <RefreshCw
@@ -607,15 +676,26 @@ export function EmailList() {
               ))
             })()}
             {hasMore && (
-              <div className="p-4 text-center">
-                <Button
-                  variant="ghost"
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={isLoading}
-                  className="text-sm text-[#4285F4] hover:text-[#1a73e8]"
-                >
-                  {isLoading ? 'Loading...' : 'Load more emails'}
-                </Button>
+              <div ref={sentinelRef} className="p-4 text-center">
+                {isLoading && emails.length > 0 ? (
+                  <span className="inline-flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Loading older messages…
+                  </span>
+                ) : typeof IntersectionObserver === 'undefined' ? (
+                  // Manual fallback only for browsers without IntersectionObserver
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      isLoadingMoreRef.current = true
+                      setCurrentPage(currentPage + 1)
+                    }}
+                    disabled={isLoading}
+                    className="text-sm text-[#4285F4] hover:text-[#1a73e8]"
+                  >
+                    Load more emails
+                  </Button>
+                ) : null}
               </div>
             )}
           </div>

@@ -652,3 +652,23 @@ Work Log:
 Stage Summary:
 - Picker panel is now a standard floating overlay like Google/WhatsApp's, never clipped on any screen size
 - Search/selection/OTP-related behavior unchanged
+
+---
+Task ID: 20
+Agent: Super Z
+Task: Gmail-style infinite scroll for older messages on Sent, Trash and all other mail pages (user: "when I scroll the messages and then I want to go to earlier message from old it does not work on sent, trash and some other pages - fix like gmail, scroll smoothly, do not touch anything else")
+
+Work Log:
+- Root cause: the list fetch REPLACED the whole emails array with only the current page (20). "Load more emails" button bumped the page -> refetch -> replace, so older messages never accumulated; the notification hook's new-mail poll and tab-visibility refresh also collapsed a deep-scrolled list back to one page.
+- store (use-app-store.ts): added additive appendEmails(incoming) action - merges the next page into the loaded list, dedupes by id, hides replies whose root email is already visible (mirrors server thread grouping); returns count actually added (0 = history exhausted).
+- email-list.tsx: page 1 still replaces (fresh folder view); page > 1 now APPENDS via appendEmails so previously loaded messages and scroll position are kept. Scroll restore (PRD 5.2) now runs only on page-1 loads so appends never move the viewport.
+- email-list.tsx: replaced the "Load more emails" button with an IntersectionObserver sentinel (rootMargin 600px) that auto-loads the next page shortly before the user reaches the bottom - Gmail-style smooth infinite scroll. Guards: no double-trigger (isLoadingMoreRef), back-off after failed load (lastLoadErrorAtRef), hard stop when a brand-new page yields 0 new items (noMoreRef, handles server thread-grouping shrink), manual fallback button only for browsers without IntersectionObserver.
+- email-list.tsx: refresh button + pull-to-refresh now reload from the newest page (reset to page 1, clear stale deep scroll memory) instead of refetching the current deep page.
+- use-notifications.tsx: new-mail poll refresh and tab-visibility refresh now merge via appendEmails instead of replacing - list history and scroll position survive.
+- Verification: 45 sent + 45 trash ScrollTest emails seeded for john.doe@ezy.af; E2E (scripts/test-infinite-scroll.sh): Sent 20 -> 40 -> 46 cards purely by scrolling, oldest #45 reachable, zero duplicates, Trash fills to 45 and stops exactly at exhaustion (no request loop), Inbox regression 4 cards OK, no page errors. Opening a deep email (#30) and pressing Back keeps all 46 cards and the exact scroll offset (2921 -> 2921) - previously the list collapsed to 20.
+- bun run build: pass; bun run lint: same 5 pre-existing issues only, none in changed files. prisma/schema.prisma temporarily switched to sqlite for local dev and restored to postgresql before commit.
+
+Stage Summary:
+- Older messages now load seamlessly on scroll across ALL folders (Sent, Trash, Archive, Starred, Spam, custom folders) like Gmail - no button click needed.
+- 3 files changed only: src/components/mail/email-list.tsx, src/store/use-app-store.ts, src/hooks/use-notifications.tsx (additive store action; no UI redesign, all other elements untouched).
+- Screenshots: download/infinite-scroll-sent.png, download/infinite-scroll-trash.png, download/infinite-scroll-inbox.png
