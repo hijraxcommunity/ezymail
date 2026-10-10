@@ -688,3 +688,17 @@ Work Log:
 Stage Summary:
 - Collapsed old messages now read Gmail-like: preview tucked under the name, clear separation before the next reply; expanded thread untouched
 - Also shipping previously-verified commit 571a747 (Gmail-style infinite scroll) that was still unpushed
+
+---
+Task ID: 21-completion
+Agent: Super Z
+Task: Push + verify thread-spacing fix on production
+
+Work Log:
+- Pushed main: 571a747..abdc3c2 (spacing fix on top of the already-pushed infinite-scroll commit)
+- GitHub commit status: Vercel "Deployment has completed" for abdc3c2 at 14:15Z
+- Landing-HTML CSS grep initially looked stale (Turbopack serves the rule from a client-loaded chunk, not the 2 CSS files referenced in the HTML shell) — resolved by real-browser check on https://ezymail.vercel.app: synthetic element with class pb-3.5 computes paddingBottom = 14px (rule live); ml-9 sanity check = 36px
+- New JS chunk confirmed live: /_next/static/chunks/0l561z35h-nkl.js contains the new 'pb-3.5' template literal
+
+Stage Summary:
+- Thread spacing fix is LIVE on https://ezymail.vercel.app: collapsed preview aligned under sender name (was +36px indent), tighter name-to-preview gap, 14px breathing room before the next reply (was 8px); expanded thread layout untouched
