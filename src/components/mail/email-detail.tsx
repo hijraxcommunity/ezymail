@@ -322,7 +322,7 @@ function ThreadMessage({
     <>
       {/* Clickable header row */}
       <div
-        className="w-full flex items-center gap-2.5 py-2 text-left cursor-pointer group"
+        className={`w-full flex items-center gap-2.5 pt-2 ${isExpanded ? 'pb-2' : 'pb-3.5'} text-left cursor-pointer group`}
         onClick={onToggle}
       >
         <Popover>
@@ -356,8 +356,8 @@ function ThreadMessage({
               {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
             </span>
           </div>
-          <div className="mt-0.5">
-            {isExpanded && (
+          {isExpanded && (
+            <div className="mt-0.5">
               <span
                 onClick={(e) => { e.stopPropagation(); setShowInfoBox(!showInfoBox) }}
                 className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#4285F4] dark:hover:text-[#8AB4F8] transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 px-1.5 py-0.5 cursor-pointer"
@@ -370,10 +370,10 @@ function ThreadMessage({
                   <ChevronDown className="w-3 h-3" />
                 </motion.span>
               </span>
-            )}
-          </div>
+            </div>
+          )}
           {!isExpanded && (
-            <p className="text-xs text-gray-500 truncate mt-0.5 ml-9">
+            <p className="text-xs text-gray-500 truncate mt-0.5">
               {previewText}
             </p>
           )}

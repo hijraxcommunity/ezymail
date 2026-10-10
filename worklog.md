@@ -672,3 +672,19 @@ Stage Summary:
 - Older messages now load seamlessly on scroll across ALL folders (Sent, Trash, Archive, Starred, Spam, custom folders) like Gmail - no button click needed.
 - 3 files changed only: src/components/mail/email-list.tsx, src/store/use-app-store.ts, src/hooks/use-notifications.tsx (additive store action; no UI redesign, all other elements untouched).
 - Screenshots: download/infinite-scroll-sent.png, download/infinite-scroll-trash.png, download/infinite-scroll-inbox.png
+
+---
+Task ID: 21
+Agent: Super Z
+Task: Email thread spacing polish — collapsed reply preview sits near its name + more gap between two replies (user screenshot marked; "do not touch anything else")
+
+Work Log:
+- User screenshot: (a) wanted a little more gap between a collapsed old reply and the next reply (red line), (b) the collapsed preview starting "The raw push..." had a long gap from the sender name when the old message was closed (expanded thread was fine)
+- Root cause in ThreadMessage (src/components/mail/email-detail.tsx): collapsed preview <p> had ml-9 (36px extra indent past the name) and an always-rendered empty "to me" wrapper div with mt-0.5 added a stray vertical margin when collapsed; header row used flat py-2 (8px bottom) before the divider
+- Fix (collapsed state only): preview drops ml-9 -> left edge exactly aligned with sender name (measured alignDelta 0 vs +36px before); empty wrapper div now renders only when expanded (expanded structure byte-identical); header pt-2 + pb-2 when expanded / pb-3.5 when collapsed -> gap preview-to-next-divider 14px vs 8px before (+6px "little more gap", also applies between consecutive collapsed replies)
+- Verified in browser against seeded 3-message thread (scripts/seed-thread-spacing.ts, scripts/test-thread-spacing.sh): alignDelta 0, nameBottomToPrevTop 2px, gapToNext 14px on both collapsed messages; toggle msg2 expand -> chip + body render, header-to-next 212.8px (body height, expanded layout unchanged); collapse -> back to 14px. Screenshots: download/thread-spacing-state1.png, download/thread-spacing-user-scenario.png
+- bun run build pass; lint baseline identical (same 5 pre-existing, none in changed file); only email-detail.tsx touched (6+/-6 lines); prisma schema sqlite<->postgresql round-trip restored before commit
+
+Stage Summary:
+- Collapsed old messages now read Gmail-like: preview tucked under the name, clear separation before the next reply; expanded thread untouched
+- Also shipping previously-verified commit 571a747 (Gmail-style infinite scroll) that was still unpushed
