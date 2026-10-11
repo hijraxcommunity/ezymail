@@ -719,3 +719,21 @@ Work Log:
 
 Stage Summary:
 - Scrolling to older messages now shows a Gmail-app-style circular loader at the bottom center of the list for as long as the fetch takes — no more silent "stuck" feeling; everything else untouched
+
+---
+Task ID: 22-fix
+Agent: Super Z
+Task: "I did not see any loader check what is wrong?" — diagnose why the Task 22 loader never showed in production and fix with loader-only changes
+
+Work Log:
+- Verified deploy was NOT the issue: GitHub status "Deployment has completed" for 20ffddd; production chunk 15oks83.u5fzt.js contains the loader code — the user's browser did serve it
+- Root causes found (all in the trigger logic, not deployment): (a) bare 28px gray spinner was only mounted while isLoading stayed true — instant network failures (flaky mobile) flip isLoading true→false between frames so React never paints it, and fast loads flash it for <300ms — effectively invisible; (b) a single failed load-older left the list PERMANENTLY stuck: observer re-arms during the 2s backoff, gets no new intersection events afterwards, no retry ever fires — matches user's "stuck for minutes"; (c) page-1 refetches over existing content (returning from an email, folder switch, refresh) never showed any loader because of the currentPage > 1 gate
+- Fix (email-list.tsx only, still loader-scoped): floating loader upgraded to a Gmail-style pill (white rounded-full, border+shadow, blue #4285F4 Loader2 spinner + "Loading…" text, pointer-events-none, same bottom-20 md:bottom-6 z-30 position); pill visibility now driven by showLoaderPill state with an 800ms minimum display window (hide timer) so brief or instantly-failing loads are always perceptible; trigger widened to isLoading && emails.length > 0 (mutually exclusive with the empty-state skeleton) so folder loads / returning-from-email / refresh over an existing list also give feedback; added bounded auto-retry (max 5, 2.5s apart) that re-runs the SAME failed page via a latest-ref handle so a flaky connection can never strand the list silently; new fetch cycles clear any pending retry timer; timers cleared on unmount
+- E2E verified interactively (dev server + agent-browser, fetch delay wrapper 1.2s): scroll-load pill present mid-load (desktop: centered in list panel, bottomGap 24px; mobile 390x844: cx 195/390, bottomGap 80, aboveNav true — clears fixed nav); pill cleared after loads settled; ONE-SHOT network failure test: folder=sent&page=2 rejected — pill STILL VISIBLE at +589ms (grace window; a bare spinner would never have painted), auto-retry fired at +2.6s re-fetching the SAME page, cards 40→80, pill cleared — old code would have stayed stuck at 40 forever; folder-switch pill visible during page-1 load, clears after; zero page errors
+- Debug note: initial "Application error" splash crash during testing was environmental (leftover next start holding port 3000 after EADDRINUSE serving mismatched chunks), NOT a code regression — clean restart loads fine; lsof/pkill port cleanup added to scripts
+- bun build pass; lint: same 5 pre-existing issues, none in email-list.tsx; prisma schema restored to postgresql + client regenerated
+- Seed helpers added (gitignored): scripts/seed-more-sent.ts (+30 ScrollTest sent), scripts/test-loader-v2.sh (interactive assertions), screenshots download/loader2-midload-desktop.png / loader2-midload-mobile.png
+
+Stage Summary:
+- Loader is now actually visible in every real-world loading scenario: Gmail-style "Loading…" pill bottom-center with 800ms minimum display, covers scroll appends + folder loads + returning-from-email + refresh, and a failed load-older now self-heals (bounded auto-retry of the same page) instead of stranding the list silently
+- All changes confined to src/components/mail/email-list.tsx; no other UI or behavior touched

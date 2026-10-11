@@ -87,6 +87,15 @@ export function EmailList() {
   const noMoreRef = useRef(false) // older history exhausted for this folder
   const maxPageLoadedRef = useRef(0) // highest page fetched for this folder
   const lastLoadErrorAtRef = useRef(0) // throttle auto-retries after a failure
+  // Floating loader pill: stays visible for a minimum window so fast loads
+  // and instantly-failing requests still give perceptible Gmail-style feedback
+  const [showLoaderPill, setShowLoaderPill] = useState(false)
+  const loaderHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevListLoadingRef = useRef(false)
+  // Auto-recovery when a load-older fetch fails (flaky network): the same page
+  // is retried after the backoff window so the list can never get stuck silent
+  const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoRetriesRef = useRef(0)
 
   const fetchEmails = useCallback(async () => {
     if (!isAuthenticated) return
@@ -96,9 +105,14 @@ export function EmailList() {
     }
     // A new fetch cycle invalidates any pending load-more trigger
     isLoadingMoreRef.current = false
+    if (autoRetryTimerRef.current) {
+      clearTimeout(autoRetryTimerRef.current)
+      autoRetryTimerRef.current = null
+    }
     // Page 1 replaces the list (fresh view); deeper pages APPEND to it so
     // previously loaded messages (and the user's scroll position) are kept
     const append = currentPage > 1
+    let failed = false
     setIsLoading(true)
     try {
       const params = new URLSearchParams()
@@ -123,13 +137,30 @@ export function EmailList() {
         }
         setTotalEmails(data.total || 0)
       } else {
+        failed = true
         lastLoadErrorAtRef.current = Date.now()
       }
     } catch {
+      failed = true
       lastLoadErrorAtRef.current = Date.now()
       toast.error('Failed to load emails')
     } finally {
       setIsLoading(false)
+      if (append && failed) {
+        // A failed load-older must not leave the list silently stuck: retry
+        // the same page after the backoff window (bounded, so a permanently
+        // broken folder cannot turn into a request storm)
+        if (autoRetriesRef.current < 5) {
+          autoRetriesRef.current += 1
+          if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current)
+          autoRetryTimerRef.current = setTimeout(() => {
+            autoRetryTimerRef.current = null
+            void fetchEmailsRef.current?.()
+          }, 2500)
+        }
+      } else if (!failed) {
+        autoRetriesRef.current = 0
+      }
       if (!append) {
         // PRD 5.2: Restore scroll position (page-1 loads only — appends must
         // never move the viewport while the user is reading)
@@ -154,6 +185,9 @@ export function EmailList() {
   useEffect(() => {
     fetchEmails()
   }, [fetchEmails])
+  // Latest-ref handle so the auto-retry can re-run the current fetch cycle
+  const fetchEmailsRef = useRef<(() => Promise<void>) | null>(null)
+  fetchEmailsRef.current = fetchEmails
 
   // ─── Auto-refresh when navigating back from an opened email ──────────────
   // Refetches the list so newly arrived emails appear without a manual reload
@@ -276,6 +310,36 @@ export function EmailList() {
     observer.observe(el)
     return () => observer.disconnect()
   }, [hasMore, isLoading, currentPage, currentFolder, displayEmails.length, setCurrentPage])
+
+  // ─── Floating loader pill visibility ─────────────────────────────────────
+  // Shows while any list fetch runs over existing content (scroll appends,
+  // folder loads, returning from an email, refresh) and remains up for a
+  // short grace period afterwards so brief loads are still perceptible
+  useEffect(() => {
+    const loading = isLoading && emails.length > 0
+    if (loading) {
+      if (loaderHideTimerRef.current) {
+        clearTimeout(loaderHideTimerRef.current)
+        loaderHideTimerRef.current = null
+      }
+      setShowLoaderPill(true)
+    } else if (prevListLoadingRef.current) {
+      loaderHideTimerRef.current = setTimeout(() => {
+        loaderHideTimerRef.current = null
+        setShowLoaderPill(false)
+      }, 800)
+    }
+    prevListLoadingRef.current = loading
+  }, [isLoading, emails.length])
+
+  // Clear pending loader/auto-retry timers when the list unmounts
+  useEffect(
+    () => () => {
+      if (loaderHideTimerRef.current) clearTimeout(loaderHideTimerRef.current)
+      if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current)
+    },
+    []
+  )
 
   // Bulk actions
   const handleBulkDelete = async () => {
@@ -698,12 +762,17 @@ export function EmailList() {
         )}
       </div>
 
-      {/* Gmail-style floating loader — visible anywhere in the list while
-          older messages are being fetched (the in-flow sentinel sits up to
-          600px below the viewport, so it could never be seen when loading) */}
-      {hasMore && isLoading && emails.length > 0 && currentPage > 1 && (
+      {/* Gmail-style floating loader pill — visible anywhere in the list while
+          messages are loading (the in-flow sentinel sits up to 600px below the
+          viewport, so it could never be seen when loading). Rendered through
+          showLoaderPill so it also survives fast/failed loads long enough to
+          be seen, like the Gmail app's loading bubble */}
+      {showLoaderPill && (
         <div className="absolute bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <Loader2 className="w-7 h-7 animate-spin text-gray-400 dark:text-gray-300" />
+          <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            <Loader2 className="h-4 w-4 animate-spin text-[#4285F4]" />
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Loading…</span>
+          </div>
         </div>
       )}
 
