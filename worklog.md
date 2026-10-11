@@ -772,3 +772,16 @@ Stage Summary:
 - Agent.md committed at repo root (8ce1d1b) — engineering standards are now part of the codebase
 - Loader refinement LIVE on https://ezymail.vercel.app: loader appears ONLY when scrolling loads older messages, as an animated Gmail-style icon-only Material spinner; scroll loads that fail still show the spinner (800ms grace window) and self-heal via bounded auto-retry
 - Note: file named Agent.md per the user's explicit instruction; the convention most AI coding tools auto-discover is AGENTS.md — rename is trivial if wanted
+
+---
+Task ID: 24-b
+Agent: Super Z
+Task: Rename Agent.md → AGENTS.md per user confirmation ("yeah do it you know it better")
+
+Work Log:
+- git mv Agent.md AGENTS.md — pure rename, content byte-identical (H1 already read "AGENTS.md — EzyMail Engineering & UI Development Standards")
+- Committed cfa8233, pushed 8ce1d1b..cfa8233, Vercel "Deployment has completed" confirmed
+- Docs-only change; production app bundle unaffected
+
+Stage Summary:
+- Standards file now lives at repo root as AGENTS.md — the conventional filename most AI coding tools (incl. Claude Code, Cursor, Copilot) auto-discover and follow
