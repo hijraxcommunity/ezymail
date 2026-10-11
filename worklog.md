@@ -754,3 +754,21 @@ Work Log:
 Stage Summary:
 - Loader now appears ONLY on scroll-triggered older-message loads, as a Gmail-authentic animated icon-only Material spinner (no text, no bubble), with the 800ms grace + auto-retry kept so "stuck" always shows feedback instead
 - Single-file change: src/components/mail/email-list.tsx
+
+---
+Task ID: 24
+Agent: Super Z
+Task: Add user-provided engineering & UI standards as Agent.md on the codebase; ship the already-verified loader refinement (scroll-only trigger + icon-only Material spinner) that was still unpushed
+
+Work Log:
+- Found Task 23 loader work complete but unpushed: local main was ahead of origin (dda85d2 on top of 1b3bf53; GitHub still at 20ffddd — earlier pushes used explicit token URLs, which do not update the origin/main tracking ref, and 1b3bf53 had in fact never reached GitHub either)
+- Code-reviewed committed loader change (email-list.tsx @ dda85d2): trigger narrowed to isLoading && emails.length > 0 && currentPage > 1 (scroll-append loads ONLY; currentPage added to effect deps) — folder switches / page-1 refreshes / returning-from-email show no loader; design rebuilt as Material indeterminate spinner (inline ezm-md-rotate 1.4s linear + ezm-md-dash dash-sweep 1.4s ease-in-out keyframes, SVG circle r=20 stroke #4285F4, 30px, icon-only — "Loading…" text and white pill bubble removed); 800ms minimum-display grace and bounded auto-retry (≤5, 2.5s apart) of a failed load-older preserved
+- Created Agent.md at repo root with the user's standards verbatim (452 lines: professional responsibility, mandatory pre-implementation workflow, stack & architecture rules, UI/design consistency, mobile behavior, scope isolation, data/API integrity, security, error handling, dependencies, code quality, testing, git management, ambiguity handling, definition of done, required final report format)
+- bun run lint: same 5 pre-existing issues, zero new; bun run build: pass
+- Pushed 20ffddd..8ce1d1b — GitHub now carries 1b3bf53 (loader v2 grace/retry), dda85d2 (loader v3 scroll-only + icon-only), 8ce1d1b (Agent.md); origin/main tracking ref synced via fetch
+- Vercel "Deployment has completed" for 8ce1d1b; production chunk 06ofvqb0qrzu..js contains the ezm-md-dash keyframes and the old "Loading…" pill text is ABSENT from that chunk — icon-only spinner live in production
+
+Stage Summary:
+- Agent.md committed at repo root (8ce1d1b) — engineering standards are now part of the codebase
+- Loader refinement LIVE on https://ezymail.vercel.app: loader appears ONLY when scrolling loads older messages, as an animated Gmail-style icon-only Material spinner; scroll loads that fail still show the spinner (800ms grace window) and self-heal via bounded auto-retry
+- Note: file named Agent.md per the user's explicit instruction; the convention most AI coding tools auto-discover is AGENTS.md — rename is trivial if wanted
