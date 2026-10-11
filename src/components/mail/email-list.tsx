@@ -12,7 +12,6 @@ import {
   Search,
   Clock,
   CalendarClock,
-  Loader2,
 } from 'lucide-react'
 import { format, isToday, isYesterday, isAfter, startOfWeek } from 'date-fns'
 import { toast } from 'sonner'
@@ -311,12 +310,13 @@ export function EmailList() {
     return () => observer.disconnect()
   }, [hasMore, isLoading, currentPage, currentFolder, displayEmails.length, setCurrentPage])
 
-  // ─── Floating loader pill visibility ─────────────────────────────────────
-  // Shows while any list fetch runs over existing content (scroll appends,
-  // folder loads, returning from an email, refresh) and remains up for a
-  // short grace period afterwards so brief loads are still perceptible
+  // ─── Floating loader (scroll-load only) ─────────────────────────────
+  // Shows ONLY while older messages are being appended on scroll — never for
+  // folder switches, refreshes or returning from an email. Stays visible for
+  // a short grace period so fast or instantly-failing fetches still give the
+  // user a perceptible "wait, loading older mail" signal
   useEffect(() => {
-    const loading = isLoading && emails.length > 0
+    const loading = isLoading && emails.length > 0 && currentPage > 1
     if (loading) {
       if (loaderHideTimerRef.current) {
         clearTimeout(loaderHideTimerRef.current)
@@ -330,7 +330,7 @@ export function EmailList() {
       }, 800)
     }
     prevListLoadingRef.current = loading
-  }, [isLoading, emails.length])
+  }, [isLoading, emails.length, currentPage])
 
   // Clear pending loader/auto-retry timers when the list unmounts
   useEffect(
@@ -762,17 +762,42 @@ export function EmailList() {
         )}
       </div>
 
-      {/* Gmail-style floating loader pill — visible anywhere in the list while
-          messages are loading (the in-flow sentinel sits up to 600px below the
-          viewport, so it could never be seen when loading). Rendered through
-          showLoaderPill so it also survives fast/failed loads long enough to
-          be seen, like the Gmail app's loading bubble */}
+      {/* Gmail-style loading spinner — shown ONLY while older messages are
+          being fetched on scroll (the in-flow sentinel sits up to 600px below
+          the viewport, so it could never be seen when loading). Icon-only
+          Material indeterminate spinner, rendered through showLoaderPill so
+          it survives fast/failed loads long enough to be seen */}
       {showLoaderPill && (
         <div className="absolute bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-            <Loader2 className="h-4 w-4 animate-spin text-[#4285F4]" />
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Loading…</span>
-          </div>
+          <style>{`
+            @keyframes ezm-md-rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            @keyframes ezm-md-dash {
+              0% { stroke-dasharray: 1px, 200px; stroke-dashoffset: 0px; }
+              50% { stroke-dasharray: 100px, 200px; stroke-dashoffset: 15px; }
+              100% { stroke-dasharray: 1px, 200px; stroke-dashoffset: -120px; }
+            }
+            .ezm-md-spin { animation: ezm-md-rotate 1.4s linear infinite; }
+            .ezm-md-dash { animation: ezm-md-dash 1.4s ease-in-out infinite; }
+          `}</style>
+          <svg
+            className="ezm-md-spin"
+            width="30"
+            height="30"
+            viewBox="0 0 50 50"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              className="ezm-md-dash"
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke="#4285F4"
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
       )}
 

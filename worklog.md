@@ -737,3 +737,20 @@ Work Log:
 Stage Summary:
 - Loader is now actually visible in every real-world loading scenario: Gmail-style "Loading…" pill bottom-center with 800ms minimum display, covers scroll appends + folder loads + returning-from-email + refresh, and a failed load-older now self-heals (bounded auto-retry of the same page) instead of stranding the list silently
 - All changes confined to src/components/mail/email-list.tsx; no other UI or behavior touched
+
+---
+Task ID: 23
+Agent: Super Z
+Task: Loader refinement per user feedback — scroll-load ONLY + Gmail-style icon-only design ("do not touch anything else")
+
+Work Log:
+- User feedback on 1b3bf53: (a) loader must appear ONLY when scrolling loads older messages — not on folder switches / refreshes / returning from an email; (b) pill-with-text design not professional enough — wants Gmail-style animated loader, icon only, no text
+- Trigger narrowed (email-list.tsx): floating-loader condition now isLoading && emails.length > 0 && currentPage > 1 (append loads only); currentPage added to the effect deps; folder switch / page-1 refresh / returning-from-email no longer show anything (verified: probe at +0.5s into a 1.2s-delayed folder load = no spinner)
+- Design rebuilt as an authentic Material indeterminate spinner (same technique as MUI/Gmail): inline <style> keyframes in email-list.tsx (ezm-md-rotate 1.4s linear + ezm-md-dash stroke-dasharray/offset sweep 1.4s ease-in-out), inline SVG circle r=20 viewBox 50x50, stroke #4285F4 (Google blue), strokeLinecap round, 30px rendered size; "Loading…" text and the white pill bubble REMOVED (icon only); Loader2 import removed (no longer used anywhere in the file)
+- Kept from 22-fix (still required for "instead of stuck the loader shows"): 800ms minimum display window and bounded auto-retry of a failed load-older page
+- E2E re-verified (prod build, fetch delay 1.2s): folder switch → NO spinner (present:false mid-load); scroll to bottom → spinner present (svg.ezm-md-spin, centered cx 512/1024 panel, bottomGap 24 desktop) → cleared after load (cards 80); one-shot folder=sent&page=3 rejection → spinner visible in grace window → auto-retry re-fetched the SAME page ~2.5s later → cards 80→120; mobile 390x844 → icon-only spinner centered cx 195/390, aboveNav true; zero page errors. Screenshots: download/loader3-midload-desktop.png, loader3-midload-mobile.png
+- bun build pass; lint: same 5 pre-existing issues, zero new; prisma schema restored to postgresql + client regenerated before commit
+
+Stage Summary:
+- Loader now appears ONLY on scroll-triggered older-message loads, as a Gmail-authentic animated icon-only Material spinner (no text, no bubble), with the 800ms grace + auto-retry kept so "stuck" always shows feedback instead
+- Single-file change: src/components/mail/email-list.tsx
