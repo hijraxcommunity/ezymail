@@ -12,6 +12,7 @@ import {
   Search,
   Clock,
   CalendarClock,
+  Loader2,
 } from 'lucide-react'
 import { format, isToday, isYesterday, isAfter, startOfWeek } from 'date-fns'
 import { toast } from 'sonner'
@@ -380,7 +381,7 @@ export function EmailList() {
 
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full">
+    <div className="relative flex-1 flex flex-col min-w-0 h-full">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 h-12 border-b border-gray-100 dark:border-gray-800 shrink-0">
         {currentFolder === 'spam' ? (
@@ -677,12 +678,7 @@ export function EmailList() {
             })()}
             {hasMore && (
               <div ref={sentinelRef} className="p-4 text-center">
-                {isLoading && emails.length > 0 ? (
-                  <span className="inline-flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Loading older messages…
-                  </span>
-                ) : typeof IntersectionObserver === 'undefined' ? (
+                {typeof IntersectionObserver === 'undefined' ? (
                   // Manual fallback only for browsers without IntersectionObserver
                   <Button
                     variant="ghost"
@@ -701,6 +697,15 @@ export function EmailList() {
           </div>
         )}
       </div>
+
+      {/* Gmail-style floating loader — visible anywhere in the list while
+          older messages are being fetched (the in-flow sentinel sits up to
+          600px below the viewport, so it could never be seen when loading) */}
+      {hasMore && isLoading && emails.length > 0 && currentPage > 1 && (
+        <div className="absolute bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <Loader2 className="w-7 h-7 animate-spin text-gray-400 dark:text-gray-300" />
+        </div>
+      )}
 
       {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>

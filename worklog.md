@@ -702,3 +702,20 @@ Work Log:
 
 Stage Summary:
 - Thread spacing fix is LIVE on https://ezymail.vercel.app: collapsed preview aligned under sender name (was +36px indent), tighter name-to-preview gap, 14px breathing room before the next reply (was 8px); expanded thread layout untouched
+
+---
+Task ID: 22
+Agent: Super Z
+Task: Gmail-style loading icon while older messages load on scroll (user screenshot = Gmail app bottom-center circular spinner; "do not touch anything else")
+
+Work Log:
+- Root cause of "stuck with no loader": the old indicator ("Loading older messages…" + small spinner) lived inside the sentinel div, but the IntersectionObserver pre-triggers at rootMargin 600px — so while a slow page fetch ran, the indicator sat up to 600px+ BELOW the viewport and the user saw a frozen list
+- Fix (email-list.tsx only): replaced the in-flow sentinel spinner with a floating bottom-center circular Loader2 spinner (w-7 h-7 animate-spin, gray-400/dark:gray-300, pointer-events-none) absolutely positioned inside the list panel — visible anywhere the user has scrolled to, exactly like the Gmail app screenshot
+- Placement: absolute bottom-20 md:bottom-6 (mobile clears the 64px fixed bottom nav, desktop 24px), left-1/2 -translate-x-1/2, z-30; root list div gained "relative" (only other absolute child is the per-email Cancel button, already scoped to its own relative parent)
+- Visibility condition: hasMore && isLoading && emails.length > 0 && currentPage > 1 — shows ONLY for load-older appends; initial folder load keeps its skeleton, folder switches/refresh (page 1) show nothing new, exhausted history shows nothing; the sentinel div itself stays unchanged as the observer target + manual no-IO fallback button preserved
+- Workspace note: node_modules and untracked scratch files (incl. db/custom.db) were wiped between tasks — bun install re-run, db recreated via prisma db push, re-seeded 45 ScrollTest Sent + 4 inbox emails (scripts/seed-loader-test.ts)
+- Verified E2E with a 1.5s fetch-delay wrapper on /api/emails (scripts/test-load-spinner.sh): desktop 1280x800 — spinner present mid-load, centered in the list panel, bottomGap 24px; gone after 20→40 cards appended; 45 reached then no spinner (exhausted); mobile 390x844 — spinner bottomGap 80px, aboveNav true (clears fixed nav); Inbox regression 4 cards; zero page errors. Screenshots: download/loader-midload-desktop.png, download/loader-midload-mobile.png, download/loader-inbox.png
+- bun run build pass (after fresh bun install); lint: same 5 pre-existing issues, none in email-list.tsx; prisma schema sqlite→postgresql restored + client regenerated before commit
+
+Stage Summary:
+- Scrolling to older messages now shows a Gmail-app-style circular loader at the bottom center of the list for as long as the fetch takes — no more silent "stuck" feeling; everything else untouched
