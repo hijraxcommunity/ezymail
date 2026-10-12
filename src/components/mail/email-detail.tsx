@@ -44,6 +44,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
 import { handleDownload } from '@/components/mail/attachment-viewer'
+import { sanitizeEmailHtml } from '@/lib/sanitize-email-html'
 
 /* ─── Helpers ─── */
 
@@ -313,8 +314,12 @@ function ThreadMessage({
   const ccData: string[] = (() => { try { const cc = (message as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
   const bccData: string[] = (() => { try { const bcc = (message as unknown as Record<string, unknown>).bcc; if (!bcc) return []; if (Array.isArray(bcc)) return bcc; if (typeof bcc === 'string') return bcc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
 
-  // Strip quoted text for display
-  const rawHtml = message.bodyHtml || message.body?.replace(/\n/g, '<br>') || '<p>No content</p>'
+  // Sanitize untrusted email HTML first (XSS protection), then strip quoted
+  // text — both the visible body and the quoted fragment derive from
+  // sanitized content. See src/lib/sanitize-email-html.ts.
+  const rawHtml = sanitizeEmailHtml(
+    message.bodyHtml || message.body?.replace(/\n/g, '<br>') || ''
+  )
   const { clean: cleanHtml, quoted: quotedHtml } = stripQuotedHtml(rawHtml)
   const previewText = stripQuotedText(message.body?.replace(/<[^>]*>/g, '') || '').replace(/\n/g, ' ').substring(0, 120) || '...'
 
@@ -1322,7 +1327,9 @@ export function EmailDetail() {
 
                       <div>
                         {(() => {
-                          const rawHtml = msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || '<p>No content</p>'
+                          const rawHtml = sanitizeEmailHtml(
+                            msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || ''
+                          )
                           const { clean: selectedCleanHtml, quoted: selectedQuotedHtml } = stripQuotedHtml(rawHtml)
                           return (
                             <>
