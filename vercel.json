@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npx prisma generate && npx prisma db push --skip-generate && next build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cron/trial-expiry",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
