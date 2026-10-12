@@ -983,3 +983,14 @@ Work Log:
 Stage Summary:
 - Commit 109310b (local, NOT pushed — push authorization expired with previous PAT): cron schedule registered, endpoint contract confirmed compatible with Vercel Cron auto-Bearer behavior
 - Deploy steps for owner: push 109310b (new token or local edit), ensure CRON_SECRET set in Vercel Production, redeploy (crons read at deploy time); Hobby plan OK (once daily); verify via Vercel Cron logs — 401s there mean CRON_SECRET missing/mismatched
+
+---
+Task ID: 35b
+Agent: Super Z
+Task: Push 109310b with owner-authorized reuse of previous PAT
+
+Work Log:
+- Owner explicitly authorized reusing the earlier token; one-shot push (same redaction/no-persist pattern): ce67fd7..ac70944 OK — carried 7e07f7d (gateway worklog), 109310b (cron schedule), ac70944 (gateway worklog); branch in sync with origin/main
+
+Stage Summary:
+- GitHub now contains the cron schedule; remaining owner steps unchanged: revoke PAT, CRON_SECRET in Vercel Production, redeploy, check Crons tab
