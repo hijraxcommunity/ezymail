@@ -879,3 +879,24 @@ Stage Summary:
 - No fallback secret anywhere; cron endpoint authorized-only before DB access; behavior with configured secrets unchanged; no production secret rotated, nothing pushed/deployed
 - OWNER ACTION REQUIRED before deploy: set JWT_SECRET + CRON_SECRET in Vercel project env (never in repo). If JWT_SECRET was never set in prod, all fallback-era sessions/tokens (incl. reset tokens) invalidate at deploy; if it was set, zero user impact
 - Remaining risks: tracked .env.vercel contains VERCEL_OIDC_TOKEN key (recommend untrack + gitignore + consider rotation — out of scope); labels/emails-labels routes' de-facto "undefined" key quirk (uncalled by UI, future batch); CRON_SECRET unset in prod = cron returns 401 for ALL callers including Vercel until configured
+
+---
+Task ID: 30
+Agent: Super Z
+Task: Post-Batch-3 security review — verification + narrowly scoped remediation. No commit/push/deploy.
+
+Work Log:
+- Re-read AGENTS.md + docs/ai rules; git state: 4 unpushed commits (235fce0 worklog, d3fed4c Batch 1, b80fd7c Batch 2, af12f78 Batch 3 — Batch 3 was committed after its report), tree clean before review; all three batches' diffs re-inspected against their reports, intact, no unrelated files
+- JWT audit: grepped all JWT_SECRET/jwtVerify/SignJWT/TextEncoder usage. Confirmed exactly 2 routes bypass getJwtSecret(): labels/route.ts:15 + emails/[id]/labels/route.ts:14 (`new TextEncoder().encode(process.env.JWT_SECRET)` — encodes "" when unset, so verify fails only by jose's accidental empty-key throw, not designed fail-closed). Old fallback secret string now appears in NO app code (worklog docs only)
+- FIX (2 files, minimal): both label routes' local getSession now calls shared getJwtSecret() INSIDE the existing try/catch -> missing secret throws -> caught -> null -> 401, identical observable behavior, now fail-closed by design; no signing exists in these routes (verify only); no secret in logs; authorization logic untouched
+- .env.vercel investigation (values never printed): tracked by git (added 09759f1, modified e167fb7 — both on origin/main => public/collaborator-visible); .gitignore lacked coverage. Characterized keys only: 20 of 22 entries EMPTY or NX/TURBO/VERCEL build metadata (non-secret); only credential-shaped value = VERCEL_OIDC_TOKEN (1268 chars, JWT-shaped). Decoded ONLY lifecycle claims: iat 2026-07-16, exp 2026-07-17 (12h lifetime) => expired ~3 months, exposure risk nil; no revocation/rotation urgency; general rotation guidance reported anyway
+- FIX (hygiene, no history rewrite): git rm --cached .env.vercel (file kept on disk) + .gitignore += .env.vercel
+- Runtime probe (scripts/review-labels-driver.sh + review-labels-probe.ts, local sqlite flipped via sed and RESTORED; local dummy test secrets): build with env -u JWT_SECRET -u CRON_SECRET OK; PHASE A no JWT_SECRET: labels + email-labels 401 x3 (no-cookie, forged cookie) fail-closed; PHASE B with JWT_SECRET: valid-token 200 x2 (empty table), wrong-secret 401, no-cookie 401 => 7/7 PASS; no secret values in server logs. Note: label routes swallow JwtSecretMissingError silently (401, no log signal) — behavior-preserving choice, loud signal verified only on auth.ts paths (Batch 3)
+- Checks: bun test 31/31; lint 5 problems (3e/2w) = unchanged baseline; tsc 0 new errors in tracked code (29 pre-existing = 14 src + 15 gitignored scripts, exactly Batch 3 baseline; +6 in local-only untracked dirs skills//ezymail-repo//examples/; labels TS2339 = pre-existing, shifted line 77->81 by my comment lines); build OK; .next/cache/config.json clean this time; prisma schema git-restored after sqlite flip
+- Deployment prerequisites verified: vercel.json has NO crons key and no other repo file schedules trial-expiry => whether a Vercel Cron exists is dashboard-managed and NOT verifiable from this workspace (no .vercel link, no API access); NOT claimed either way
+
+Stage Summary:
+- 3 tracked-file changes UNCOMMITTED: .gitignore (+.env.vercel), labels/route.ts, emails/[id]/labels/route.ts (+getJwtSecret); staged: deletion of .env.vercel from tracking (kept on disk)
+- All 5 JWT-signing/verification sites now use shared getJwtSecret(); fail-closed everywhere; behavior preserved; no secret rotated; no history rewritten; nothing pushed/deployed
+- OWNER ACTION REQUIRED before deploy: set JWT_SECRET + CRON_SECRET in Vercel (verify presence via dashboard/vercel env ls — names, not values); verify/create cron schedule for /api/cron/trial-expiry in vercel.json or dashboard (Vercel auto-attaches Bearer when CRON_SECRET project env is set); commit the staged .env.vercel untracking when authorizing next push
+- Remaining risks: emails/[id]/labels POST/DELETE never verify email ownership (authz gap, pre-existing, out of scope — future batch); buildCommand runs prisma db push at every build (pre-existing deployment config quirk, out of scope)

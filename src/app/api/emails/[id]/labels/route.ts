@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
+import { getJwtSecret } from '@/lib/auth'
 import { z } from 'zod/v4'
 
 const addLabelsSchema = z.object({
@@ -11,7 +12,10 @@ async function getSession(req: NextRequest) {
   const token = req.cookies.get('token')?.value
   if (!token) return null
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET))
+    // Shared fail-closed helper: throws when JWT_SECRET is unconfigured, which
+    // this catch treats like any invalid token (null -> 401) — the same
+    // observable behavior as before, now by design instead of by accident.
+    const { payload } = await jwtVerify(token, getJwtSecret())
     return payload
   } catch {
     return null
