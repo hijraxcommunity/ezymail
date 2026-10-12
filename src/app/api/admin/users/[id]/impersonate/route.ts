@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, getJwtSecret } from '@/lib/auth';
 import { SignJWT } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'ezymail-super-secret-key-change-in-production-2024'
-);
 
 // POST /api/admin/users/[id]/impersonate - Create temporary session for target user
 export async function POST(
@@ -58,7 +54,7 @@ export async function POST(
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('1h') // Short-lived: 1 hour for impersonation
-      .sign(JWT_SECRET);
+      .sign(getJwtSecret());
 
     // Create a Session record
     await db.session.create({

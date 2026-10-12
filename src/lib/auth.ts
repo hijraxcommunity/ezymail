@@ -2,9 +2,33 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { db } from './db';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'ezymail-super-secret-key-change-in-production-2024'
-);
+/**
+ * Thrown when the deployment is missing JWT_SECRET. Authentication fails
+ * closed: there is deliberately NO fallback secret, because a predictable
+ * default would let anyone forge valid session tokens. The error message
+ * never contains the secret value itself.
+ */
+export class JwtSecretMissingError extends Error {
+  constructor() {
+    super(
+      'JWT_SECRET environment variable is not configured. Authentication is unavailable until a strong secret is set in the deployment environment.'
+    );
+    this.name = 'JwtSecretMissingError';
+  }
+}
+
+/**
+ * Resolves the JWT signing secret at call time (not at module load) so a
+ * missing configuration surfaces as a clear runtime error in the routes that
+ * actually need it, instead of silently falling back to a predictable key.
+ */
+export function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.trim() === '') {
+    throw new JwtSecretMissingError();
+  }
+  return new TextEncoder().encode(secret);
+}
 
 export interface SessionPayload {
   userId: string;
@@ -22,7 +46,7 @@ export async function createSession(user: { id: string; email: string; role: str
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 
   // Store session in database (non-blocking — cookie is set either way)
   try {
@@ -57,8 +81,13 @@ export async function getSession(): Promise<SessionPayload | null> {
 
   if (!token) return null;
 
+  // Fails loudly (throw) when JWT_SECRET is unconfigured so misconfiguration
+  // is visible in server logs — but only for requests that actually carry a
+  // session cookie, keeping anonymous traffic on the normal unauthenticated path.
+  const secret = getJwtSecret();
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
     return payload as unknown as SessionPayload;
   } catch {
     return null;

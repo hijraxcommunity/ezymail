@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
 import { createHash, randomInt } from 'crypto';
 import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword, getJwtSecret } from '@/lib/auth';
 import { sendWhatsAppOTP, OpenWAError } from '@/lib/whatsapp/openwa';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'ezymail-super-secret-key-change-in-production-2024'
-);
 
 // Verification is only valid for 10 minutes after the number is confirmed
 const RESET_TOKEN_TTL_SECONDS = 10 * 60;
@@ -223,7 +220,7 @@ export async function POST(request: NextRequest) {
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(`${RESET_TOKEN_TTL_SECONDS}s`)
-        .sign(JWT_SECRET);
+        .sign(getJwtSecret());
 
       return NextResponse.json({
         verified: true,
@@ -238,8 +235,12 @@ export async function POST(request: NextRequest) {
       const password = typeof body.password === 'string' ? body.password : '';
 
       let userId: string;
+      // Resolve the secret outside the inner try: a missing JWT_SECRET is a
+      // server misconfiguration and must surface as a 500 (caught by the outer
+      // handler), not as the user-facing "verification expired" message.
+      const secret = getJwtSecret();
       try {
-        const { payload } = await jwtVerify(resetToken, JWT_SECRET);
+        const { payload } = await jwtVerify(resetToken, secret);
         if (payload.purpose !== 'password-reset' || typeof payload.userId !== 'string') {
           return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
         }
