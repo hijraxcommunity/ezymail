@@ -919,3 +919,17 @@ Stage Summary:
 - Route now uses the app's real session mechanism (ezymail-session) — previously it could never authenticate anyone ('token' cookie never set); this is the one deliberate alignment beyond the POST/DELETE headline, required by "only authenticated users can perform the operation" + "existing session authentication pattern"
 - UNCOMMITTED: 1 tracked file changed (route). Tests live in gitignored scripts/ (use git add -f to version them)
 - Remaining risks: GET returns ALL labels attached to an accessible email incl. any legacy foreign-label rows created outside the API (impossible via API now; would require direct DB writes); /api/labels/route.ts still has the dead 'token'-cookie session (uncalled by UI, reported not touched — outside this task's scope); labels/[id] PUT/DELETE of a label cascades EmailLabel deletes for ALL users' emails bearing that label — correct since labels are per-user (userId scoped), no issue found
+
+---
+Task ID: 32
+Agent: Super Z
+Task: Step 1 verification — re-review committed email-label fix against live test runs (owner had committed Task 31 work as e78dd85)
+
+Work Log:
+- Git state on entry: owner committed the Task 31 route fix as e78dd85 (route + worklog only); tree clean; 6 unpushed commits (235fce0..e78dd85)
+- Showed committed diff e78dd85 for src/app/api/emails/[id]/labels/route.ts; verified: shared getSession() from '@/lib/auth' replaces the dead 'token'-cookie helper in all 3 handlers; getEmailIfAccessible (sender-OR-recipient) guards GET/POST/DELETE with 404 'Email not found' BEFORE any DB access; DELETE filters deletions to session-user-owned labels; POST keeps skip-foreign-labels behavior
+- Re-ran both suites FRESH against the committed code: bun test sanitizer 31/31 (142 assertions); authz driver ALL_OK 40/40 (37 main incl. all cross-user 404/no-DB-change cases + 3 nosecret fail-closed); production build inside driver OK with env -u JWT_SECRET -u CRON_SECRET; no secret values in server logs; prisma schema restored (postgresql), tree clean
+
+Stage Summary:
+- Step 1 confirmed on live evidence: shared getSession() in use, unauthorized email access 404 pre-DB, cross-user tests pass (40/40), sanitizer 31/31
+- Next up (owner-side): authorize push of 6 commits, set JWT_SECRET + CRON_SECRET in Vercel, verify/create cron schedule for /api/cron/trial-expiry, then deploy + smoke-test
