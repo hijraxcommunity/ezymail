@@ -933,3 +933,18 @@ Work Log:
 Stage Summary:
 - Step 1 confirmed on live evidence: shared getSession() in use, unauthorized email access 404 pre-DB, cross-user tests pass (40/40), sanitizer 31/31
 - Next up (owner-side): authorize push of 6 commits, set JWT_SECRET + CRON_SECRET in Vercel, verify/create cron schedule for /api/cron/trial-expiry, then deploy + smoke-test
+
+---
+Task ID: 33
+Agent: Super Z
+Task: "Add CRON_SECRET only" — add CRON_SECRET where agent can do so safely; hand exact Vercel steps to owner (no Vercel access from workspace)
+
+Work Log:
+- Access check: no vercel CLI, no VERCEL_* token env, no .vercel project link => agent CANNOT modify Vercel production env; per "only": JWT_SECRET intentionally NOT touched
+- Generated strong value locally (openssl rand -base64 48), appended CRON_SECRET="<value>" to gitignored .env (value never printed to terminal/chat/report); verified keys = DATABASE_URL + CRON_SECRET only; git status clean (.env ignored)
+- DB-safe negative-only runtime check (server loaded .env automatically): /api/cron/trial-expiry no-header 401, wrong-bearer 401, non-Bearer 401; secret value absent from server log and .next build output; server killed; no valid-bearer request sent (zero DB access, production Neon untouched)
+
+Stage Summary:
+- CRON_SECRET now exists locally in .env (gitignored) — owner copies that value into Vercel (Settings > Environment Variables > Production, then redeploy; env vars apply to new deployments only)
+- Owner must still: set the same CRON_SECRET in Vercel, ensure a cron schedule exists (vercel.json still has NO crons entry — secret alone does nothing until scheduled), decide JWT_SECRET state (untouched per instruction)
+- Local implication: local .env has no JWT_SECRET => local login/auth flows fail closed (500) by design; add locally only if local auth testing is needed
