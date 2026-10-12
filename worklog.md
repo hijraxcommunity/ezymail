@@ -785,3 +785,22 @@ Work Log:
 
 Stage Summary:
 - Standards file now lives at repo root as AGENTS.md — the conventional filename most AI coding tools (incl. Claude Code, Cursor, Copilot) auto-discover and follow
+
+---
+Task ID: 25
+Agent: Super Z
+Task: Install user-uploaded EzyMail_AI_Project_Guidelines.zip into the codebase per the given structure (AGENTS.md at root + docs/ai rules + screens with approved UI screenshots)
+
+Work Log:
+- Inspected zip (8 files) + upload/ loose files; read README_FIRST.md install guide, screens/README.md guidance, and the zip's condensed AGENTS.md (11 sections, references docs/ai files)
+- Replaced root AGENTS.md (16426B v1 from 8ce1d1b, preserved in git history) with the package's condensed 6809B v2 per README_FIRST install step 2; removed stray untracked Agent.md (byte-identical leftover duplicate, content already at AGENTS.md + history)
+- Created docs/ai/ with ARCHITECTURE_RULES.md, CHANGE_SAFETY_RULES.md, FEATURE_IMPLEMENTATION_RULES.md, UI_DESIGN_SYSTEM.md, UI_PATTERNS.md + screens/README.md (exact structure from user; docs/ did not exist before)
+- Viewed all 7 loose PNGs in upload/: 4 are real EzyMail screens (settings panel mobile, signup birthday desktop, password-reset country picker desktop, email thread desktop) → copied into docs/ai/screens/ as settings.png, signup-birthday.png, password-reset-country-picker.png, email-detail.png; 3 are EXTERNAL app references (Gmail ×2 incl. 1000400532.png, Chrome ×1) → excluded per screens/README rule "actual EzyMail application—not generic images"
+- Appended "Current approved screenshots" inventory table to docs/ai/screens/README.md with per-file notes (viewport, mode, what's approved, annotation disclaimers)
+- README_FIRST.md intentionally NOT committed (packaging meta, not in user's target structure)
+- Pre-existing working-tree noise left untouched: mode-only (100644→100755) diffs on src/components/auth/country-code-picker.tsx + src/lib/countries.ts — 0 content changes, belong to parallel work; not staged
+- Committed + pushed; Vercel deploy confirmed. Docs-only change — app bundle unaffected
+
+Stage Summary:
+- Repo now carries the full AI guidelines package: AGENTS.md (v2) next to package.json, docs/ai/ with 5 rule files, docs/ai/screens/ with README + 4 approved EzyMail screenshots and inventory notes
+- Screenshots/notes make visual-consistency references available to every future coding session, as the package intended
