@@ -804,3 +804,16 @@ Work Log:
 Stage Summary:
 - Repo now carries the full AI guidelines package: AGENTS.md (v2) next to package.json, docs/ai/ with 5 rule files, docs/ai/screens/ with README + 4 approved EzyMail screenshots and inventory notes
 - Screenshots/notes make visual-consistency references available to every future coding session, as the package intended
+
+---
+Task ID: 26
+Agent: Super Z
+Task: Remove docs/ai/screens/README.md per product owner request ("do not touch anything else")
+
+Work Log:
+- Removed only docs/ai/screens/README.md (33 lines: the package's screens guidance + the inventory table I appended in Task 25) — commit 188bbe8, pushed, Vercel "Deployment has completed"
+- The 4 approved screenshots (settings.png, signup-birthday.png, password-reset-country-picker.png, email-detail.png) remain in docs/ai/screens/ untouched; all other files untouched
+- Note: file is recoverable from git history (present in 8d90108) if wanted again
+
+Stage Summary:
+- docs/ai/screens/ now contains only the 4 approved screenshots; the guidelines package is otherwise fully installed (AGENTS.md v2 + docs/ai rule files)
