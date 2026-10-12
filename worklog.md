@@ -948,3 +948,23 @@ Stage Summary:
 - CRON_SECRET now exists locally in .env (gitignored) — owner copies that value into Vercel (Settings > Environment Variables > Production, then redeploy; env vars apply to new deployments only)
 - Owner must still: set the same CRON_SECRET in Vercel, ensure a cron schedule exists (vercel.json still has NO crons entry — secret alone does nothing until scheduled), decide JWT_SECRET state (untouched per instruction)
 - Local implication: local .env has no JWT_SECRET => local login/auth flows fail closed (500) by design; add locally only if local auth testing is needed
+
+---
+Task ID: 34
+Agent: Super Z
+Task: Deliver codebase to owner (no file panel/preview in owner's UI) + authorized GitHub push
+
+Work Log:
+- Owner UI verified via screenshot: chat-only web interface — no preview panel, no files/download panel, "+" button is upload-only; prior file-delivery guidance retracted
+- Packaged download/ezymail-source.zip (4.5 MB, 305 files: tracked source + .env + scripts/, minus skills/, node_modules, .git); no owner-reachable download channel exists, zip retained for future use
+- Gateway investigation: platform Caddy :81 -> app :3000 (502, dead); python static server on :3000 served zip through gateway (200, 4.6 MB) but died between turns and owner has no URL (bot-id not discoverable: probed gw 12600 endpoints, 6 preview-* candidates all 404); route abandoned
+- CRON_SECRET delivered to owner in chat (owner-required for Vercel; warned: chat-history exposure, no Share, rotation = openssl rand -base64 48); DATABASE_URL intentionally NOT pasted (available from Neon console)
+- Pre-flight push checks: 8 outgoing commits (235fce0..ce67fd7 incl. 2 gateway worklog auto-commits); outgoing diff secret-scan clean (.env.vercel = deletion, .env.example = placeholders, no eyJ-shaped content)
+- Auth discovery: no ssh-keygen/ssh (minimal container, no root/sudo) => deploy-key route dead; no gh, no stored credentials => PAT route chosen; owner created fine-grained PAT (ezymail repo only, Contents RW, 7-day)
+- Push executed one-shot: git push https://x-access-token:<TOKEN>@github.com/... main => 188bbe8..ce67fd7 OK; token used in shell var only, never written to disk (remote.origin.url still clean HTTPS, no .git/config residue, output redacted); origin/main = ce67fd7, branch in sync
+
+Stage Summary:
+- GitHub now has ALL security work: Batch 1 d3fed4c, Batch 2 b80fd7c, Batch 3 af12f78, review fixes 40a2b99, labels authz e78dd85 (+worklog commits) — owner can git clone locally
+- Owner immediate action: REVOKE the PAT (chat history holds it) — https://github.com/settings/personal-access-tokens
+- Owner remaining (unchanged): paste CRON_SECRET into Vercel Production + redeploy; add crons entry to vercel.json if scheduling wanted; decide JWT_SECRET state
+- Sandbox note: code delivery channel problem remains open for future needs (no owner-visible file/preview UI); fallback = paste small files in chat
