@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: label }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: 'Invalid input', details: error.errors }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Invalid input', details: error.issues }, { status: 400 })
     }
     console.error('POST /api/labels error:', error)
     return NextResponse.json({ success: false, error: 'Failed to create label' }, { status: 500 })
@@ -96,7 +96,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true, data: updated })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: 'Invalid input', details: error.errors }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Invalid input', details: error.issues }, { status: 400 })
     }
     console.error('PUT /api/labels error:', error)
     return NextResponse.json({ success: false, error: 'Failed to update label' }, { status: 500 })

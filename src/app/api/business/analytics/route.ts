@@ -11,7 +11,7 @@ export async function GET() {
 
     const user = await db.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, accountType: true },
+      select: { id: true, email: true, accountType: true },
     });
 
     if (!user || user.accountType !== 'business') {

@@ -817,3 +817,25 @@ Work Log:
 
 Stage Summary:
 - docs/ai/screens/ now contains only the 4 approved screenshots; the guidelines package is otherwise fully installed (AGENTS.md v2 + docs/ai rule files)
+
+---
+Task ID: 27
+Agent: Super Z
+Task: Implement audit Batch 1 — fix business analytics data leak + four Zod validation issues (smallest possible changes, no restructuring)
+
+Work Log:
+- Re-read AGENTS.md + docs/ai/ rules (CHANGE_SAFETY_RULES, ARCHITECTURE_RULES); verified every finding against current code before editing
+- Root cause of analytics leak: /api/business/analytics selects { id, accountType } but references user.email (lines 36/56) — undefined at runtime; next.config.ts has typescript.ignoreBuildErrors=true so the TS2339 slipped through; Prisma strips undefined filters => recipientEmail filter dropped (totalEmailsReceived counted ALL emails in DB) and OR-branch {} matched all rows (recentActivity returned the 10 newest emails system-wide, leaking other users' subjects/isRead/folder)
+- Fix 1 (1 line): src/app/api/business/analytics/route.ts — added email:true to the findUnique select
+- Root cause of Zod issues: zod 4.3.5 — ZodError.errors is undefined (v3 API); exactly 4 call sites used it. contacts/route.ts:86 + contacts/[id]/route.ts:30 => TypeError inside validation branch => invalid input returned 500 instead of 400; labels/route.ts:62,99 => details: undefined (400 still returned, details silently lost)
+- Fixes 2-5 (1 line each): .errors => .issues in the 4 call sites (matches convention already used in 10+ other routes)
+- Focused runtime validation on local sqlite (provider flipped via sed, RESTORED to postgresql after; server on :3100 with JWT_SECRET set — labels routes read process.env.JWT_SECRET with no fallback): scripts/batch1-validate.ts — 26/26 PASS: analytics 401 unauth / 403 personal / 200 business with totals + recentActivity exactly matching DB ground truth for the session user (no leaked subject "BATCH1-PRIVATE-A2B"); contacts POST/PUT invalid => 400 with zod message (was 500); labels POST/PUT invalid => 400 with details; positive-path 201/200/201 regressions all green
+- bun run lint: 5 problems (3 errors, 2 warnings) = pre-existing baseline, no new issues
+- bunx tsc --noEmit: pre-fix had 7 errors in touched files (user.email x2, .errors x4, pre-existing labels:77 id destructure); post-fix all gone except untouched labels:77 (out of Batch 1 scope, masked by ignoreBuildErrors)
+- bun run build: success; killed test server; git diff reviewed = exactly 4 files / 5 one-line changes; prisma schema diff clean
+- NOT committed — awaiting authorization (CHANGE_SAFETY_RULES #7/#10); noted pre-existing quirks found on the way: labels + emails/[id]/labels routes read a `token` cookie that nothing sets and are uncalled by the UI (they only authenticate when JWT_SECRET env var exists); local sqlite test db (db/custom.db) accumulated ~12 test users/emails
+
+Stage Summary:
+- Batch 1 complete, uncommitted in working tree (4 files: business/analytics/route.ts, contacts/route.ts, contacts/[id]/route.ts, labels/route.ts)
+- Cross-user analytics leak closed (verified with DB ground-truth comparison); all four invalid-input paths now return 400 with proper Zod details
+- Validation script kept at scripts/batch1-validate.ts for reuse; production Neon DB untouched
