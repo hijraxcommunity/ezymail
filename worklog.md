@@ -968,3 +968,18 @@ Stage Summary:
 - Owner immediate action: REVOKE the PAT (chat history holds it) — https://github.com/settings/personal-access-tokens
 - Owner remaining (unchanged): paste CRON_SECRET into Vercel Production + redeploy; add crons entry to vercel.json if scheduling wanted; decide JWT_SECRET state
 - Sandbox note: code delivery channel problem remains open for future needs (no owner-visible file/preview UI); fallback = paste small files in chat
+
+---
+Task ID: 35
+Agent: Super Z
+Task: Add missing EzyMail trial-expiry cron schedule to vercel.json (daily 02:00 UTC)
+
+Work Log:
+- Inspected src/app/api/cron/trial-expiry/route.ts: GET-only; isAuthorizedCronRequest checks Authorization: Bearer BEFORE any DB access; SHA-256 digest + timingSafeEqual (no length leak); fails closed when CRON_SECRET unset/blank; authorized path = expire past-due trials (subscriptionStatus expired, emailReservedUntil +30d) then soft-delete lapsed reservations; errors -> 500, message-only logging
+- vercel.json: added crons [{path:/api/cron/trial-expiry, schedule:0 2 * * *}] — all existing keys ($schema, framework, buildCommand, installCommand) preserved verbatim; node JSON.parse validated, keys verified
+- Negative-only runtime checks (local next dev :3001, DB never touched, no production call, no valid-bearer request sent): no-header 401, wrong-bearer 401, non-bearer 401; dev log grep clean (no secret values)
+- Committed ONLY vercel.json (worklog for Task 34 was gateway auto-committed as 7e07f7d): 109310b, 1 file, +7/-1; tree clean
+
+Stage Summary:
+- Commit 109310b (local, NOT pushed — push authorization expired with previous PAT): cron schedule registered, endpoint contract confirmed compatible with Vercel Cron auto-Bearer behavior
+- Deploy steps for owner: push 109310b (new token or local edit), ensure CRON_SECRET set in Vercel Production, redeploy (crons read at deploy time); Hobby plan OK (once daily); verify via Vercel Cron logs — 401s there mean CRON_SECRET missing/mismatched
