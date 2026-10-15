@@ -34,19 +34,99 @@ export interface SessionPayload {
   userId: string;
   email: string;
   role: string;
+  iat?: number;
   exp: number;
 }
 
-export async function createSession(user: { id: string; email: string; role: string }, ipAddress?: string) {
-  const token = await new SignJWT({
-    userId: user.id,
+/**
+ * Session lifetime policy (sliding sessions):
+ *
+ * - A session token is valid for SESSION_MAX_AGE_SECONDS (30 days) from
+ *   issuance, enforced both by the JWT `exp` claim and the cookie `maxAge`.
+ * - While the user keeps using the app, getSession() silently re-issues a
+ *   fresh 30-day token once the current one is older than
+ *   SESSION_RENEWAL_THRESHOLD_SECONDS (24h). Active users therefore never
+ *   get logged out, while a session that sees no activity for 30 days
+ *   expires for good.
+ * - Rotation is strictly best-effort: if the cookie cannot be rewritten in
+ *   the current execution context, or the auxiliary DB session row cannot
+ *   be updated, the current token simply remains valid until its own `exp`.
+ *   The JWT itself is the only authentication authority; DB rows exist for
+ *   the sessions list and admin statistics.
+ */
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const SESSION_RENEWAL_THRESHOLD_SECONDS = 60 * 60 * 24; // renew after 1 day of token age
+const SESSION_COOKIE_NAME = 'ezymail-session';
+
+async function signSessionToken(user: { userId: string; email: string; role: string }): Promise<string> {
+  return new SignJWT({
+    userId: user.userId,
     email: user.email,
     role: user.role,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('24h')
+    // jose interprets a numeric input as an absolute UNIX-epoch timestamp in
+    // seconds (verified against the installed version), so the 30-day window
+    // must be added to "now" explicitly.
+    .setExpirationTime(Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS)
     .sign(getJwtSecret());
+}
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: SESSION_MAX_AGE_SECONDS,
+    path: '/',
+  };
+}
+
+/**
+ * Re-issues the session token when the current one is past the renewal
+ * threshold, sliding the 30-day window forward. Runs at most once per day
+ * per session. Any failure leaves the current token untouched and valid.
+ */
+async function rotateSessionIfDue(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  currentToken: string,
+  session: SessionPayload
+): Promise<void> {
+  try {
+    if (typeof session.iat !== 'number') return;
+    const ageSeconds = Math.floor(Date.now() / 1000) - session.iat;
+    if (ageSeconds <= SESSION_RENEWAL_THRESHOLD_SECONDS) return;
+
+    const token = await signSessionToken({
+      userId: session.userId,
+      email: session.email,
+      role: session.role,
+    });
+
+    cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+
+    // Keep the auxiliary DB session rows consistent with the active cookie.
+    try {
+      await db.session.deleteMany({ where: { token: currentToken } });
+      await db.session.create({
+        data: {
+          userId: session.userId,
+          token,
+          ipAddress: '',
+          expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
+        },
+      });
+    } catch {
+      // DB rows are auxiliary — cookie rotation above is what matters.
+    }
+  } catch {
+    // Renewal is best-effort: the current token stays valid until its exp.
+  }
+}
+
+export async function createSession(user: { id: string; email: string; role: string }, ipAddress?: string) {
+  const token = await signSessionToken({ userId: user.id, email: user.email, role: user.role });
 
   // Store session in database (non-blocking — cookie is set either way)
   try {
@@ -55,7 +135,7 @@ export async function createSession(user: { id: string; email: string; role: str
         userId: user.id,
         token,
         ipAddress: ipAddress || '',
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
       },
     });
   } catch {
@@ -64,20 +144,14 @@ export async function createSession(user: { id: string; email: string; role: str
 
   // Set cookie
   const cookieStore = await cookies();
-  cookieStore.set('ezymail-session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24, // 24 hours
-    path: '/',
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
 
   return token;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get('ezymail-session')?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) return null;
 
@@ -88,7 +162,9 @@ export async function getSession(): Promise<SessionPayload | null> {
 
   try {
     const { payload } = await jwtVerify(token, secret);
-    return payload as unknown as SessionPayload;
+    const session = payload as unknown as SessionPayload;
+    await rotateSessionIfDue(cookieStore, token, session);
+    return session;
   } catch {
     return null;
   }
@@ -96,7 +172,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 export async function destroySession() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('ezymail-session')?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (token) {
     try {

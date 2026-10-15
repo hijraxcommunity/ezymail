@@ -994,3 +994,22 @@ Work Log:
 
 Stage Summary:
 - GitHub now contains the cron schedule; remaining owner steps unchanged: revoke PAT, CRON_SECRET in Vercel Production, redeploy, check Crons tab
+
+---
+Task ID: 36
+Agent: Super Z
+Task: Option B sliding sessions (user reports 24h forced logout) + sandbox reset recovery
+
+Work Log:
+- SANDBOX RESET detected on entry: workspace reverted to Oct 1 snapshot — .env lost CRON_SECRET line, node_modules and db/ wiped, gitignored security test scripts (authz-email-labels suite, sanitizer tests) UNRECOVERABLE (never committed; zip backup also wiped); git history safe (origin/main = ac70944 intact; local = origin + 2 unpushed gateway commits incl. 6b738c3 which auto-captured stray docs files Agent.md/docs/ai/screens)
+- Recovery: bun install (1012 pkgs); .env restored with SAME CRON_SECRET as Vercel (value from chat history) + placeholder DATABASE_URL (real Neon URL lost — owner must re-paste from Neon console; placeholder intentionally invalid so misconfig is loud)
+- Root cause of complaint confirmed in auth.ts: JWT exp '24h' + cookie maxAge 24h + DB expiresAt 24h, no renewal — by-design hard 24h session
+- Implemented Option B sliding sessions in src/lib/auth.ts ONLY: SESSION_MAX_AGE_SECONDS=30d, SESSION_RENEWAL_THRESHOLD_SECONDS=24h, shared signSessionToken()/sessionCookieOptions(), rotateSessionIfDue() invoked from getSession() (re-sign fresh 30d token + rewrite cookie + swap auxiliary DB session row, all best-effort try/catch); SessionPayload gains optional iat; destroySession unchanged except constant
+- CRITICAL catch pre-test: jose setExpirationTime(number) = ABSOLUTE unix seconds (runtime-verified: exp=2592000 => 1970); fixed to Math.floor(Date.now()/1000)+MAX_AGE
+- New scripts/sliding-session-driver.sh (sqlite flip + dev server :3002, LOCAL DB only, restore-on-exit trap): ALL_OK 17/17 — login issues 30d JWT+cookie, no rotation below 24h threshold, 25h-old token rotates to fresh 30d token (iat fresh, window 30d, differs from aged), no immediate re-rotation, expired 401, anonymous 401, DB rows swap correctly
+- Validation: eslint auth.ts clean; tsc total 36 vs baseline 35 (delta = restored snapshot legacy untracked scripts, NOT auth.ts — auth.ts 0 errors); schema restored postgresql; tree = only M src/lib/auth.ts
+
+Stage Summary:
+- auth.ts sliding sessions ready, NOT committed/pushed (awaiting authorization per standing rule)
+- After deploy: existing users finish current <=24h token, log in once more, then enjoy 30d sliding sessions (active users never logged out; 30d inactivity = hard logout)
+- Owner reminders: re-paste real DATABASE_URL into local .env; revoke PAT if not done; next push will also carry the 2 unpushed gateway commits (worklog + stray docs)
