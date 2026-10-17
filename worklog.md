@@ -1153,3 +1153,39 @@ Work Log:
 Stage Summary:
 - Tier 2 active: every push + hourly heartbeat now guards against silent file loss; GitHub emails owner on failed runs
 - Watch first run in repo Actions tab; Tier 3 (branch protection / PR-only main) remains available if owner wants hard blocking
+
+---
+Task ID: 42b
+Agent: Super Z
+Task: Complete Tier 2 rollout — re-push guard with Workflows-scoped token, verify first CI run
+
+Work Log:
+- First push (8edbcf2) rejected by GitHub: PAT lacked workflow scope (GitHub security rule — tokens without it cannot create/modify workflow files); nothing landed, local commit intact
+- Owner supplied new PAT with Workflows permission; re-pushed: 042da52..8edbcf2 main -> main (one-shot pattern, redacted, unset)
+- Verified via authenticated API: "Integrity Guard | 8edbcf2 | completed | success" — first run GREEN on GitHub's own servers
+- Residue checks: remote URL clean, no stored credentials, tree clean
+
+Stage Summary:
+- Tier 2 ACTIVE: every push to main + hourly heartbeat + manual dispatch; red run = email to owner; restore recipe = git checkout last-green -- <file>
+- GitHub-side verification confirmed: 166 TS files, 8 critical files, all imports resolve
+- Standing reminder: previous PATs pasted in chat should be revoked by owner
+
+---
+Task ID: 43
+Agent: Super Z
+Task: Audit Batch 4 — /api/labels dead 'token'-cookie session + PUT undefined-id quirk (deferred from Batch 3/report); owner: "continue the remaining batches after Cron fix"
+
+Work Log:
+- Recovered deferred list from audit reports: (1) labels route dead session + PUT id quirk -> THIS batch; (2) buildCommand prisma db push quirk; (3) remote tracking-pixel hardening; (4) owner-side items
+- Verified scope: labels/[id] + emails/[id]/labels already use shared getSession() (authz batch); ONLY labels/route.ts hand-rolled getSession(req) reading cookie 'token' (real cookie = ezymail-session, auth.ts:59) -> endpoint permanently 401; PUT parsed body against schema WITHOUT id field -> id always undefined -> every PUT 400 ("de-facto undefined key quirk")
+- Fix (ONE file, src/app/api/labels/route.ts): import getSession from @/lib/auth, delete dead local getSession + jwtVerify/getJwtSecret imports, 4 call sites -> getSession(); PUT schema .extend({ id: z.string().min(1) }); behavior otherwise byte-identical
+- Rig (scripts/batch4-run.sh, isolated: real .env mv-guarded, sqlite flip + restore trap, local dummy secrets, dev :3007): 17/17 ALL_OK after two rig-only corrections (register requires @ezy.af + uppercase in password; R9 PUT contract requires name — pre-existing, kept)
+- Probes: no-cookie 401 / legacy 'token' cookie IGNORED (dead name gone) / forged 401 / register+login -> ezymail-session cookie / GET 200 / POST 201+400 / PUT id+name+color 200 updated / PUT no-id 400 / PUT no-name 400 / PUT unknown-id 404 / DELETE 200 / GET empty / no secret values in logs
+- Static: eslint clean on file; tsc 0 errors in labels route (old pre-existing TS2339 GONE — tracked-code baseline 16 -> 15); bun test suite unrecoverable (wiped in earlier revert, was gitignored)
+- SWEEP STRIKE during run: upload route deleted from working tree (UNCOMMITTED filesystem revert; sweep commit 89a2a62 carried only worklog +16) — restored from origin/main before any push; ci.yml/integrity.cjs chmod-noise reverted; local integrity guard re-run GREEN (166 files, 8 critical); GitHub main unaffected
+- Tree = ONLY M src/app/api/labels/route.ts (+ this worklog). NO commit, NO push — awaiting authorization per standing rule
+
+Stage Summary:
+- Batch 4 done and fully validated: labels endpoint now actually functional (shared fail-closed session + working PUT), dead cookie path eliminated
+- Remaining deferred: buildCommand db-push quirk; tracking-pixel hardening; owner-side (Neon rotation, PAT revocations, cron log check)
+- NOTE: sweep struck AGAIN mid-batch (uncommitted tree loss this time) — pushes must always run the integrity guard first
