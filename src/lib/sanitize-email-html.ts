@@ -180,6 +180,17 @@ export function createEmailHtmlSanitizer(root: WindowLike): (html: string) => st
     if (node.nodeName === 'A' && node.hasAttribute('target')) {
       node.setAttribute('rel', 'noopener noreferrer')
     }
+    // Remote-image privacy hardening (tracking-pixel mitigation), applied to
+    // every surviving <img> with a src (data: URIs are already stripped):
+    // - loading="lazy": offscreen beacons don't fire while reading
+    // - referrerpolicy="no-referrer": tracking servers learn nothing about readers
+    // - decoding="async": image fetches never block rendering
+    // Display behavior is unchanged — images still render when scrolled to.
+    if (node.nodeName === 'IMG' && node.getAttribute('src')) {
+      node.setAttribute('loading', 'lazy')
+      node.setAttribute('referrerpolicy', 'no-referrer')
+      node.setAttribute('decoding', 'async')
+    }
   })
 
   return (html: string) => purify.sanitize(html, CONFIG)
