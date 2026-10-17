@@ -1013,3 +1013,44 @@ Stage Summary:
 - auth.ts sliding sessions ready, NOT committed/pushed (awaiting authorization per standing rule)
 - After deploy: existing users finish current <=24h token, log in once more, then enjoy 30d sliding sessions (active users never logged out; 30d inactivity = hard logout)
 - Owner reminders: re-paste real DATABASE_URL into local .env; revoke PAT if not done; next push will also carry the 2 unpushed gateway commits (worklog + stray docs)
+
+---
+Task ID: 37
+Agent: Super Z
+Task: Restore real Neon DATABASE_URL into local .env (owner provided it from Neon console) + read-only connectivity verification
+
+Work Log:
+- Found .env reduced to a single placeholder DATABASE_URL line — the CRON_SECRET line restored in Task 36 was ALSO wiped (another snapshot reversion); .env confirmed gitignored (.gitignore:34)
+- Replaced placeholder via sed with owner-provided pooled string (host ep-flat-bread-ao1majhj-pooler..., db neondb, sslmode=require&channel_binding=require); value never printed back — verification output password-masked
+- Snapshot reversion again detected: node_modules gone AND scripts/ dir wiped (incl. sliding-session-driver.sh); recovered: mkdir scripts, bun install (1012 pkgs, 11s), prisma generate OK
+- Read-only ping (scripts/neon-ping.js — SELECT/COUNT only, credential-redacted errors): CONNECTED OK | db=neondb | role=neondb_owner | PostgreSQL 17.11; live data visible: User 20, Email 151, Contact 5, Session 65 rows
+- No commits, no pushes, production untouched; Vercel's own DATABASE_URL is separate and already serving production
+
+Stage Summary:
+- Local .env now holds the working pooled Neon URL; CRON_SECRET line still missing locally (needed only for local cron-route tests — owner can re-paste when desired)
+- CAUTION recorded: local dev server would now share the LIVE production DB — keep local testing on the sqlite-flip driver pattern; no mutating local runs without owner authorization
+- Pooled (-pooler) string is correct for app runtime; direct (non-pooler) string recommended only if future schema migrations are ever run against Neon
+- src/lib/auth.ts sliding-session change still uncommitted, awaiting owner authorization; old PAT (used twice) should be revoked
+
+---
+Task ID: 38
+Agent: Super Z
+Task: SECURITY AUDIT (triggered during Task 37) — Neon password exposure in git history
+
+Work Log:
+- While verifying .env, discovered .env had been committed historically: 27 .env change-points across refs; gateway auto-commits re-added the gitignored .env repeatedly
+- DEFINITIVE FINDINGS (all checks masked, no secret values printed):
+  * 105 commits (2026-06-29 .. 2026-07-09) contain a tracked root .env whose DATABASE_URL password is IDENTICAL to the current live Neon password (105/105 exact match, 0 different)
+  * ALL 105 commits are reachable from origin/main → the live production DB password is in GitHub history RIGHT NOW
+  * .env NOT tracked at origin/main tip nor local HEAD tip (only historical blobs) — fresh clones don't include it, but history browsing exposes it
+  * Historical blobs use the direct endpoint (ep-flat-bread-ao1majh, no -pooler); current URL is pooled — same instance/branch, same password
+  * CRON_SECRET: 0 occurrences in any committed .env — never leaked
+  * NEXT_PUBLIC_FIREBASE_API_KEY present in blobs — public-by-design, benign
+- Repo visibility undetermined from sandbox (GitHub API 403/rate-limit); owner can check instantly on github.com
+- Sliding-session change discovered safely captured inside gateway auto-commit 713af50 (local main = origin/main + 3 commits, unpushed); working tree now only M worklog.md + untracked scripts/neon-ping.js, scripts/npg-commits.txt
+- NO remediation executed — history rewrite/force-push requires owner authorization + fresh PAT; password rotation is owner-side on Neon console
+
+Stage Summary:
+- OWNER ACTION REQUIRED (urgent): rotate Neon password (Neon Console → Project → Roles/Connection Details → Reset password) → immediately update Vercel Production DATABASE_URL → redeploy → give me the new string for local .env
+- Optional after rotation (authorization needed): purge .env blobs from history (git filter-repo) + force-push; leaked value becomes harmless once rotated
+- Standing reminders: revoke old PAT; sliding-session push still pending authorization
