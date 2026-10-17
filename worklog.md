@@ -1064,7 +1064,7 @@ Work Log:
 - Clarified to owner: chat messages cannot be deleted; neutralization = history purge (done here) + Neon password rotation (owner-side) + old PAT revocation (owner-side)
 - Pre-rewrite capture: remote URL, tip tree 5d669d69ec073f3139de9df974c3e667655e9c13, identity present; gateway auto-commit 71ea26c had already swept worklog Tasks 37-38 (tree clean); /scripts/ confirmed gitignored
 - git-filter-repo (single-file, curl-installed to gitignored scripts/): --force --invert-paths --path .env --path .env.local over ALL refs; 363 → 361 commits (2 .env-only auto-commits pruned); repack+gc automatic
-- VERIFIED: 0 .env/.env.local blobs in any ref; 0 npg_ occurrences in any blob; old commit 713af50 + leaky blob 2a9bb344 absent from local object store; reflog empty; tip tree byte-identical (5d669d6...); sliding-session code intact (8 matches)
+- VERIFIED: 0 .env/.env.local blobs in any ref; 0 Neon-password occurrences in any blob; old commit 713af50 + leaky blob 2a9bb344 absent from local object store; reflog empty; tip tree byte-identical (5d669d6...); sliding-session code intact (8 matches)
 - CRON_SECRET: 261 hits = code refs (route reads process.env), .env.example placeholders, worklog prose — no values, benign
 - .env.vercel audit: 2 historical blobs contain only 21 Vercel system/OIDC metadata keys (short-lived token, expired) — benign, left in place
 - Origin remote re-added (filter-repo strips it); force-push attempted WITHOUT credentials (expected fail: no PAT stored by design) — AWAITING fresh PAT from owner
@@ -1075,3 +1075,21 @@ Stage Summary:
 - BLOCKED ON: fresh fine-grained PAT from owner → then: GIT_TERMINAL_PROMPT=0 git push -f origin main (force-push rewrites GitHub history) → Vercel auto-deploys same tree
 - After push: recommend GitHub Support ticket to flush cached commit views; rotation of Neon password remains the definitive kill-switch for the leaked value
 - This push will ALSO ship the sliding-session fix (tip contains auth.ts change, tested 17/17) — flagged to owner as part of "push - deploy!"
+
+---
+Task ID: 39b
+Agent: Super Z
+Task: Force-push purged history to GitHub with fresh owner PAT (one-shot, redacted)
+
+Work Log:
+- Owner provided fresh fine-grained PAT; one-shot push pattern (shell var only, output redacted, no persistence)
+- FORCE-PUSH OK: ac70944...209383d main -> main (forced update); remote refs inventory = refs/heads/main ONLY (no stray branches on GitHub)
+- Gateway auto-commit added worklog Task 39 on top of rewrite tip mid-flow (65ea40c -> 209383d) — rode along in push
+- Post-push residue checks: remote URL clean (no token), git config clean, ~/.git-credentials absent, env clean, token unset
+- Single secret-prefix word found in pushed worklog PROSE (audit wording, not a value) — wording neutralized locally; cleanup commit rides next push
+- Vercel auto-deploy triggers from push (same code tree as production + sliding-session fix)
+
+Stage Summary:
+- GitHub main = purged history (0 .env blobs, 0 Neon-password occurrences) + sliding-session fix + full worklog
+- Deploy is automatic on Vercel; owner should see a build for 209383d in the dashboard
+- REMAINING owner actions: rotate Neon password → update Vercel DATABASE_URL → redeploy → revoke old PAT → (optional) GitHub Support cache-flush note
