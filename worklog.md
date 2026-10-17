@@ -1189,3 +1189,20 @@ Stage Summary:
 - Batch 4 done and fully validated: labels endpoint now actually functional (shared fail-closed session + working PUT), dead cookie path eliminated
 - Remaining deferred: buildCommand db-push quirk; tracking-pixel hardening; owner-side (Neon rotation, PAT revocations, cron log check)
 - NOTE: sweep struck AGAIN mid-batch (uncommitted tree loss this time) — pushes must always run the integrity guard first
+
+---
+Task ID: 44
+Agent: Super Z
+Task: Audit Batch 5 (buildCommand db-push quirk) + Batch 6 (tracking-pixel hardening); owner: "continue if other batch remains"
+
+Work Log:
+- Batch 5 (vercel.json, ONE line): removed `npx prisma db push --skip-generate` from buildCommand -> `npx prisma generate && next build`. Rationale: every Vercel build connected to PROD DB and auto-applied schema drift BEFORE code verification; schema changes now deliberate. JSON re-validated; crons/installCommand untouched
+- Batch 6 (src/lib/sanitize-email-html.ts, ONE hook extension): every surviving <img> with src now gets loading=lazy + referrerpolicy=no-referrer + decoding=async (set in afterSanitizeAttributes, same pattern as rel=noopener hardening). data: URIs already stripped upstream; display behavior unchanged; beacons no longer fire offscreen, no referrer leak, no render blocking. Full Gmail-style block-by-default banner explicitly NOT done (product decision, offered to owner)
+- Tests: scripts/batch6-sanitizer.test.ts (bun+jsdom; old 31-test suite unrecoverable after revert) — 12/12 PASS: 5 img-hardening cases (remote/relative/no-src/override-eager/attrs-preserved) + 7 regressions (script, onclick, data:, javascript:, tabnabbing rel, legit formatting, idempotency)
+- Static: eslint clean; tsc 0 errors in sanitizer (baseline 15 unrelated unchanged); integrity guard GREEN pre-push; tree = exactly M vercel.json + M sanitize-email-html.ts
+- NO commit, NO push — awaiting authorization per standing rule
+
+Stage Summary:
+- Both remaining audit batches implemented and validated; audit backlog now EMPTY on my side
+- Owner-side items remain: Neon password rotation, old PAT revocations, Vercel cron log check (200s)
+- After deploy of this batch: builds no longer touch prod DB; email images lazy-load with zero referrer leakage
