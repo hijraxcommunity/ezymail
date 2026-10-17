@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
-import { getJwtSecret } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { z } from 'zod/v4'
 
 const labelSchema = z.object({
@@ -9,23 +8,13 @@ const labelSchema = z.object({
   color: z.string().default('#4285F4'),
 })
 
-async function getSession(req: NextRequest) {
-  const token = req.cookies.get('token')?.value
-  if (!token) return null
-  try {
-    // Shared fail-closed helper: throws when JWT_SECRET is unconfigured, which
-    // this catch treats like any invalid token (null -> 401) — the same
-    // observable behavior as before, now by design instead of by accident.
-    const { payload } = await jwtVerify(token, getJwtSecret())
-    return payload
-  } catch {
-    return null
-  }
-}
+// PUT needs the label id in the body; the base schema has no id field, so it
+// is extended here (was previously destructured from a schema without it —
+// always undefined, making every PUT return 400).
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession(req)
+    const session = await getSession()
     if (!session?.userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
@@ -44,7 +33,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession(req)
+    const session = await getSession()
     if (!session?.userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
@@ -72,13 +61,17 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const session = await getSession(req)
+    const session = await getSession()
     if (!session?.userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await req.json()
-    const { id, ...data } = labelSchema.partial().required({ name: true }).parse(body)
+    const { id, ...data } = labelSchema
+      .partial()
+      .required({ name: true })
+      .extend({ id: z.string().min(1) })
+      .parse(body)
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'Label ID required' }, { status: 400 })
@@ -109,7 +102,7 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await getSession(req)
+    const session = await getSession()
     if (!session?.userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
