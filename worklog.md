@@ -1093,3 +1093,24 @@ Stage Summary:
 - GitHub main = purged history (0 .env blobs, 0 Neon-password occurrences) + sliding-session fix + full worklog
 - Deploy is automatic on Vercel; owner should see a build for 209383d in the dashboard
 - REMAINING owner actions: rotate Neon password → update Vercel DATABASE_URL → redeploy → revoke old PAT → (optional) GitHub Support cache-flush note
+
+---
+Task ID: 40
+Agent: Super Z
+Task: Gmail-style UI change — hide top header (search bar + avatar) on email READING view, mobile only; owner: "do not touch anything else"
+
+Work Log:
+- Screenshot analysis: owner's red box marks the TOP header (search/theme/avatar), NOT the bottom tab bar — bottom nav explicitly kept
+- Structure: single-route app (src/app/page.tsx) — reading state = store selectedEmailId; MailHeader mounted once, MobileNav separate (untouched)
+- Edit (ONE file, src/app/page.tsx lines 272-275): wrapped <MailHeader /> in shrink-0 div with class `hidden md:block` when selectedEmailId set, `block` otherwise — mobile reading hides header, desktop (both panes visible) unchanged
+- Verification: eslint exit 0 (after repairing partial bun install missing eslint-config-next); tsc: 16 errors total, page.tsx line 199 error PRE-EXISTING (stash-baseline confirmed, unrelated to edit); zero new errors
+- E2E on ISOLATED rig (zero production contact): .env guarded away via mv, schema sed-flipped to sqlite, fresh db/local-test.db pushed, seed script (test user reader@ezymail.test + 3 emails incl. "Re: PDF File"), dev server :3003 with local-only JWT_SECRET, API login + injected session cookie, agent-browser 390x844 viewport
+- RESULTS: MOBILE MAIN header=VISIBLE | MOBILE READING header=HIDDEN (clean toolbar + bottom nav intact, Gmail-identical) | DESKTOP READING header=VISIBLE | DESKTOP MAIN header=VISIBLE; screenshots in download/reading-nav-test/ (4 PNGs)
+- Teardown: server killed, schema git-restored to postgresql, .env restored, postgres prisma client regenerated; git status = only M src/app/page.tsx
+- ANOMALY discovered+fixed: .env had been SILENTLY clobbered mid-session (gateway/snapshot cycle) back to stale sqlite url file:...db/custom.db — real Neon URL re-written again from owner's earlier paste (masked-verified); test rig itself never touched the real .env (guarded before server start)
+- No commit, no push — awaiting owner authorization per standing rule
+
+Stage Summary:
+- Gmail-style reading view implemented, fully verified across 4 viewport states; only file touched: src/app/page.tsx (+3 lines)
+- .env again holds the real pooled Neon URL; CRON_SECRET still absent locally (harmless for app runtime)
+- Awaiting owner "push" to ship (will ride with next deploy; sliding-session fix already on GitHub)

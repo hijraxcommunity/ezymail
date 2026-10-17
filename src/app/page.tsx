@@ -269,7 +269,10 @@ export default function HomePage() {
   // ─── Main mail view (personal users) ─────────────────────────────────────
   return (
     <div className="h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
-      <MailHeader />
+      {/* Gmail-style: top header hidden on mobile while reading an email (list/detail panes unaffected on desktop) */}
+      <div className={`shrink-0 ${selectedEmailId ? 'hidden md:block' : 'block'}`}>
+        <MailHeader />
+      </div>
 
       <motion.div
         initial={{ opacity: 0 }}
