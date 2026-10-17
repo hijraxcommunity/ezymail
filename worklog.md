@@ -1134,3 +1134,22 @@ Stage Summary:
 - /api/upload restored (single-file diff, byte-identical to last working version) — attachment upload 404 resolved on next deploy
 - Production now ships: upload fix + Task 40 Gmail-style reading view + sliding-session fix (already on remote)
 - No secrets exposed; no other files touched
+
+---
+Task ID: 42
+Agent: Super Z
+Task: Tier 2 protection — GitHub Actions integrity guard; owner: "Tier 2 ... I can not check app everytime"
+
+Work Log:
+- Context: /api/upload was silently deleted 5x by sandbox-revert + gateway auto-commit sweeps (Task 41 root cause); owner chose Tier 2 CI watchdog
+- Created .github/workflows/ci.yml — triggers: push to main, PRs to main, hourly cron heartbeat ('7 * * * *' UTC), manual dispatch; runs on GitHub servers, immune to sandbox
+- Created .github/scripts/integrity.cjs — walks all src TS/TSX (166 files), verifies every relative import resolves, verifies 8 critical files exist (upload route, attachments route, auth, db, emails route, schema, package.json, workflow itself)
+- Failure mode: exit 1 + explicit MISSING CRITICAL FILES / BROKEN IMPORTS listing; red run = restore file from last green commit
+- Kept lean (no install/build) to avoid false positives — Vercel already fails visibly on build errors; this guard covers what builds CANNOT see (string-URL runtime references like /api/upload)
+- Local verification: node .github/scripts/integrity.cjs -> exit 0, "Integrity OK: 166 TS files checked, all imports resolve, 8 critical files present"
+- Note: .github/ paths NOT gitignored (scripts/ is, hence checker lives under .github/scripts/)
+- Pushed to GitHub main (one-shot token, redacted, unset) — first CI run triggers on this push
+
+Stage Summary:
+- Tier 2 active: every push + hourly heartbeat now guards against silent file loss; GitHub emails owner on failed runs
+- Watch first run in repo Actions tab; Tier 3 (branch protection / PR-only main) remains available if owner wants hard blocking

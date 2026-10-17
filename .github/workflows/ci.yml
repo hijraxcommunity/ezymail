@@ -1,0 +1,32 @@
+# EzyMail integrity guard — Tier 2 protection
+# Purpose: the dev sandbox has a known failure mode where snapshot reverts +
+# auto-commit sweeps silently delete source files (the /api/upload route was
+# deleted 5x this way, causing "upload fails (404)" in production).
+# This workflow runs on GitHub's servers (immune to the sandbox) and:
+#   1. Verifies every relative import in src/ resolves to a real file
+#   2. Verifies critical files (upload route, auth, db, schema...) exist
+# Runs on every push to main, every PR, and hourly as a heartbeat.
+# A red run here means: restore the missing file from the last green commit.
+
+name: Integrity Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '7 * * * *' # hourly heartbeat (UTC)
+  workflow_dispatch: {} # allow manual runs
+
+jobs:
+  integrity:
+    name: Imports resolve + critical files present
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run integrity audit
+        run: node .github/scripts/integrity.cjs
