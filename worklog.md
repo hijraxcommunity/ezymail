@@ -1114,3 +1114,23 @@ Stage Summary:
 - Gmail-style reading view implemented, fully verified across 4 viewport states; only file touched: src/app/page.tsx (+3 lines)
 - .env again holds the real pooled Neon URL; CRON_SECRET still absent locally (harmless for app runtime)
 - Awaiting owner "push" to ship (will ride with next deploy; sliding-session fix already on GitHub)
+
+---
+Task ID: 41
+Agent: Super Z
+Task: Fix "upload fails (404)" when attaching documents in compose; owner: fix + push, touch nothing else
+
+Work Log:
+- Reproduced by code trace: compose-modal.tsx line 747 POSTs multipart to /api/upload (field `files`, expects { files: [{name,url,size,type,data}] })
+- Root cause: src/app/api/upload/route.ts DOES NOT EXIST on main — Next.js returns 404 for the missing route
+- History audit: route existed (89 lines, base64-storage design); FIVE separate commits deleted it (ac73c4f Sep18, 551619b Sep27, 41fb7fa Sep27, 1da1e39 Oct01, 91c85ce Oct01) — repeated gateway/sandbox auto-commit sweeps recorded the deletion each time it was wiped
+- Downstream chain verified intact: /api/emails stores attachments JSON; /api/attachments/[path] serves match.data base64 (both present, unchanged)
+- Fix: restored route byte-for-byte from 91c85ce^ (getSession auth, 3MB/file, 3MB total, 2 files max — identical to compose-modal pre-flight limits)
+- Verification: bunx tsc --noEmit = 0 errors in restored route (16 pre-existing errors elsewhere, all already on production main; next.config ignoreBuildErrors=true so build unaffected)
+- Push payload audit before pushing: 0a741bb = worklog-only cleanup; 69e4d20 = Task 40 navbar fix (previously authorized, never pushed) + worklog
+- Pushed main to GitHub (one-shot token pattern, output redacted, token unset, zero residue) — Vercel auto-deploy picks up upload fix + navbar fix together
+
+Stage Summary:
+- /api/upload restored (single-file diff, byte-identical to last working version) — attachment upload 404 resolved on next deploy
+- Production now ships: upload fix + Task 40 Gmail-style reading view + sliding-session fix (already on remote)
+- No secrets exposed; no other files touched
