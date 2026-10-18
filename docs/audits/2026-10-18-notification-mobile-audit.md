@@ -113,3 +113,30 @@ Method: static code inspection + git evidence. No production data touched, no co
 - **Phase 6:** deployment/release guide with env names, Firebase/APNs/Play/App Store steps, rollback, monitoring.
 
 **Owner prerequisites (Phase 2+):** VAPID key + service account key verified in Vercel; for native: Firebase Android app + google-services.json, Apple Developer account + APNs key, later Play/App Store accounts.
+
+---
+
+## 8. Corrections after re-verification (same day, before Phase 2)
+
+- **F1 partial correction — service worker registration was NEVER missing.**
+  `src/components/providers.tsx:23-24` contains `navigator.serviceWorker.register('/sw.js')` — the call is split across two lines and the original audit grep (single-line pattern) missed it. Registration has existed since commit `b4ea4d5`. The `serviceWorker.ready` wait in push-notification-setup resolves correctly.
+  Consequently the subscription chain's only hard gate is the **VAPID key env at build time** (F5) — browser E2E in the isolated rig confirms: with `/sw.js` registered and controlled, the subscribe flow runs as soon as `NEXT_PUBLIC_FIREBASE_VAPID_KEY` is present in the build.
+- **NEW F11 — payload semantics made web taps unreliable even with a subscription.**
+  `sendPushNotification.ts` sent a top-level `notification` + `data`. For web push, a notification-bearing FCM message is **auto-displayed by the browser and `onBackgroundMessage` never fires** — so `sw.js`'s click handler (which reads `data.url`) was unreachable for auto-shown notifications. Data-only web payloads guarantee the SW shows the notification itself and owns the click URL.
+- **Clarification on the "two mounts"**: `<PushNotificationSetup />` appears twice in `page.tsx` (admin branch + personal branch) but the branches are mutually exclusive returns — never mounted twice simultaneously.
+- **Production `PushSubscription` row count could NOT be verified from the sandbox**: local `.env` was again found clobbered to the stale sqlite URL (recurring anomaly, cf. Task 40) and the real Neon URL is not held in this session. Read-only count script ready at `scripts/push-sub-count.cjs` (SELECT/COUNT only) — run it once a valid DATABASE_URL is provided, or check Vercel logs for `[Push]` lines.
+
+## 9. Phase 2 implementation record (2026-10-18)
+
+Commits (local, main, **not pushed** — awaiting owner authorization):
+- `de3c4a6` **2a** — push-setup: VAPID-missing warn (was silent), `ezymail-push-active` sessionStorage flag on subscribe (cleared on logout); use-notifications suppresses its own Notification/toast when the flag is set (FCM owns surfaces; list refresh + sound unchanged); deleted dead `public/firebase-messaging-sw.js`.
+- `c504c5a` **2b** — compose push wrapped in `next/server` `after()` (fire-and-forget could be frozen post-response on serverless); recipient `desktopNotif` preference now honored on the push path; reply path now pushes (was missing entirely, same `after()` pattern); payload restructured to data-only-for-web + platform payloads (android.notification / apns.aps.alert); `buildFcmMessage()` extracted as a pure exported function for tests.
+- `d3cf86f` **2c** — sw.js: background handler reads title/body from `data`, targets `/?id=<emailId>` (was `/inbox?id=` → 404; no `/inbox` route exists), click fallback `/`, vibrate restored; page.tsx: reads `?id=` once after auth, opens the email (EmailDetail self-fetches by id), cleans the URL via `replaceState` preserving the ezView back-guard state; skipped for admin/business views.
+
+Verification (isolated sqlite rig, dummy secrets, zero production contact):
+- Payload unit tests `scripts/phase2-payload.test.ts`: **7/7** (web data-only, deep-link URL, platform payloads, empty-subject fallback, serializable).
+- API battery `scripts/phase2-run.sh`: **23/23** — subscribe auth (no-cookie/forged 401, register+login), compose 201 + post-response push trigger logged, reply 201 + reply push trigger logged, "Sending to 1 token" dispatch, FCM boundary reached with dummy creds (send failed safely, email unaffected), prefs gate skip, scheduled send produces NO push, unsubscribe → 0 tokens.
+- Browser E2E (390×844, Chromium): `/sw.js` registered + controlling page; `/?id=<emailId>` opens the correct email and URL is cleaned to `/`; back closes the detail and the app stays alive (back-guard intact); `[Push] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing` now visible in console (diagnosability). Screenshots: `download/phase2-deeplink-open.png`, `download/phase2-inbox-after-back.png`.
+- Static: eslint clean on all 6 touched files; `tsc --noEmit` 15 errors = unchanged pre-existing baseline (one transient `setCurrentFolder` miss was caught by tsc and fixed inside commit 2c); integrity guard green (166 files, 8 critical).
+
+Still true after Phase 2 (unchanged): F6 iOS web push exclusion (native phase required), F5/V1-V2 owner-side env verification on Vercel (`NEXT_PUBLIC_FIREBASE_VAPID_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`), F8 logout hygiene relies on rebind + client cleanup (server-side logout sweep still open), Capacitor greenfield (Phase 3).
