@@ -1304,3 +1304,20 @@ Stage Summary:
 - Web path proven inert-identical: the only web-reachable diff is a false boolean check + optional param default
 - Remaining Phase 3 owner-side: npx cap add android/ios + google-services.json + signing (Phase 4 checklist)
 - Standing sweep watch: UUID commits keep targeting upload route — guard is the control, keep monitoring
+
+---
+Task ID: 50
+Agent: Main
+Task: Push #2 with owner-reused token (Capacitor 3a/3b + worklogs)
+
+Work Log:
+- Owner directed reuse of previous token ("do push with the old one"); same one-shot protocol: inline helper, redacted output, unset after, residue checks clean
+- Pre-push gate green: 4 commits (99489fd, ed588ae, bc9e976, 737e352), 6 files, secret scan clean, no UUID noise, guard green
+- Push landed 4648cfc..737e352; main==origin/main
+- Deploy monitoring: site 200, sw.js deep-link version intact; capacitor inertness already proven by local prod-build browser smoke (0 capacitor network requests, 0 errors) — no further bundle forensics needed
+- CI run for 737e352 queued at check time (previous run for 4648cfc completed success); local guard ran identical checks green
+
+Stage Summary:
+- Phase 3 DEPLOYED to production (inert on web by design)
+- Owner: REVOKE the token now if not done — it has now been used twice
+- Remaining: Phase 5 regression battery rebuild (scripts/ swept), Phase 4 device checklists are owner-side, final 9-item report
