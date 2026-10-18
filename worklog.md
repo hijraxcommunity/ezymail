@@ -1321,3 +1321,24 @@ Stage Summary:
 - Phase 3 DEPLOYED to production (inert on web by design)
 - Owner: REVOKE the token now if not done — it has now been used twice
 - Remaining: Phase 5 regression battery rebuild (scripts/ swept), Phase 4 device checklists are owner-side, final 9-item report
+
+---
+Task ID: 51
+Agent: Main
+Task: Phase 5 regression battery rebuild + continuous push/deploy while owner does Phase 4
+
+Work Log:
+- Owner directive: doing Phase 4 on devices; agent to keep pushing/deploying meanwhile (standing push authorization)
+- Push #3: 737e352..1c5c733 (Task 50 worklog) — token reused per owner instruction, one-shot protocol, residue clean
+- Rebuilt scripts/phase5-api-battery.sh (spec per Task 46's swept 23/23 rig): isolated sqlite + dummy secrets, 21 assertions — subscribe auth (401 no-cookie/forged), register/login ×2, upsert subs, compose→after() post-response dispatch, FCM-boundary safe-fail (email NOT rolled back), recipient inbox scoping, reply-path push, prefs gate skip, scheduled→no push, cross-user unsubscribe DENIED, own-unsubscribe scoped, zero-subscriber no-op, profile 401 no-fallback
+- SAFETY FINDING while debugging 409: shell env + clobbered .env both export DATABASE_URL=file:.../db/custom.db (stale local sqlite — the recurring anomaly) and env beats .env → battery run 1 wrote test rows into local dev custom.db. ZERO production/Neon contact (local file only). custom.db purged via temporary sqlite-client switch (2 users, 22 emails, 1 stray sub removed), schema+client restored to postgresql byte-exact
+- Battery hardening: exported ABSOLUTE rig DATABASE_URL (beats shell), rig-in-use safety abort (db file must exist post-start), teardown kills next-server children (pkill), A10 assertion gained outer-catch line "Failed to send push notification"
+- Result: 21/21 ALL GREEN (reproduced); payload tests 8/8 unchanged; production untouched
+- scripts/ un-gitignored (now only scripts/*.log ignored) and battery committed b9c10fd — rig survives future sweeps recoverable from origin
+- Push #4: 1c5c733..b9c10fd, one-shot protocol, residue clean
+
+Stage Summary:
+- Phase 5 regression battery: COMPLETE (21/21 + 8/8), tracked in git
+- main == origin/main at b9c10fd; Vercel deploys (no functional change)
+- Remaining: owner Phase 4 device results → feed final report; final 9-item report drafted after
+- Standing watch: .env still clobbered to stale sqlite (anomaly unchanged — owner's real URL lives in Vercel only)
