@@ -1206,3 +1206,25 @@ Stage Summary:
 - Both remaining audit batches implemented and validated; audit backlog now EMPTY on my side
 - Owner-side items remain: Neon password rotation, old PAT revocations, Vercel cron log check (200s)
 - After deploy of this batch: builds no longer touch prod DB; email images lazy-load with zero referrer leakage
+
+---
+Task ID: 45
+Agent: Super Z
+Task: Phase 1 audit — notification lifecycle, Web/FCM push, PWA, Capacitor readiness (owner's mobile program); AUDIT ONLY, no code changes
+
+Work Log:
+- Pre-check: sweep struck again (upload route deleted uncommitted from tree) — restored from origin/main BEFORE audit began; guard green; ci files chmod-noise reverted
+- Traced full lifecycle: POST /api/emails commits inbox+sent rows -> fire-and-forget sendPushNotification (emails/route.ts:305-320, scheduled skipped) -> FCM v1 (lib/notifications/sendPushNotification.ts, FIREBASE_SERVICE_ACCOUNT_KEY, project customer-database-88e9f) -> db.pushSubscription tokens (model: userId/fcmToken@unique/platform) -> SW shows notification -> notificationclick /inbox?id=
+- CONFIRMED F1 (primary root cause): ZERO navigator.serviceWorker.register() calls in src/ — push-notification-setup waits on serviceWorker.ready (never resolves) -> getToken never runs -> pushSubscription table always empty -> every server push = early-return no-op. public/sw.js (full PWA SW!) + firebase-messaging-sw.js both DEAD files
+- CONFIRMED F2: only working notifications = 15s in-page polling + page-context Notification constructor (use-notifications.tsx) — frozen in mobile background tabs, dead in closed app, unsupported in iOS standalone PWA. Matches symptom "desktop works, mobile doesn't"
+- CONFIRMED F3: push not awaited, no after() — Vercel may freeze lambda post-response, dropping FCM calls
+- CONFIRMED F4: deep links broken — /inbox?id= target (no /inbox route exists, single-route app) AND page.tsx reads no URL params -> tap = 404 / no email opened
+- CONFIRMED F5: silent VAPID gate (NEXT_PUBLIC_FIREBASE_VAPID_KEY absent from local .env; Vercel value owner-verifiable only)
+- CONFIRMED F6: iOS structurally excluded (FCM web push unsupported on iOS Safari/PWA) — native-only fix
+- Also: F7 triple notification surfaces (dedup needed post-fix), F8 logout does NOT clean push subscriptions (cross-account leak edge; rebind-upsert mitigates), F9 reply path never pushes, F10 Capacitor greenfield (no deps/dirs)
+- Full report written to docs/audits/2026-10-18-notification-mobile-audit.md (uncommitted) — reusable components, risks, phased plan inside
+
+Stage Summary:
+- Root cause chain proven: no SW registration -> no subscriptions -> no push; foreground-only polling explains desktop-works/mobile-doesn't; deep links 404
+- Phase 2 minimal plan ready: 2a register sw.js + explicit registration + surfaced states; 2b after()-wrap + reply push + prefs + dedup; 2c /?id= deep links + SW click fix
+- Awaiting owner green light on Phase 2 before any code change (per critical rules)
