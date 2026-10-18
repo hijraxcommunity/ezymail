@@ -72,7 +72,7 @@ server.log
 /examples/
 /ezymail-repo/
 /mini-services/
-/scripts/
+/scripts/*.log
 /tests/
 
 # Capacitor native shells (generated owner-side, artifacts never committed)
