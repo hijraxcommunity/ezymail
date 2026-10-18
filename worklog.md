@@ -1228,3 +1228,23 @@ Stage Summary:
 - Root cause chain proven: no SW registration -> no subscriptions -> no push; foreground-only polling explains desktop-works/mobile-doesn't; deep links 404
 - Phase 2 minimal plan ready: 2a register sw.js + explicit registration + surfaced states; 2b after()-wrap + reply push + prefs + dedup; 2c /?id= deep links + SW click fix
 - Awaiting owner green light on Phase 2 before any code change (per critical rules)
+
+---
+Task ID: 46
+Agent: Super Z
+Task: Phase 2 — notification trigger fixes (owner green light "Yeah all is set"): after() dispatch, prefs gate, reply push, data-only web payload, deep links, foreground dedup; AUDIT corrections included
+
+Work Log:
+- Pre-flight: sweep check clean (274484b = gateway commit carrying audit report + Task 45 worklog only); critical files intact; node_modules + scripts/ found WIPED again (sandbox reversion) — bun install + scripts/ recreated; .env found clobbered to stale sqlite URL AGAIN (Task 40 anomaly recurs) — production PushSubscription count therefore UNVERIFIABLE from sandbox (scripts/push-sub-count.cjs ready for owner/next session)
+- AUDIT CORRECTION (F1): providers.tsx:23-24 HAS navigator.serviceWorker.register('/sw.js') — call split across two lines, original audit grep missed it; registration never missing; real gate = VAPID env at build time. NEW F11: top-level notification payload = browser auto-display, onBackgroundMessage never fires → SW click data.url unreachable; fixed via data-only web payload
+- Commit de3c4a6 (2a): VAPID-missing console.warn (was silent), 'ezymail-push-active' flag on subscribe/clear on logout, use-notifications suppresses own Notification+toast when flag set (FCM owns surfaces; refresh+sound kept), deleted dead firebase-messaging-sw.js
+- Commit c504c5a (2b): compose push wrapped in next/server after(); recipient desktopNotif pref honored on push path; reply route now pushes (was missing); payload restructured (web data-only, android.notification + apns.aps.alert, data.url /?id=); buildFcmMessage() exported pure for tests
+- Commit d3cf86f (2c): sw.js targets /?id= (was /inbox?id= → 404), reads title/body from data, click fallback /, vibrate; page.tsx opens ?id email once after auth (EmailDetail self-fetches by id), replaceState URL clean keeping ezView guard; admin/business skipped; tsc caught a transient setCurrentFolder miss — fixed in-commit
+- Commit f1f74b2: audit doc corrections + Phase 2 record
+- Verification: payload tests 7/7; API rig 23/23 (subscribe auth 401s, compose+reply post-response triggers logged, 1-token dispatch, FCM boundary safe-fail with dummy creds, prefs skip, scheduled = no push, unsubscribe → 0 tokens); browser E2E (390x844): /sw.js registered+controlling, /?id= opens correct email + URL cleaned, back closes detail + app alive, VAPID warn visible; eslint clean ×6 files; tsc = 15 pre-existing baseline (0 new); integrity guard green
+- Teardown verified: schema postgresql restored, prisma client regenerated, .env restored, server killed; rig scripts persisted (scripts/phase2-*.sh/.test.ts, gitignored)
+
+Stage Summary:
+- Phase 2 complete on local main: 4 commits (de3c4a6, c504c5a, d3cf86f, f1f74b2) on top of 274484b; NOT pushed — awaiting owner authorization per standing rule
+- After deploy: push chain works IF Vercel has NEXT_PUBLIC_FIREBASE_VAPID_KEY + FIREBASE_SERVICE_ACCOUNT_KEY (owner to verify); notification taps open the right email via /?id=; reply notifies; prefs respected; foreground no double surfaces
+- Unchanged/open: F6 iOS needs native (Phase 3 Capacitor); F8 server-side logout sweep; PushSubscription prod count unknown (masked read-only script ready); owner-side Vercel env verification
