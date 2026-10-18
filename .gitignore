@@ -74,3 +74,14 @@ server.log
 /mini-services/
 /scripts/
 /tests/
+
+# Capacitor native shells (generated owner-side, artifacts never committed)
+/android/.gradle/
+/android/app/build/
+/android/build/
+/android/local.properties
+/android/app/src/main/assets/capacitor.config.json
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/Podfile.lock
+/ios/DerivedData/
