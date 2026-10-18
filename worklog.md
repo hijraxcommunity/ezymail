@@ -1248,3 +1248,21 @@ Stage Summary:
 - Phase 2 complete on local main: 4 commits (de3c4a6, c504c5a, d3cf86f, f1f74b2) on top of 274484b; NOT pushed — awaiting owner authorization per standing rule
 - After deploy: push chain works IF Vercel has NEXT_PUBLIC_FIREBASE_VAPID_KEY + FIREBASE_SERVICE_ACCOUNT_KEY (owner to verify); notification taps open the right email via /?id=; reply notifies; prefs respected; foreground no double surfaces
 - Unchanged/open: F6 iOS needs native (Phase 3 Capacitor); F8 server-side logout sweep; PushSubscription prod count unknown (masked read-only script ready); owner-side Vercel env verification
+
+---
+Task ID: 47
+Agent: Main
+Task: Phase 2 push + deploy (owner-authorized); Phase 3/4/6 deliverable docs
+
+Work Log:
+- Session resumed: owner confirmed push env vars exist on Vercel ("it exist on vercel var push and deploy") and authorized push+deploy
+- Reconstructed state: repo root /home/z/my-project (ezymail/ is an empty leftover dir — false alarm sweep check); 6 local commits queued (274484b UUID-carrying audit, de3c4a6 2a, c504c5a 2b, d3cf86f 2c, f1f74b2 audit corrections, de46333 worklog); tree clean
+- Pre-push gate ALL GREEN: outgoing diff = exactly 10 expected files (no .env, no workflow files); secret scan = only REMOVED public-by-design Firebase apiKey from deleted firebase-messaging-sw.js; UUID commit content verified benign (audit + worklog only); no stale refs to deleted SW; integrity guard OK (166 TS files, 8 critical)
+- PUSH ATTEMPT BLOCKED: no credentials in session (no helper, no ~/.git-credentials, no GH token env, no gh CLI) — per standing protocol owner must supply one-time PAT (Contents: Read/Write sufficient; no workflow files in this push); nothing landed, local commits intact
+- While blocked, produced remaining deliverables: docs/mobile/capacitor-architecture.md (Phase 3 decision: remote-URL wrapper, server.url + allowNavigation, backend stays Vercel, no static export, per-platform push transport table, capacitor.config.ts planned content, cookie/SW analysis incl. WKWebView no-SW fact), docs/mobile/platform-verification-checklist.md (Phase 4 Android/iOS checklists with honesty statement: no iOS build ever performed; all device items [owner]), docs/deployment/notification-mobile-deploy-guide.md (Phase 6: env var NAMES only, committed/deployed/verified status table, deploy steps, 10-min post-deploy verification, monitoring, rollback, store releases)
+- Status snapshot in deploy guide reflects: Phase 2 committed-not-deployed; VAPID var owner-verified; service account key owner-confirmed with cheap post-deploy re-check ([Push] log line); prod subscription count still unknown (push-sub-count.cjs ready)
+
+Stage Summary:
+- All Phase 1-3 documentation deliverables now COMMITTED locally (not pushed — still awaiting one-time PAT)
+- Single remaining blocker for deploy: one-time PAT from owner (repo Contents: Read/Write; revoke after)
+- Post-push: Vercel auto-deploy → run deploy guide Section 5 (SW activated, background notification, deep-link tap, [Push] logs, subscription count) → then Phase 3 code (capacitor deps + native branch) as separate commit
