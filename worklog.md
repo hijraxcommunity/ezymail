@@ -1284,3 +1284,23 @@ Stage Summary:
 - Remaining owner actions: REVOKE the PAT now (used, one-shot); 10-min device check per docs/deployment/notification-mobile-deploy-guide.md §5 (allow permission, background-tab notification, tap deep link, Vercel [Push] logs — FIREBASE_SERVICE_ACCOUNT_KEY missing line would show if that var absent)
 - Worklog commit for Tasks 47-48 queued locally (will ride with next authorized push)
 - Next: Phase 3 code (capacitor deps + native branch in push-notification-setup) after owner device confirmation
+
+---
+Task ID: 49
+Agent: Main
+Task: Phase 3 Capacitor implementation (additive only, web untouched per owner instruction)
+
+Work Log:
+- Owner directive: "try to not touch anything and continue for the next phase" → additive-only changes, nothing pushed, web behavior byte-identical
+- Deps: @capacitor/core 8.5.3 + @capacitor/push-notifications 8.1.3 + @capacitor/cli 8.5.3 (dev)
+- capacitor.config.ts: remote-URL wrapper (appId af.ezy.mail, server.url = https://ezymail.vercel.app, allowNavigation, PushNotifications presentationOptions) — no android/ios generated in sandbox (no SDKs; owner-side per Phase 4 checklist)
+- 3b edit push-notification-setup.tsx: native branch gated by Capacitor.isNativePlatform() — bypasses VAPID + SW checks (native tokens need neither), requestPermissions→register→registration listener→subscribeToken(value, platform from Capacitor.getPlatform()), listeners bound once via ref, pushNotificationReceived→toast, pushNotificationActionPerformed→replaceState('/?id=') + setSelectedEmailId (reuses Phase 2c handling); subscribeToken gained optional platformOverride param (undefined on web = unchanged UA logic); @capacitor/push-notifications dynamic-imported so web bundle never fetches it
+- SWEEP INCIDENT #2 (same day, 15:12 UTC+0): UUID commit addae79 appeared on local main DELETING src/app/api/upload/route.ts (89 lines, the historical attack target) + chmod-noise on 6 files; CI guard caught it (MISSING CRITICAL FILES); recovery: reset --soft dropped UUID commit, route restored from origin/main (4648cfc), modes normalized 644, guard re-green. scripts/ dir (untracked, gitignored) WIPED entirely — phase2-payload.test.ts, phase2-run.sh battery, browser scripts, push-sub-count.cjs lost
+- Recreated from spec: scripts/phase2-payload.test.ts (8 tests — original 7 + token-binding) → 8/8 pass via npx tsx; scripts/push-sub-count.cjs (read-only SELECT/COUNT). API battery (23/23) deferred to Phase 5 rebuild — server files untouched by Phase 3 diff (git status: only component + deps), so server regression risk this phase = zero
+- Verification: build OK; tsc 15 errors = pre-existing baseline (0 new); eslint clean ×2 touched files; integrity guard green; browser smoke on PRODUCTION build (npm start + agent-browser): page renders, /sw.js registered, ZERO capacitor network requests (dynamic import never triggered in browser), zero console errors/page errors
+
+Stage Summary:
+- Local main ahead of origin by 3 commits (99489fd worklog + 3a ed588ae + 3b bc9e976) — NOT pushed, awaiting owner token per standing rule
+- Web path proven inert-identical: the only web-reachable diff is a false boolean check + optional param default
+- Remaining Phase 3 owner-side: npx cap add android/ios + google-services.json + signing (Phase 4 checklist)
+- Standing sweep watch: UUID commits keep targeting upload route — guard is the control, keep monitoring
