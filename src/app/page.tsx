@@ -115,6 +115,7 @@ export default function HomePage() {
     emails,
     user,
     setSelectedEmailId,
+    setCurrentFolder,
     setComposeOpen,
     setReplyToEmail,
     setUser,
@@ -141,6 +142,29 @@ export default function HomePage() {
       .catch(() => { /* silent */ })
       .finally(() => setIsCheckingAuth(false))
   }, [setUser])
+
+  // ─── Deep link: /?id=<emailId> opens that email (push notification taps) ─
+  // Runs once after auth resolves; EmailDetail self-fetches by id, so no
+  // dependency on the inbox list having loaded.
+  const deepLinkHandledRef = useRef(false)
+  useEffect(() => {
+    if (isCheckingAuth || !isAuthenticated || deepLinkHandledRef.current) return
+    deepLinkHandledRef.current = true
+    try {
+      const id = new URLSearchParams(window.location.search).get('id')
+      if (!id) return
+      // Email deep links only exist in the personal mail UI
+      if (user && (user.role === 'admin' || user.accountType === 'business')) {
+        window.history.replaceState({ ezView: true }, '', '/')
+        return
+      }
+      setCurrentFolder('inbox')
+      setSelectedEmailId(id)
+      // Clean the URL without adding a history entry — passing ezView keeps
+      // the back-navigation guard state intact
+      window.history.replaceState({ ezView: true }, '', '/')
+    } catch { /* silent */ }
+  }, [isCheckingAuth, isAuthenticated, user, setCurrentFolder, setSelectedEmailId])
 
   // ─── Fetch emails when authenticated ─────────────────────────────────────
   const fetchEmails = useCallback(async () => {

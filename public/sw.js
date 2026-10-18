@@ -12,19 +12,24 @@ firebase.initializeApp({
 })
 
 // Handle FCM background messages
+// Server payload is data-only for web (see sendPushNotification.ts):
+// data-only guarantees this handler fires and we control the notification —
+// notification-bearing payloads are auto-displayed by the browser and this
+// handler never runs (their click data.url handling is unreachable).
 firebase.messaging().onBackgroundMessage((payload) => {
   const data = payload.data || {}
-  const notificationTitle = payload.notification?.title || 'New Email'
-  const notificationBody = payload.notification?.body || 'You received a new message'
+  const notificationTitle = data.title || payload.notification?.title || 'New Email'
+  const notificationBody = data.body || payload.notification?.body || 'You received a new message'
   const emailId = data.emailId || ''
 
-  // Build URL to open specific email in app
-  const urlToOpen = emailId ? `/inbox?id=${emailId}` : '/inbox'
+  // Build URL to open specific email in app (single-route app — no /inbox path)
+  const urlToOpen = emailId ? `/?id=${emailId}` : '/'
 
   self.registration.showNotification(notificationTitle, {
     body: notificationBody,
     icon: '/logo.png',
     badge: '/logo.png',
+    vibrate: [200, 100, 200],
     data: { url: urlToOpen, emailId },
     tag: data.tag || 'ezy-email',
     renotify: true,
@@ -35,7 +40,7 @@ firebase.messaging().onBackgroundMessage((payload) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const urlToOpen = event.notification.data?.url || '/inbox'
+  const urlToOpen = event.notification.data?.url || '/'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
