@@ -186,6 +186,12 @@ export function useNotifications() {
       if (trulyNewEmails.length > 0) {
         const prefs = prefsRef.current
         const isBackground = document.visibilityState === 'hidden'
+        // When FCM push is subscribed (flag set by push-notification-setup),
+        // FCM owns the notification surfaces: SW shows background system
+        // notifications, onMessage shows the instant foreground toast.
+        // Polling then only refreshes the list + plays sound — no doubles.
+        let pushActive = false
+        try { pushActive = sessionStorage.getItem('ezymail-push-active') === '1' } catch { /* ignore */ }
 
         // Refresh the email list so new emails appear immediately
         const { currentFolder: folder, currentPage } = useAppStore.getState()
@@ -214,7 +220,8 @@ export function useNotifications() {
           const subject = e.subject || '(No subject)'
 
           // Always show native browser push notification (outside the app)
-          if (prefs.desktopNotif) {
+          // — suppressed when FCM push is active (it owns this surface)
+          if (prefs.desktopNotif && !pushActive) {
             showBrowserNotification(`New email from ${senderName}`, {
               body: subject,
               tag: `email-${e.id}`,
@@ -227,7 +234,8 @@ export function useNotifications() {
           }
 
           // Show toast when app is in foreground
-          if (!isBackground) {
+          // — suppressed when FCM push is active (onMessage toast covers it)
+          if (!isBackground && !pushActive) {
             toast.info(`New email from ${senderName}`, {
               description: subject,
               icon: <Mail className="w-4 h-4 text-[#4285F4]" />,

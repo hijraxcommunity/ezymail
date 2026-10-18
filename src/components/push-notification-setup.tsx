@@ -30,6 +30,10 @@ export function PushNotificationSetup() {
       if (res.ok) {
         statusRef.current = 'subscribed'
         tokenRef.current = token
+        // Foreground dedup flag — tells use-notifications to suppress its
+        // own browser Notification/toast because FCM now owns those surfaces
+        // (SW shows background notifications, onMessage shows foreground toast)
+        try { sessionStorage.setItem('ezymail-push-active', '1') } catch { /* ignore */ }
       } else {
         statusRef.current = 'error'
       }
@@ -121,6 +125,10 @@ export function PushNotificationSetup() {
     // Firebase config is hardcoded — only VAPID key needed for token generation
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
     if (!vapidKey || vapidKey.length < 20) {
+      // Surfaced for diagnosability (was a fully silent no-op — made the
+      // "desktop works, mobile doesn't" investigation much harder)
+      console.warn('[Push] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped')
+      statusRef.current = 'unsupported'
       return
     }
 
@@ -152,6 +160,7 @@ export function PushNotificationSetup() {
       unsubscribeToken(tokenRef.current)
       tokenRef.current = null
     }
+    try { sessionStorage.removeItem('ezymail-push-active') } catch { /* ignore */ }
     statusRef.current = 'unknown'
   }, [isAuthenticated, unsubscribeToken])
 
