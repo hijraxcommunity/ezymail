@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
+import { Capacitor } from '@capacitor/core'
 import { useAppStore } from '@/store/use-app-store'
 
 type PushStatus = 'unknown' | 'unsupported' | 'prompt' | 'granted' | 'denied' | 'subscribed' | 'loading' | 'error'
@@ -10,14 +11,16 @@ export function PushNotificationSetup() {
   const { isAuthenticated, user, setSelectedEmailId } = useAppStore()
   const statusRef = useRef<PushStatus>('unknown')
   const tokenRef = useRef<string | null>(null)
+  const nativeListenersBoundRef = useRef(false)
 
-  const subscribeToken = useCallback(async (token: string) => {
+  const subscribeToken = useCallback(async (token: string, platformOverride?: 'android' | 'ios') => {
     try {
-      const platform = /Android/i.test(navigator.userAgent)
-        ? 'android'
-        : /iPhone|iPad|iPod/i.test(navigator.userAgent)
-          ? 'ios'
-          : 'web'
+      const platform = platformOverride
+        ?? (/Android/i.test(navigator.userAgent)
+          ? 'android'
+          : /iPhone|iPad|iPod/i.test(navigator.userAgent)
+            ? 'ios'
+            : 'web')
 
       const deviceInfo = navigator.userAgent.substring(0, 200)
 
@@ -54,9 +57,68 @@ export function PushNotificationSetup() {
     }
   }, [])
 
+  // Native shells (Capacitor Android/iOS): FCM native registration token —
+  // no VAPID key and no service worker involved. Inert in normal browsers.
+  const registerNativePush = useCallback(async (silent = false) => {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+
+      if (!nativeListenersBoundRef.current) {
+        nativeListenersBoundRef.current = true
+
+        PushNotifications.addListener('registration', (t) => {
+          const platform: 'android' | 'ios' = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android'
+          subscribeToken(t.value, platform)
+        })
+        PushNotifications.addListener('registrationError', (err) => {
+          console.warn('[Push] native registration error:', err)
+          statusRef.current = 'error'
+          if (!silent) toast.error('Failed to enable push notifications')
+        })
+        PushNotifications.addListener('pushNotificationReceived', (n) => {
+          const emailId = n.data?.emailId || ''
+          toast(n.title || 'New Email', {
+            description: n.body || 'You received a new message',
+            duration: 6000,
+            action: emailId ? {
+              label: 'View',
+              onClick: () => setSelectedEmailId(emailId),
+            } : undefined,
+          })
+        })
+        // Tap on a native notification → open the email (Phase 2c `?id=`
+        // handling picks it up post-auth on cold start; replaceState is
+        // cleaned by the existing page.tsx logic)
+        PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+          const emailId = action.notification?.data?.emailId || ''
+          if (!emailId) return
+          try { window.history.replaceState(null, '', `/?id=${encodeURIComponent(emailId)}`) } catch { /* ignore */ }
+          setSelectedEmailId(emailId)
+        })
+      }
+
+      const perm = await PushNotifications.requestPermissions()
+      if (perm.receive !== 'granted') {
+        statusRef.current = 'denied'
+        return
+      }
+      PushNotifications.register()
+    } catch (err) {
+      console.error('[Push] native setup error:', err)
+      statusRef.current = 'error'
+      if (!silent) toast.error('Failed to enable push notifications')
+    }
+  }, [subscribeToken, setSelectedEmailId])
+
   const requestPermissionAndSubscribe = useCallback(async (silent = false) => {
     if (statusRef.current === 'loading') return
     statusRef.current = 'loading'
+
+    // Native shells take the native path; web path below is unchanged
+    if (Capacitor.isNativePlatform()) {
+      await registerNativePush(silent)
+      return
+    }
 
     try {
       // Dynamic import so Firebase isn't bundled for non-auth users
@@ -117,10 +179,17 @@ export function PushNotificationSetup() {
       // Only show error toast when user explicitly requested (not on auto-subscribe)
       if (!silent) toast.error('Failed to enable push notifications')
     }
-  }, [subscribeToken, setSelectedEmailId])
+  }, [subscribeToken, setSelectedEmailId, registerNativePush])
 
   useEffect(() => {
     if (!isAuthenticated || !user) return
+
+    // Native shells (Capacitor): register native FCM/APNs token — VAPID
+    // and web service-worker checks do not apply on this path
+    if (Capacitor.isNativePlatform()) {
+      void registerNativePush(true)
+      return
+    }
 
     // Firebase config is hardcoded — only VAPID key needed for token generation
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
