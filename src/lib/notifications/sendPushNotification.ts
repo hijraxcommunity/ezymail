@@ -32,6 +32,62 @@ interface PushPayload {
   emailId: string
 }
 
+interface FcmTokenPayload {
+  fcmToken: string
+  senderName: string
+  subject: string
+  emailId: string
+}
+
+// Pure message builder (exported for regression tests).
+//
+// Web is DELIBERATELY data-only: with a top-level `notification` field the
+// browser auto-displays the message and onBackgroundMessage never fires,
+// so our sw.js click handler never sees data.url. Data-only guarantees
+// sw.js shows the notification itself with data.url attached (deep link).
+// Android/APNs get platform-specific display payloads so they render
+// natively without the top-level notification.
+export function buildFcmMessage({ fcmToken, senderName, subject, emailId }: FcmTokenPayload) {
+  const title = `New email from ${senderName}`
+  const body = subject || '(No subject)'
+  return {
+    message: {
+      token: fcmToken,
+      data: {
+        url: `/?id=${emailId}`,
+        emailId,
+        tag: `email-${emailId}`,
+        title,
+        body,
+      },
+      webpush: {
+        headers: { Urgency: 'high' },
+      },
+      android: {
+        priority: 'high' as const,
+        notification: {
+          channelId: 'ezy-emails',
+          title,
+          body,
+          priority: 'high' as const,
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          icon: '/logo.png',
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: { title, body },
+            sound: 'default',
+            badge: 1,
+          },
+        },
+      },
+    },
+  }
+}
+
 export async function sendPushNotification({
   recipientUserId,
   senderName,
@@ -45,6 +101,27 @@ export async function sendPushNotification({
   }
 
   try {
+    // Respect the recipient's notification preferences (desktopNotif=false
+    // disables new-email push; same pref the polling path honors)
+    const recipient = await db.user.findUnique({
+      where: { id: recipientUserId },
+      select: { preferences: true },
+    })
+    if (recipient?.preferences) {
+      try {
+        const prefs =
+          typeof recipient.preferences === 'string'
+            ? JSON.parse(recipient.preferences)
+            : recipient.preferences
+        if (prefs && prefs.desktopNotif === false) {
+          console.log('[Push] Skipped — recipient has desktop notifications disabled:', recipientUserId)
+          return
+        }
+      } catch {
+        // Malformed preferences — default to sending
+      }
+    }
+
     // Fetch all active FCM tokens for this user
     const subscriptions = await db.pushSubscription.findMany({
       where: { userId: recipientUserId },
@@ -73,45 +150,12 @@ export async function sendPushNotification({
     // Send to each token
     const sendPromises = subscriptions.map(async (sub) => {
       try {
-        const message: Record<string, unknown> = {
-          message: {
-            token: sub.fcmToken,
-            notification: {
-              title: `New email from ${senderName}`,
-              body: subject || '(No subject)',
-            },
-            data: {
-              url: `/inbox?id=${emailId}`,
-              emailId,
-              tag: `email-${emailId}`,
-            },
-            webpush: {
-              notification: {
-                icon: '/logo.png',
-                badge: '/logo.png',
-                vibrate: [200, 100, 200],
-              },
-            },
-            android: {
-              priority: 'high' as const,
-              notification: {
-                channelId: 'ezy-emails',
-                priority: 'high' as const,
-                defaultSound: true,
-                defaultVibrateTimings: true,
-                icon: '/logo.png',
-              },
-            },
-            apns: {
-              payload: {
-                aps: {
-                  sound: 'default',
-                  badge: 1,
-                },
-              },
-            },
-          },
-        }
+        const message = buildFcmMessage({
+          fcmToken: sub.fcmToken,
+          senderName,
+          subject,
+          emailId,
+        })
 
         const res = await fetch(FCM_V1_URL, {
           method: 'POST',

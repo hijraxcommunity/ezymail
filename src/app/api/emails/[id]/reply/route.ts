@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
 
 // POST /api/emails/[id]/reply - Reply to an email
 export async function POST(
@@ -103,6 +104,33 @@ export async function POST(
         folder: 'sent',
       },
     });
+
+    // Push notification to the reply recipient (after response — guaranteed
+    // to run on serverless). Mirrors the compose path; send failures never
+    // affect the reply itself. Recipient may not resolve to a user (e.g.
+    // deleted account) — skip push silently in that case.
+    const replyRecipientUser = await db.user.findUnique({
+      where: { email: replyRecipientEmail },
+      select: { id: true },
+    });
+    if (replyRecipientUser) {
+      const senderUser = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const senderName = senderUser
+        ? `${senderUser.firstName} ${senderUser.lastName}`
+        : 'Someone';
+
+      after(() =>
+        sendPushNotification({
+          recipientUserId: replyRecipientUser.id,
+          senderName,
+          subject: reply.subject,
+          emailId: reply.id,
+        }).catch(() => {})
+      );
+    }
 
     return NextResponse.json({ success: true, email: reply }, { status: 201 });
   } catch (error: unknown) {
