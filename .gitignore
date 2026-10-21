@@ -85,3 +85,11 @@ server.log
 /ios/App/build/
 /ios/App/Podfile.lock
 /ios/DerivedData/
+
+# Firebase native config (owner downloads per Phase 4; never publish)
+google-services.json
+GoogleService-Info.plist
+*.p8
+key.properties
+/android/app/*.keystore
+/android/app/*.jks
