@@ -10,7 +10,10 @@ marked `[owner]` was executed here; those items remain UNVERIFIED until done on 
 
 ### A1. Prerequisites `[owner]`
 - [ ] Android Studio installed (includes SDK 34/35 + platform tools)
-- [ ] After Phase 3 commits: `npx cap add android` → `android/` project generated
+- [ ] Install the platform package first (repo already lists it since Task 53 —
+      if `npx cap add android` says "Could not find the android platform", run
+      `npm install @capacitor/android` and retry)
+- [ ] `npx cap add android` → `android/` project generated
 - [ ] Firebase console → project `customer-database-88e9f` → add **Android app**
       (package `af.ezy.mail`) → download `google-services.json` → place at `android/app/`
 - [ ] `google-services.json` must be git-ignored (contains project identifiers, not secrets —
