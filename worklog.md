@@ -1360,3 +1360,20 @@ Stage Summary:
 - origin/main == local at Task 52 commits; owner can safely git clone for Android Studio
 - Hygiene TODO (owner decision): skills/web-reader + skills/web-search remain TRACKED in origin (grandfathered past /skills/ ignore) — internal tooling docs public since inception; no secrets inside (spot-checked); recommend git rm --cached in a future cleanup commit
 - Next: owner Phase 4 device results → final 9-item report
+
+---
+Task ID: 53
+Agent: Main
+Task: Repo gap fix (@capacitor/android missing) + sweep event #4 (history rewind pattern)
+
+Work Log:
+- Owner hit real error on Windows during Phase 4 clone setup: `npx cap add android` → "Could not find the android platform" — repo deps had core/push-notifications/cli but NOT @capacitor/android (Phase 3 was web-only by design)
+- Fix: package.json += `"@capacitor/android": "^8.5.3"` (matches core/cli 8.5.3); package-lock re-normalized via `npm install --package-lock-only` (+1924/-85, all resolved URLs = registry.npmjs.org, within-semver re-validation only; trailing npm error was postinstall `prisma generate` exit 127 in lock-only mode — harmless); checklist A1 corrected with install-first + recovery note
+- SWEEP EVENT #4 during push prep — NEW PATTERN: local history REWOUND (pushed 41ea417 re-created as 1d5bbc9, same message different SHA) with upload route dropped from index AND disk (4th time targeted); origin/main untouched (file intact). Guard caught it (MISSING CRITICAL FILES)
+- Repair: verified tree diff (tampered commit = 11 chmod-noise files + deleted route, nothing of value) → `git reset --mixed origin/main` (discarded 1d5bbc9, kept working-tree Task 53 edits) → route restored from HEAD → per-file chmod normalization to HEAD modes (11 files) → guard green
+- Push #6 with Task 53 fix + this worklog; one-shot token protocol, residue checks
+
+Stage Summary:
+- `npx cap add android` now works out-of-the-box on fresh clones (dep + lock in sync, `npm ci` safe)
+- Sweep escalation noted: direct-disk deletion → history rewind + index drop; integrity guard remains the control, origin/main is source of truth
+- Owner unblocked: npm install @capacitor/android (or plain npm install after this push) → npx cap add android → google-services.json → npx cap sync android
