@@ -64,15 +64,17 @@ export function buildFcmMessage({ fcmToken, senderName, subject, emailId }: FcmT
         headers: { Urgency: 'high' },
       },
       android: {
+        // FCM v1 schema: priority lives on AndroidConfig ONLY — AndroidNotification
+        // has no priority field (400 INVALID_ARGUMENT in production 2026-10-22).
         priority: 'high' as const,
         notification: {
           channelId: 'ezy-emails',
           title,
           body,
-          priority: 'high' as const,
           defaultSound: true,
           defaultVibrateTimings: true,
-          icon: '/logo.png',
+          // Must be an in-app drawable resource name, not a URL
+          icon: 'ic_launcher',
         },
       },
       apns: {
@@ -174,12 +176,12 @@ export async function sendPushNotification({
           console.log('[Push] FCM success for token:', sub.fcmToken.substring(0, 20) + '...')
         }
 
-        // Clean up invalid tokens
+        // Clean up dead tokens — ONLY true UNREGISTERED signals. NEVER delete
+        // on INVALID_ARGUMENT: that means OUR payload was schema-invalid
+        // (builder bug), not the token; deleting would wipe every row.
         if (result.error && (
-          result.error.code === 'UNREGISTERED' ||
-          result.error.code === 'INVALID_ARGUMENT' ||
-          result.error.message?.includes('not registered') ||
-          result.error.message?.includes('registration token')
+          result.error.status === 'UNREGISTERED' ||
+          result.error.message?.includes('Requested entity was not found')
         )) {
           await db.pushSubscription.deleteMany({
             where: { fcmToken: sub.fcmToken },

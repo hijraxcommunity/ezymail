@@ -40,6 +40,11 @@ test('android platform payload renders natively', () => {
   assert.equal(msg.message.android.notification.channelId, 'ezy-emails')
   assert.equal(msg.message.android.notification.title, 'New email from Ali')
   assert.equal(msg.message.android.notification.body, 'Salam')
+  // Regression lock (prod 400 INVALID_ARGUMENT 2026-10-22): FCM v1 AndroidNotification
+  // has NO priority field — priority is AndroidConfig-level only
+  assert.equal(msg.message.android.notification.priority, undefined)
+  // icon must be an in-app drawable resource name, never a URL
+  assert.equal(msg.message.android.notification.icon, 'ic_launcher')
 })
 
 test('apns payload carries alert + sound + badge', () => {

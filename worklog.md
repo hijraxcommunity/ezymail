@@ -1377,3 +1377,21 @@ Stage Summary:
 - `npx cap add android` now works out-of-the-box on fresh clones (dep + lock in sync, `npm ci` safe)
 - Sweep escalation noted: direct-disk deletion → history rewind + index drop; integrity guard remains the control, origin/main is source of truth
 - Owner unblocked: npm install @capacitor/android (or plain npm install after this push) → npx cap add android → google-services.json → npx cap sync android
+
+---
+Task ID: 54
+Agent: Main
+Task: ROOT CAUSE of "notifications never arrive" — FCM v1 payload schema bug — fixed + sweep events #5/#6
+
+Work Log:
+- Owner ran Phase 4 on Android emulator; Vercel logs (owner-supplied) showed `[Push] Sending to 10 token(s)` followed by 10× `FCM API error: 400 INVALID_ARGUMENT — Unknown name "priority" at 'message.android.notification': Cannot find field`
+- ROOT CAUSE: buildFcmMessage placed `priority` inside android.notification — FCM v1 AndroidNotification has NO priority field (priority is AndroidConfig-level, which was correctly set already); FCM schema-validates before platform routing → EVERY send since Phase 2 deploy was rejected → this is why notifications never arrived anywhere (web + native) — the original project complaint, now finally explained with production evidence
+- Fix in sendPushNotification.ts: removed invalid notification.priority; icon '/logo.png' (URL — meaningless to FCM) → 'ic_launcher' (in-app drawable); token-cleanup condition hardened: now ONLY true UNREGISTERED signals (error.status === 'UNREGISTERED' or 'Requested entity was not found') — old code matched on INVALID_ARGUMENT which would have deleted ALL 10 tokens on a payload bug (near-miss avoided only because the old string-matching never worked)
+- phase2-payload.test.ts: regression locks added (notification.priority === undefined, icon === 'ic_launcher'); tests 8/8 exit 0 (the earlier 8/8 validated OUR shape, not FCM's schema — lesson recorded)
+- SWEEP EVENT #5 (mid-fix): UUID commit 99bea5e deleted upload route from index/disk AND reverted my uncommitted Task 54 edits from disk (new: targets working tree) → reset --mixed to 1178141, route restored, modes normalized, edits re-applied from conversation, guard re-green, push executed fast to shrink window
+- Push #7: fix + test + worklog; one-shot token protocol, residue checks
+
+Stage Summary:
+- The 6-month "notifications don't work" mystery = payload schema bug + nobody had ever seen a real FCM response until owner's Phase 4 logs — evidence-driven close
+- After deploy: owner re-sends test email → Vercel must show `[Push] FCM success for token:` → notification lands on emulator; stale tokens among the 10 will now surface as UNREGISTERED and self-clean
+- Web-push path (top-level data reaching sw.js) still to be observed live — first browser test after this deploy confirms or amends
