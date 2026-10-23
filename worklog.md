@@ -1395,3 +1395,32 @@ Stage Summary:
 - The 6-month "notifications don't work" mystery = payload schema bug + nobody had ever seen a real FCM response until owner's Phase 4 logs — evidence-driven close
 - After deploy: owner re-sends test email → Vercel must show `[Push] FCM success for token:` → notification lands on emulator; stale tokens among the 10 will now surface as UNREGISTERED and self-clean
 - Web-push path (top-level data reaching sw.js) still to be observed live — first browser test after this deploy confirms or amends
+
+---
+Task ID: 55
+Agent: Main
+Task: Owner attached screenshot of the splash to KEEP (web splash in page.tsx); built a replica splash.png for the native side (owner-local). Repo untouched.
+
+Work Log:
+- Identified keep-splash: src/app/page.tsx isCheckingAuth branch (logo w-20 rounded-2xl, "EzyMail" 2xl #1F1F1F, gray-400 "Email made Ezy", gray "From HijraX" pb-8) — the web splash
+- scripts/make_splash.py measured the owner screenshot programmatically (1080x2408: logo bbox x427..651 y935..1159, EzyMail y1211..1274, tagline y1325..1356, footer y2014..2045) and replicated it on a 2732x2732 white canvas (Liberation Sans, logo from public/logo.png with rounded alpha mask, phone cover-crop math)
+- Output: download/splash.png (near-pixel replica, verified via portrait preview)
+
+Stage Summary:
+- Replica delivered owner-side; then superseded by Task 56 (owner chose full removal trial)
+
+---
+Task ID: 56
+Agent: Main
+Task: Owner re-explained: REMOVE the splash screen COMPLETELY first (trial) — owner tests, then decides keep-removed vs add-back. Sweep event #7 intercepted during this task.
+
+Work Log:
+- Sweep event #7 on session start: local HEAD = bogus UUID commit 47c17b3, working tree tampered (integrity.cjs/ci.yml/capacitor.config.ts/docs/scripts modified, upload route deleted again); origin/main clean at 730b326
+- Repair per protocol: git reset --mixed origin/main + git restore . -> HEAD == origin/main == 730b326, tree clean (only my untracked splash scripts remain); worklog Task 55 append lost in restore, re-appended here
+- Web splash removal: src/app/page.tsx isCheckingAuth branch -> `return <div className="min-h-dvh bg-white" />` (blank white during auth check; restore note comment pointing to git history)
+- Integrity guard + tsc before push; commit scope: page.tsx + worklog.md only
+
+Stage Summary:
+- Web splash gone after deploy (app loads live site, so removal reaches the Android app automatically)
+- Native big-logo splash removal is owner-local: download/splash.png re-generated as PLAIN WHITE 2732x2732 (replica preserved as download/splash-with-logo.png for the add-back case) + same generate command + rmdir mipmap-anydpi-v26 (icon-shape protection)
+- Restore plan if owner says "add it back": revert this commit (web) + owner puts splash-with-logo.png back in assets
