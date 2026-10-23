@@ -1424,3 +1424,18 @@ Stage Summary:
 - Web splash gone after deploy (app loads live site, so removal reaches the Android app automatically)
 - Native big-logo splash removal is owner-local: download/splash.png re-generated as PLAIN WHITE 2732x2732 (replica preserved as download/splash-with-logo.png for the add-back case) + same generate command + rmdir mipmap-anydpi-v26 (icon-shape protection)
 - Restore plan if owner says "add it back": revert this commit (web) + owner puts splash-with-logo.png back in assets
+
+---
+Task ID: 57
+Agent: Main
+Task: Owner tested the no-splash build and decided: "Add the old one back like WhatsApp" — restore the splash (their screenshot design: logo + EzyMail + Email made Ezy + From HijraX), one brief splash then straight into the app. Do not touch anything else.
+
+Work Log:
+- Sweep event #8 on session start: bogus UUID commit 004e0a1 on local HEAD (only tried to sneak my untracked local files into the repo, no destructive tree changes this time); origin/main clean at 4a4c3fb -> reset --mixed origin/main + restore . -> clean
+- Restored src/app/page.tsx byte-perfect from 730b326 (git checkout 730b326 -- src/app/page.tsx); verified `git diff 730b326 -- src/app/page.tsx` EMPTY = exact original splash block back
+- WhatsApp-style single-splash feel comes from native+web showing the same design: owner swaps white assets/splash.png for the replica (download/splash.png = logo+EzyMail replica, white kept as download/splash-white.png)
+- Guard + tsc before push; commit scope: page.tsx + worklog.md only
+
+Stage Summary:
+- Web splash restored and deployed; native side owner-local (same generate command + rmdir mipmap-anydpi-v26 for icon shape)
+- download/splash.png = logo replica (use now), download/splash-white.png = white (kept for any future no-splash trial)

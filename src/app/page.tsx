@@ -257,10 +257,18 @@ export default function HomePage() {
   }, [isAuthenticated, emails])
 
   // ─── Auth views ──────────────────────────────────────────────────────────
-  // Splash screen removed by owner request (2026-10-23): blank white during the
-  // auth check. To restore the branded splash, see the git history of this block.
   if (isCheckingAuth) {
-    return <div className="min-h-dvh bg-white" />
+    return (
+      <div className="min-h-dvh bg-white flex flex-col items-center justify-between py-20">
+        <div />
+        <div className="flex flex-col items-center gap-3">
+          <img src="/logo.png" alt="EzyMail" className="w-20 h-20 rounded-2xl" />
+          <p className="font-bold text-2xl tracking-tight text-[#1F1F1F]">EzyMail</p>
+          <p className="text-xs text-gray-400">Email made Ezy</p>
+        </div>
+        <p className="text-xs text-gray-400 pb-8">From <span className="font-semibold text-gray-500">HijraX</span></p>
+      </div>
+    )
   }
 
   if (!isAuthenticated) {
