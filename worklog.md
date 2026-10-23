@@ -1439,3 +1439,16 @@ Work Log:
 Stage Summary:
 - Web splash restored and deployed; native side owner-local (same generate command + rmdir mipmap-anydpi-v26 for icon shape)
 - download/splash.png = logo replica (use now), download/splash-white.png = white (kept for any future no-splash trial)
+
+---
+Task ID: 59
+Agent: Main
+Task: Owner's UI has no file-download option — asked to push splash.png to public files so they can pull it from the website URL. Sweep event #9 (bogus UUID commit 29658f7 again trying to sneak local files) repaired before work.
+
+Work Log:
+- Copied download/splash.png (2732x2732 design replica with text) -> public/splash.png (95143 bytes)
+- Owner delivery path: https://ezymail.vercel.app/splash.png ; owner pulls it straight into assets with: curl -o assets\splash.png https://ezymail.vercel.app/splash.png (then the usual generate + rmdir + reinstall)
+- Guard before push; commit scope: public/splash.png + worklog.md only (no code changes)
+
+Stage Summary:
+- No app behavior change; new static asset only; white/design backups remain in download/backup/
