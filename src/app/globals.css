@@ -412,3 +412,22 @@ html, body {
   direction: rtl;
   text-align: right;
 }
+
+/* ─── Android APK: no browser-style long-press text selection ─────────── */
+/* Holding a touch in the native WebView highlights text for copying, like
+   a browser. page.tsx adds html.native-app only when running inside the
+   EzyMail Android app, so normal browsers keep text selection untouched.
+   Form fields stay selectable/editable for typing. */
+html.native-app,
+html.native-app * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+html.native-app input,
+html.native-app textarea,
+html.native-app select,
+html.native-app [contenteditable='true'] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}

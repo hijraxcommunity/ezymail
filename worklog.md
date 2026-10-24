@@ -1538,3 +1538,56 @@ Stage Summary:
 - Splash fixes recreated per spec (owner PC copies not accessible — android/ was never in the repo), blank-screen transition fixed at both layers (web ready-signal + native 15s cap), full validation battery green, REAL APK built
 - Runtime cold-launch behavior NOT verifiable in sandbox (no emulator/device) — owner device test required
 - Push pending owner one-time PAT (no credentials in sandbox, per established protocol)
+
+---
+Task ID: 65
+Agent: Main
+Task: Owner said "Push with the old token already you have it" — execute the pending push of the Android splash fix commit.
+
+Work Log:
+- SWEEP EVENT #12: junk UUID commit b25c78d (199 files: scripts/inspection/** + preview_portrait.png) appeared on HEAD above the real commit. Fixed: backup branch backup-junk-uuid-12 -> reset --mixed e5a25c6 -> local-only exclude via .git/info/exclude (scripts/inspection/, scripts/preview_portrait.png). No repo file changes needed.
+- Push-readiness verified: HEAD = e5a25c6 "Fix Android splash screen and startup transition" (93 files: android/ platform + branded splash resources + drawable-v31 padded system icon + values-v31 styles + @capacitor/splash-screen 8.0.2 + capacitor.config.ts + page.tsx native dismissal + 5 scripts + lockfiles), exactly 1 commit ahead of origin/main=950043e, working tree CLEAN, secret scan clean, all critical files on disk verified.
+- TOKEN NOT FOUND — exhaustive search: git config/credentials, ~/.netrc, env, ~/.bash_history, worklog (only redacted ghp_A4ua... prefix), tool-results/, download/, docs/, /tmp (incl. chat_content.json + /tmp/my-project), .git dir. Sandbox resets wiped shell history; per protocol tokens were never persisted to disk (one-shot use, owner advised to revoke each time). Old token ghp_A4ua... was also flagged for revocation earlier.
+- origin/main re-fetched: still 950043e — push will be a clean fast-forward, zero risk to existing history.
+- Told owner: token must be pasted again (or new classic PAT with repo scope); push executes immediately on receipt.
+
+Stage Summary:
+- Repo 100% push-ready: 1 verified commit ahead, clean tree, origin unchanged
+- Blocked ONLY on token: nothing stored in sandbox (owner must re-paste); push = one command once provided
+
+---
+Task ID: 66
+Agent: Main
+Task: Execute the approved push of the Android splash fix (token provided in chat).
+
+Work Log:
+- Token verified via API: HTTP 200, x-oauth-scopes: repo (classic PAT)
+- Pre-push: remote main still 950043e; pushed e5a25c6 via one-shot token URL
+- INCIDENT (sweep event #13): auto-committer created UUID commit 774b3f1 (ONLY my 16-line worklog append, no tampering) seconds before the push -> it rode along to GitHub
+- Fixed same session: reset --mixed e5a25c6 (worklog entry back to uncommitted) + push --force-with-lease=main:774b3f1 -> remote main = e5a25c6 verified via ls-remote
+- FINAL STATE: GitHub main = e5a25c6 "Fix Android splash screen and startup transition" (93 files: android/ platform, branded splash resources, drawable-v31 padded system icon, values-v31 styles, @capacitor/splash-screen 8.0.2, capacitor.config.ts, page.tsx native dismissal, lockfiles). Identical SHA local == remote. Only local dirty file: worklog.md.
+- Token NOT stored anywhere (one-shot use in shell only); advised owner to revoke immediately
+
+Stage Summary:
+- PUSH COMPLETE: owner can now clone/download the repo and build the APK
+- Remote tip = clean fix commit, no UUID commits on origin
+- Owner next steps given: revoke token, npm install + npx cap sync android + gradlew assembleDebug (or Android Studio)
+
+---
+Task ID: 67
+Agent: Main
+Task: Three Android fixes per owner brief (everything else untouched): (1) hardware back closes app on every page, (2) document share + download broken in APK, (3) remove browser-style long-press text selection.
+
+Work Log:
+- ROOT CAUSE (back): Capacitor 8 core ships NO back handling (no onBackPressed/OnBackPressedCallback in BridgeActivity/Bridge) and @capacitor/app was NOT installed -> hardware back finished the activity instantly on every page; JS popstate guard never ran. FIX: npm i @capacitor/app@8.1.2 + page.tsx registers App.addListener('backButton') (native-only, after auth): any open view (compose/attachmentViewer/email/sidebar/settings/contacts/admin) steps back toward main; at main, first press toast, second within 2.5s -> App.exitApp(). Verified AppPlugin.java: OnBackPressedCallback fires JS listener when registered (app stays alive), exitApp() = activity.finish(). Browser keeps existing popstate behavior (zero change).
+- ROOT CAUSE (share/download): viewer used blob: URLs + <a download> and navigator.share — neither works in Android WebView. FIX: npm i @capacitor/share@8.0.3 + @capacitor/filesystem@8.1.5; attachment-viewer.tsx gains native-only paths: Share = blob->base64->Filesystem Cache->Share.share({files:[uri]}) = Android share sheet (WhatsApp/Gmail/Drive/save-to-Files); Download = writeFile to Directory.Documents (public, user-visible) with graceful fallback to share sheet if scoped storage blocks it; AbortError silenced. Web paths byte-identical (isNativePlatform() branch). Manifest += android:requestLegacyExternalStorage="true" (Android 10 support; ignored on 11+).
+- FIX 3 (text selection): globals.css += html.native-app user-select:none rules (inputs/textarea/contenteditable keep text); page.tsx adds the class when Capacitor.isNativePlatform(). Browsers unaffected.
+- Sync: npx cap sync android -> 5 plugins wired (app, filesystem, push, share, splash) in capacitor.settings.gradle + app/capacitor.build.gradle; package.json/package-lock.json/bun.lock updated (npm install + bun install).
+- Validation: eslint = 1 pre-existing error in attachment-viewer.tsx (react-hooks/set-state-in-effect at PDF effect) — verified identical on committed HEAD (git stash A/B); zero new issues. npm run build PASSED. Gradle assembleDebug: first failure = corrupted Kotlin transform cache (cleared transforms-4), second = transient download of kotlinx-coroutines (retry ok) -> BUILD SUCCESSFUL. APK 9.1MB (was 8.7MB). aapt2: requestLegacyExternalStorage=true present in packaged manifest; dexdump: AppPlugin in classes4.dex, FilesystemPlugin classes10.dex, SharePlugin classes4.dex.
+- SWEEP EVENT #14: junk UUID commit c7b3194 (worklog-only, 34 lines) on HEAD mid-session; backup-junk-uuid-14 branch -> reset --mixed e5a25c6; all 9 fix files intact as working-tree modifications.
+- Change set: 9 files, +232/-0 (page.tsx, attachment-viewer.tsx, globals.css, AndroidManifest.xml, 2 generated gradle files, package.json, 2 lockfiles). Nothing else touched.
+
+Stage Summary:
+- All 3 fixes implemented, built, and verified in a real APK; not committed/pushed (owner tests first + token required)
+- Owner flow: rebuild APK from this state -> test back button / share / download / long-press
+- Back behavior: any page -> main page; main page -> double-press exits with toast

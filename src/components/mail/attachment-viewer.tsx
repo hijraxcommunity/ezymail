@@ -7,6 +7,7 @@ import {
   FileText, FileWarning, Loader2, RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Capacitor } from '@capacitor/core'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,9 +68,103 @@ async function attachmentToBlob(att: AttachmentFile): Promise<Blob | null> {
   return null
 }
 
+// blob → bare base64 payload (@capacitor/filesystem expects no data: prefix)
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = String(reader.result || '')
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
+    }
+    reader.onerror = () => reject(new Error('base64 read failed'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+// Filesystem paths cannot contain separators or reserved characters
+const safeFileName = (att: AttachmentFile) =>
+  (att.name || 'attachment').replace(/[\\/:*?"<>|]/g, '_')
+
+// ─── Native (APK) actions ─────────────────────────────────────────────────
+// The Android WebView can't save blob: URLs and has no navigator.share, so
+// files are handed to the operating system via the official plugins:
+// - Share → Android share sheet (WhatsApp, Gmail, Drive, save to Files…)
+// - Download → saved to the phone's public Documents folder; if the device
+//   blocks that (scoped storage), falls back to the share sheet.
+
+async function nativeShareFile(att: AttachmentFile) {
+  const blob = await attachmentToBlob(att)
+  if (!blob) {
+    toast.error('Could not prepare the file for sharing.')
+    return
+  }
+  const base64 = await blobToBase64(blob).catch(() => null)
+  if (!base64) {
+    toast.error('Could not prepare the file for sharing.')
+    return
+  }
+  try {
+    const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor/share'),
+    ])
+    const written = await Filesystem.writeFile({
+      path: `share/${Date.now()}-${safeFileName(att)}`,
+      data: base64,
+      directory: Directory.Cache,
+      recursive: true,
+    })
+    await Share.share({ title: att.name || 'attachment', files: [written.uri] })
+  } catch (err) {
+    if ((err as DOMException)?.name !== 'AbortError') toast.error('Could not share this file.')
+  }
+}
+
+async function nativeDownloadFile(att: AttachmentFile) {
+  const name = safeFileName(att)
+  const blob = await attachmentToBlob(att)
+  if (!blob) {
+    toast.error('Download failed. Please try again.')
+    return
+  }
+  const base64 = await blobToBase64(blob).catch(() => null)
+  if (!base64) {
+    toast.error('Download failed. Please try again.')
+    return
+  }
+  try {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem')
+    await Filesystem.writeFile({
+      path: name,
+      data: base64,
+      directory: Directory.Documents,
+      recursive: true,
+    })
+    toast.success(`${name} saved to Documents`)
+  } catch {
+    // Public storage blocked (scoped storage / permissions) → the share
+    // sheet can still save the file anywhere (Files app, Drive, WhatsApp…)
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem')
+      const written = await Filesystem.writeFile({
+        path: `download/${Date.now()}-${name}`,
+        data: base64,
+        directory: Directory.Cache,
+        recursive: true,
+      })
+      const { Share } = await import('@capacitor/share')
+      toast('Pick "Files" to save the document to your phone')
+      await Share.share({ title: name, files: [written.uri] })
+    } catch (err) {
+      if ((err as DOMException)?.name !== 'AbortError') toast.error('Download failed. Please try again.')
+    }
+  }
+}
+
 /* ─── Actions (Download / Share / Print) ──────────────────────────────────── */
 
 export async function handleDownload(att: AttachmentFile) {
+  if (Capacitor.isNativePlatform()) return nativeDownloadFile(att)
   const blob = await attachmentToBlob(att)
   if (!blob) {
     toast.error('Download failed. Please try again.')
@@ -87,6 +182,7 @@ export async function handleDownload(att: AttachmentFile) {
 }
 
 async function handleShare(att: AttachmentFile) {
+  if (Capacitor.isNativePlatform()) return nativeShareFile(att)
   const blob = await attachmentToBlob(att)
   if (!blob) {
     toast.error('Could not prepare the file for sharing.')

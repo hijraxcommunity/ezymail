@@ -259,6 +259,57 @@ export default function HomePage() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [isAuthenticated])
 
+  // ─── Android hardware back button — native control (APK only) ────────────
+  // Capacitor 8 ships NO native back handling: without a listener the
+  // hardware key finishes the activity and the app closes instantly on every
+  // page. With a backButton listener registered, the official App plugin
+  // hands the key to JavaScript instead: any open view steps back toward the
+  // main page, and only at the main page does the app exit (first press
+  // warns, second press within 2.5s exits). Browsers are unaffected — they
+  // keep the popstate guard above.
+  useEffect(() => {
+    if (!isAuthenticated || !Capacitor.isNativePlatform()) return
+    let lastBaseBackAt = 0
+    let unsub: (() => void) | null = null
+    import('@capacitor/app')
+      .then(({ App }) =>
+        App.addListener('backButton', () => {
+          const s = useAppStore.getState()
+          // Any open in-app view — step back toward the main page
+          if (s.composeOpen || s.attachmentViewer || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
+            lastBaseBackAt = 0 // In-app navigation resets the exit timer
+            if (s.composeOpen) s.setComposeOpen(false)
+            else if (s.attachmentViewer) s.setAttachmentViewer(null)
+            else if (s.selectedEmailId) s.setSelectedEmailId(null)
+            else if (s.sidebarOpen) s.setSidebarOpen(false)
+            else if (s.settingsView) s.setSettingsView(null)
+            else if (s.contactsView) s.setContactsView(false)
+            else if (s.adminView) s.setAdminView(false)
+            return
+          }
+          // Main page — second press within 2.5s exits, like a native app
+          const now = Date.now()
+          if (lastBaseBackAt && now - lastBaseBackAt < 2500) {
+            void App.exitApp()
+            return
+          }
+          lastBaseBackAt = now
+          toast('Press back again to exit')
+        })
+      )
+      .then((handle) => { unsub = () => void handle?.remove() })
+      .catch(() => { /* never block the UI on plugin errors */ })
+    return () => { unsub?.() }
+  }, [isAuthenticated])
+
+  // ─── Native app: disable browser-style long-press text selection ─────────
+  // Holding a touch in the APK WebView highlights text like a browser. The
+  // html.native-app class switches on the CSS rule in globals.css — native
+  // only; normal browsers keep text selection and inputs stay editable.
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) document.documentElement.classList.add('native-app')
+  }, [])
+
   // ─── Email notifications ──────────────────────────────────────────────────
   useNotifications()
 
