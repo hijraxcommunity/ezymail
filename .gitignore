@@ -81,6 +81,11 @@ server.log
 /android/build/
 /android/local.properties
 /android/app/src/main/assets/capacitor.config.json
+
+# Sandbox-only build tooling (never part of the project)
+/android-sdk/
+/jdk21/
+/backup_local/
 /ios/App/Pods/
 /ios/App/build/
 /ios/App/Podfile.lock

@@ -1452,3 +1452,89 @@ Work Log:
 
 Stage Summary:
 - No app behavior change; new static asset only; white/design backups remain in download/backup/
+
+---
+Task ID: 60
+Agent: Main
+Task: Formal brief — APK/native splash only: eliminate oversized logo-only first screen, keep branded (logo+EzyMail+tagline+From HijraX) screen, respect Android 12+ limits, list every file, deploy nothing without approval.
+
+Work Log:
+- Sweep event #10 repaired (bogus UUID commit 11494f9 + tree tampering incl. public/splash.png + upload route deletion) -> HEAD == origin/main == 950043e
+- Inspected Capacitor 8 android template (from @capacitor/cli assets/android-template.tar.gz): launch theme = values/styles.xml AppTheme.NoActionBarLaunch parent Theme.SplashScreen with android:background=@drawable/splash; manifest has android:roundIcon=@mipmap/ic_launcher_round; mipmap-anydpi-v26 adaptive XMLs present by default; NO values-v31 in template (androidx Theme.SplashScreen maps to system splash on API 31+)
+- Source of big-logo screen: @capacitor/assets generated drawable*/splash.png from assets/logo.png (icon-only, logo.png has no text), held by launch theme while WebView loads remote URL (network seconds); Android 12+ system splash (launcher icon, white, no text possible) is the brief residual
+- Smallest change = owner-local only: assets/splash.png := branded design replica (https://ezymail.vercel.app/splash.png, 2732x2732, measured from owner screenshot) + regenerate + rmdir mipmap-anydpi-v26; NO manifest/theme/config/plugin/web changes
+- Nothing pushed/deployed (brief forbids without approval); worklog local-only this round
+
+Stage Summary:
+- Native phase shows same design as web splash -> reads as ONE WhatsApp-style splash; residual ~1s system icon-on-white is platform-imposed
+- Files changed on owner PC: assets/splash.png (new), 11x res/drawable*/splash.png (regenerated), mipmap icon PNGs (regenerated), mipmap-anydpi-v26 (deleted); repo: zero
+
+---
+Task ID: 61
+Agent: Main
+Task: Owner ordered REVISED plan only — no execution, no file changes: backup res/ first, verify live splash.png design, regenerate splash resources only, PRESERVE all launcher icons + adaptive icons (do NOT delete mipmap-anydpi-v26), show exact commands + file list, WAIT for approval. Website/PWA/Vercel/repo untouched.
+
+Work Log:
+- READ-ONLY session: zero repo modifications, zero pushes
+- Verified live https://ezymail.vercel.app/splash.png (scripts/verify_live_splash.py): 95,143 bytes, 2732x2732, SHA-256 cdb157587509c5ff... — byte-identical to committed public/splash.png; visual check confirms branded design (logo + EzyMail + Email made Ezy + From HijraX on white)
+- scripts/measure_splash_bands.py measured design layout: logo y1061-1316, EzyMail y1385-1448, tagline y1508-1541, footer y2290-2323; portrait cover-fit keeps x546-2185 + full height (all elements safe); landscape cover-fit crops footer (only affects sideways launch)
+- Inspected @capacitor/assets@3.0.5 source (npm pack, then deleted): asset order logo(1st)->...->splash(6th)->splashDark(7th) means real splash OVERWRITES the logo fallback; NO --splashOnly flag exists (icons always regenerated from same assets/logo.png); generator DELETES nothing; splash fit = sharp cover; splash-dark.png input controls drawable-night-* variants (dark-mode phones) — plan adds copy of splash.png to splash-dark.png; tool also re-sets manifest android:icon/android:roundIcon to standard values (no-op if standard); trapezedev commit writes only the manifest XML
+- Noted: local download/ splash backups (download/splash.png, download/backup/*) no longer exist (swept) — irrelevant: public/splash.png in git is the canonical approved design
+- Revised owner-PC plan presented: 0) xcopy backup of res/ + inventory listing; 1) curl splash -> assets/ + copy to splash-dark.png + 95,143-byte check; 2) npx @capacitor/assets generate --android; 3) fc /b icon spot-checks vs backup; 4) before/after res listing; 5) uninstall + fresh build + cold-launch test; rollback = xcopy backup back. No rmdir step anywhere.
+
+Stage Summary:
+- Plan presented and AWAITING OWNER APPROVAL; nothing executed, nothing pushed, repo zero-touch
+- Expected owner-PC changes: 26x res/drawable*/splash.png contents (light+night -> branded), 18-24x mipmap icon PNGs regenerated-identical from same logo (fc /b verified), 2x anydpi-v26 XMLs rewritten same-content (NOT deleted), AndroidManifest.xml re-set to standard icon attrs, assets/splash.png + assets/splash-dark.png added; backup folder outside android/
+- Honest limits restated: Android 12+ system icon flash (~1s, no text) is platform-forced; portrait keeps full branded design; landscape crops footer line
+
+---
+Task ID: 62
+Agent: Main
+Task: Owner approved general approach with conditions: preserve icons/adaptive XMLs without unnecessary rewriting; SHA-256 verify download vs approved public/splash.png BEFORE replacing assets; back up res + assets; splash-only regeneration or honest explanation of generator limitation; confirm zero web/PWA/Next/capacitor-config/backend/Vercel changes; small numbered steps with STOP after each file-modifying step. Nothing to be executed by agent.
+
+Work Log:
+- Zero tool executions that modify anything; only this worklog appended
+- Final staged owner-PC procedure delivered (7 steps + rollback), built on Task 61 source inspection
+- Honest limitation stated per owner point 4: @capacitor/assets has NO splash-only mode (verified in 3.0.5 source) — it always rewrites icons + re-sets manifest attrs; mitigation = Step 5 restores original mipmap-* folders and AndroidManifest.xml byte-exact from backup, so NET change = only drawable*/splash.png contents (26 files: 13 light + 13 night)
+- SHA-256 gate: expected CDB157587509C5FF19F2A52C4BE72CCC9380D32053EBD8133341393AF2515E5A (95,143 bytes) — verified live==committed public/splash.png in Task 61; owner verifies temp download with certutil BEFORE any assets/ replacement; assets/ backed up first (covers existing splash/logo sources)
+- Stop points after steps: 1 backup, 2 temp download+hash, 3 place into assets, 4 generate, 5 restore icons+manifest, 6 read-only listing compare, 7 device build+test
+- Untouched-forever confirmation given: website/Next.js, PWA, public/, capacitor.config.ts, backend, Vercel, repo — no commit, no push, no deploy by agent
+
+Stage Summary:
+- Awaiting owner step-by-step execution results; agent executes nothing
+- Rollback one-liners provided (restore res + manifest from backup)
+- Known harmless possibilities flagged: tool may add ldpi/night folder variants (same design, extra densities) — visible in listing compare, report back if seen
+
+---
+Task ID: 63
+Agent: Main
+Task: Owner's final adjustment before starting: Step 5 must COMPARE generated AndroidManifest.xml vs backup FIRST and restore ONLY if changed (explain the difference; no unnecessary overwrite). All other safeguards kept. Agent makes no changes; confirm procedure ready for manual one-step-at-a-time run.
+
+Work Log:
+- No tool executions; only this worklog appended
+- Step 5 revised into 5-A (restore original mipmap-* folders, unchanged), 5-B (fc compare manifest vs backup: "no differences" -> do nothing; any difference -> copy backup back + paste fc output for explanation), 5-C (three fc /b icon spot-checks, unchanged)
+- Explained expected manifest differences in advance: tool re-sets android:icon/android:roundIcon to standard @mipmap values; possible whitespace re-serialization; roundIcon line re-added if owner removed it in the old icon-shape test — decision rule is binary (changed -> restore -> original bytes; unchanged -> untouched)
+- Steps 1-4, 6, 7 + rollback unchanged; procedure declared FINAL and ready; agent executes nothing
+
+Stage Summary:
+- Final procedure ready for owner manual run from Step 1, stop after each file-modifying step and report results
+- Agent state: zero modifications, zero pushes; awaiting owner step results
+
+---
+Task ID: 64
+Agent: Main
+Task: Owner's formal brief — inspect repo, preserve Android splash fixes, fix blank-screen startup transition, validate resources/config, test, push to GitHub so owner can clone and build the APK.
+
+Work Log:
+- SWEEP EVENT #11 on session start: 3 bogus UUID commits on local HEAD (69d177a etc.), upload route deleted from disk (6th time), 200+ files tampered. Repair: worklog backed up first (tracked-file local entries would be lost), reset --mixed origin/main (950043e), restore ., worklog diff verified = only my Tasks 60-63 entries, re-copied. Guard GREEN (166 TS, 8 critical).
+- Inspection: NO android/ or assets/ in repo or origin (owner's splash fixes live only on their PC) -> recreated faithfully to brief spec: npx cap add android (template, appId af.ezy.mail, appName EzyMail), assets/ := logo.png + splash.png + splash-dark.png (splash SHA-verified cdb157... == approved public/splash.png), npx @capacitor/assets@3.0.5 generate --android -> 100 files (branded splash all densities + night variants + EzyMail icons). Visual check of drawable-port-xxhdpi/splash.png = exact approved design (logo+EzyMail+Email made Ezy+From HijraX, nothing cropped).
+- Android 12+ system splash per brief: drawable-v31/ezymail_system_splash_icon.png (logo at 46% of 1024 transparent canvas, rounded corners preserved) + values-v31/styles.xml (windowSplashScreenBackground #FFFFFF, windowSplashScreenAnimatedIcon -> padded icon). Template vector drawable ic_launcher_foreground.xml lacked XML declaration -> added (exactly-1 rule now uniform across all 12 XMLs).
+- BLANK-SCREEN FIX: @capacitor/splash-screen@8.0.2 installed (deps + both lockfiles updated); capacitor.config.ts += SplashScreen {launchShowDuration:15000 safety cap, launchAutoHide:true, backgroundColor #FFFFFF, showSpinner:false} (PushNotifications + server.url untouched); src/app/page.tsx += 18 lines: static Capacitor import + effect that hides the native splash AFTER isCheckingAuth flips false (effect runs post-paint of the real UI -> no flash; guarded by isNativePlatform() + dynamic plugin import so browser bundle never loads it). Native 15s cap covers offline/JS-error (splash can never hang forever). MainActivity.java untouched (plugin fallback design needs no Java change).
+- Validation: custom res validator — 12 XMLs, exactly 1 declaration each, ALL @drawable/@mipmap/@style refs resolve; npm install 695 pkgs OK; cap sync OK (2 plugins wired); eslint page.tsx 0 errors; tsc 17 errors = pre-existing (A/B proof: 17 with AND without my change; next.config.ts ignores known noise); npm run build PASSED.
+- Android build achieved in-sandbox: Gradle 8.14.3 + Temurin JDK 21 (system java is JRE-only, no javac) + Android SDK cmdline-tools 12.0 + platform-36 + build-tools 36.0.0 (~1GB downloaded) -> ./gradlew assembleDebug BUILD SUCCESSFUL (155 tasks, 2m31s). APK verified: package af.ezy.mail, label EzyMail, permissions incl. POST_NOTIFICATIONS + c2dm.RECEIVE, SplashScreenPlugin classes in classes4/classes9.dex, drawable-v31 icon + splash resources packaged. 8.7MB app-debug.apk.
+- Staging: android/ (template gitignores exclude assets/public 2.5MB + build outputs + local.properties + generated capacitor.config.json), assets/, deps + lockfiles, capacitor.config.ts, page.tsx, 5 splash scripts, worklog. Excluded: android-sdk/, jdk21/, backup_local/, scripts/inspection/ (sandbox-only; added to .gitignore as sweep defense). Secret scan before commit.
+
+Stage Summary:
+- Splash fixes recreated per spec (owner PC copies not accessible — android/ was never in the repo), blank-screen transition fixed at both layers (web ready-signal + native 15s cap), full validation battery green, REAL APK built
+- Runtime cold-launch behavior NOT verifiable in sandbox (no emulator/device) — owner device test required
+- Push pending owner one-time PAT (no credentials in sandbox, per established protocol)

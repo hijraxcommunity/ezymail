@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Android 12+ (API 31+) system splash screen overrides.
+
+      The system draws the splash itself on API 31+: a fixed-size icon slot on a
+      solid background. It cannot render arbitrary text, so the full branded
+      design (logo + EzyMail + Email made Ezy + From HijraX) appears right after
+      it, via @drawable/splash which the @capacitor/splash-screen plugin keeps
+      on screen until the web app signals it is ready.
+
+      - windowSplashScreenBackground: white, matches the approved splash design.
+      - windowSplashScreenAnimatedIcon: the approved logo centered on a larger
+        transparent canvas (drawable-v31/ezymail_system_splash_icon.png) so the
+        visible logo is smaller inside the fixed system icon slot.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ezymail_system_splash_icon</item>
+    </style>
+</resources>

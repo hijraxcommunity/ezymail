@@ -26,6 +26,16 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    SplashScreen: {
+      // The branded @drawable/splash stays on screen (no blank gap) until the
+      // web app calls SplashScreen.hide() once its real UI is rendered.
+      // launchShowDuration doubles as the safety cap: if the remote page never
+      // loads (offline, JS error), the splash is still dismissed after 15s.
+      launchShowDuration: 15000,
+      launchAutoHide: true,
+      backgroundColor: '#FFFFFF',
+      showSpinner: false,
+    },
   },
 }
 

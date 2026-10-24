@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useRef, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/use-app-store'
 import { toast } from 'sonner'
@@ -142,6 +143,23 @@ export default function HomePage() {
       .catch(() => { /* silent */ })
       .finally(() => setIsCheckingAuth(false))
   }, [setUser])
+
+  // ─── Native splash dismissal — end of the launch handover ──────────────
+  // The native shell keeps the branded splash visible while the remote site
+  // loads (no blank gap). This effect runs AFTER the real UI (or login) has
+  // painted, so hiding here cannot flash an empty screen. The plugin's 15s
+  // launchShowDuration is the native fallback cap if this never runs.
+  // Browsers: isNativePlatform() is false, the plugin is never imported, and
+  // the website behavior is unchanged.
+  const splashHiddenRef = useRef(false)
+  useEffect(() => {
+    if (isCheckingAuth || splashHiddenRef.current) return
+    splashHiddenRef.current = true
+    if (!Capacitor.isNativePlatform()) return
+    void import('@capacitor/splash-screen')
+      .then(({ SplashScreen }) => SplashScreen.hide())
+      .catch(() => { /* never block the UI on splash dismissal */ })
+  }, [isCheckingAuth])
 
   // ─── Deep link: /?id=<emailId> opens that email (push notification taps) ─
   // Runs once after auth resolves; EmailDetail self-fetches by id, so no
