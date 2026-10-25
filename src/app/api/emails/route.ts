@@ -307,11 +307,14 @@ export async function POST(request: NextRequest) {
     if (!isScheduled) {
       const sender = await db.user.findUnique({
         where: { id: session.userId },
-        select: { firstName: true, lastName: true },
+        select: { firstName: true, lastName: true, email: true, avatar: true },
       });
       const senderName = sender
         ? `${sender.firstName} ${sender.lastName}`
         : 'Someone';
+      // Gmail-style notification preview: collapsed body text (~200 chars)
+      const preview =
+        emailBody.trim().replace(/\s+/g, ' ').slice(0, 200) || undefined;
 
       after(() =>
         sendPushNotification({
@@ -319,6 +322,9 @@ export async function POST(request: NextRequest) {
           senderName,
           subject: subject.trim(),
           emailId: inboxEmail.id,
+          senderEmail: sender?.email,
+          avatarUrl: sender?.avatar || undefined,
+          preview,
         }).catch(() => {})
       );
     }

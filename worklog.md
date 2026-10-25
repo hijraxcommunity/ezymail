@@ -1591,3 +1591,35 @@ Stage Summary:
 - All 3 fixes implemented, built, and verified in a real APK; not committed/pushed (owner tests first + token required)
 - Owner flow: rebuild APK from this state -> test back button / share / download / long-press
 - Back behavior: any page -> main page; main page -> double-press exits with toast
+
+---
+Task ID: 68 (re-append)
+Agent: Main
+Task: Push record for Task 67 (entry was swallowed by sweep event #16).
+
+Work Log:
+- Token check: ghp_OuNV... valid, repo scope. Sweep event #15 had wrapped my 10 files in UUID commit 0df7889 — content verified 100% mine, message amended -> 01acec5, pushed e5a25c6..01acec5 (clean fast-forward), ls-remote verified.
+- GitHub main: 950043e -> e5a25c6 (splash) -> 01acec5 (back/share/download/selection). Site 200.
+
+Stage Summary:
+- Task 67 fixes live on origin/main; token still active (owner to revoke)
+
+---
+Task ID: 69
+Agent: Main
+Task: Gmail-style push notifications per owner screenshots: sender name as title (no "New email from"), subject as text, expandable body preview, sender avatar image, Archive/Mark-as-read/Reply actions, professional status-bar icon. Nothing else touched.
+
+Work Log:
+- ROOT CAUSE: server sent FCM display notifications for Android (title "New email from X", icon ic_launcher) — FCM display notifications cannot render BigText/actions/large icons and draw the raw launcher icon in the status bar.
+- SERVER: sendPushNotification.ts — buildFcmMessage gains androidDataOnly flag: android tokens (sub.platform === 'android') now get DATA-ONLY messages (no android.notification) with title=bare senderName, preview (200-char body), senderEmail, avatar; legacy display path kept for other tokens; web data-only + apns UNCHANGED (data.title keeps "New email from X" for web SW). emails/route.ts call site: sender select += email+avatar, passes preview=collapsed emailBody.
+- ANDROID: EzyMailMessagingService extends plugin MessagingService (onNewToken passthrough intact) — data messages with emailId+title render via EzyMailNotification.show(); manifest tools:node="remove" removes plugin's service, mine registered with MESSAGING_EVENT; NotificationActionReceiver (exported=false) handles Archive/Mark-as-read via CookieManager.getCookie(SERVER) + PUT /api/emails/<id> {"isArchived":true}/{"isRead":true} (same endpoint as UI), dismisses notification, falls back to opening the email on failure; Reply opens the email (deep link); MainActivity forwards ACTION_VIEW data URI into the WebView (cold+warm start).
+- ASSETS: ic_notification.xml (white envelope glyph — the professional status-bar icon), ic_action_archive/read/reply.xml (material glyphs). Large icon = fetched avatar circle-cropped, else Gmail-style letter avatar (colored circle + initial). Channel "ezy-emails" ensured, category email, high priority, BigTextStyle(preview)+summary.
+- GRADLE: app/build.gradle += com.google.firebase:firebase-messaging:25.0.1 (same version as push plugin; app module must see RemoteMessage/FirebaseMessagingService at compile time).
+- TESTS: phase2-payload.test.ts — legacy android assertions kept + 2 new data-only tests; 10/10 pass. eslint changed files clean. npm run build PASS. gradle assembleDebug BUILD SUCCESSFUL; merged manifest: my service + receiver present, plugin service REMOVED; dex: 3 new classes in classes9.dex, ic_notification ref in resources.
+- SWEEP EVENT #16 (worst yet): junk UUID commit 24968a5 (worklog-only) on HEAD + ~93 files tampered on disk (all splash/mipmap PNGs, CI files, gradle configs, capacitor.config.ts, bun.lock, docs, upload route DELETED 7th time). Restored ALL from HEAD (backup-junk-uuid-16 branch kept); re-verified my 12-file change set intact; upload route 89 lines restored.
+- SANDBOX: sweep also wiped jdk21/, android-sdk/, ~/.gradle, local.properties, cap-sync artifacts — rebuilt all (JDK 21, cmdline-tools, platform-36, build-tools 36 via direct zips + license files, local.properties, cap sync).
+
+Stage Summary:
+- Gmail-style notifications fully implemented + built; runtime notification rendering needs owner device test (sandbox has no device)
+- Not pushed yet (owner orders push; token required)
+- Reply action opens the email (full inline reply would need RemoteInput + compose API — future)

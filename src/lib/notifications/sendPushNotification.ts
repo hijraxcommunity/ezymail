@@ -30,6 +30,9 @@ interface PushPayload {
   senderName: string
   subject: string
   emailId: string
+  senderEmail?: string
+  avatarUrl?: string
+  preview?: string
 }
 
 interface FcmTokenPayload {
@@ -37,6 +40,14 @@ interface FcmTokenPayload {
   senderName: string
   subject: string
   emailId: string
+  senderEmail?: string
+  avatarUrl?: string
+  preview?: string
+  /** Android only: send data-only so the app builds the Gmail-style
+   *  notification (sender title, expandable body, actions, sender avatar).
+   *  FCM display notifications cannot do any of that and render the raw
+   *  launcher icon in the status bar. */
+  androidDataOnly?: boolean
 }
 
 // Pure message builder (exported for regression tests).
@@ -45,42 +56,67 @@ interface FcmTokenPayload {
 // browser auto-displays the message and onBackgroundMessage never fires,
 // so our sw.js click handler never sees data.url. Data-only guarantees
 // sw.js shows the notification itself with data.url attached (deep link).
-// Android/APNs get platform-specific display payloads so they render
-// natively without the top-level notification.
-export function buildFcmMessage({ fcmToken, senderName, subject, emailId }: FcmTokenPayload) {
-  const title = `New email from ${senderName}`
+// Android is data-only too (androidDataOnly): the app's native service
+// (EzyMailMessagingService) receives the data and renders a Gmail-style
+// notification — sender name as title, subject as text, expandable body
+// preview, sender avatar and Archive / Mark-as-read / Reply actions.
+// APNs keeps the classic alert payload (no iOS app exists yet).
+export function buildFcmMessage({
+  fcmToken,
+  senderName,
+  subject,
+  emailId,
+  senderEmail,
+  avatarUrl,
+  preview,
+  androidDataOnly,
+}: FcmTokenPayload) {
   const body = subject || '(No subject)'
+  const data: Record<string, string> = {
+    url: `/?id=${emailId}`,
+    emailId,
+    tag: `email-${emailId}`,
+    // Web SW renders data.title verbatim → keep the classic wording there.
+    // Android's native renderer wants the bare sender name (Gmail style).
+    title: androidDataOnly ? senderName : `New email from ${senderName}`,
+    body,
+  }
+  if (preview) data.preview = preview
+  if (senderEmail) data.senderEmail = senderEmail
+  if (avatarUrl) data.avatar = avatarUrl
   return {
     message: {
       token: fcmToken,
-      data: {
-        url: `/?id=${emailId}`,
-        emailId,
-        tag: `email-${emailId}`,
-        title,
-        body,
-      },
+      data,
       webpush: {
         headers: { Urgency: 'high' },
       },
-      android: {
-        // FCM v1 schema: priority lives on AndroidConfig ONLY — AndroidNotification
-        // has no priority field (400 INVALID_ARGUMENT in production 2026-10-22).
-        priority: 'high' as const,
-        notification: {
-          channelId: 'ezy-emails',
-          title,
-          body,
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          // Must be an in-app drawable resource name, not a URL
-          icon: 'ic_launcher',
-        },
-      },
+      android: androidDataOnly
+        ? {
+            // Data-only: priority lives on AndroidConfig — AndroidNotification
+            // is omitted entirely so the native service renders the message.
+            priority: 'high' as const,
+          }
+        : {
+            // Legacy display-notification path (kept for tokens registered
+            // before the native renderer existed). FCM v1 schema: priority
+            // lives on AndroidConfig ONLY — AndroidNotification has no
+            // priority field (400 INVALID_ARGUMENT in production 2026-10-22).
+            priority: 'high' as const,
+            notification: {
+              channelId: 'ezy-emails',
+              title: `New email from ${senderName}`,
+              body,
+              defaultSound: true,
+              defaultVibrateTimings: true,
+              // Must be an in-app drawable resource name, not a URL
+              icon: 'ic_launcher',
+            },
+          },
       apns: {
         payload: {
           aps: {
-            alert: { title, body },
+            alert: { title: `New email from ${senderName}`, body },
             sound: 'default',
             badge: 1,
           },
@@ -95,6 +131,9 @@ export async function sendPushNotification({
   senderName,
   subject,
   emailId,
+  senderEmail,
+  avatarUrl,
+  preview,
 }: PushPayload): Promise<void> {
   const auth = getAuthClient()
   if (!auth) {
@@ -157,6 +196,10 @@ export async function sendPushNotification({
           senderName,
           subject,
           emailId,
+          senderEmail,
+          avatarUrl,
+          preview,
+          androidDataOnly: sub.platform === 'android',
         })
 
         const res = await fetch(FCM_V1_URL, {

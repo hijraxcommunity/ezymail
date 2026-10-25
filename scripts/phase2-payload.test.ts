@@ -34,7 +34,7 @@ test('token is bound to the message', () => {
   assert.equal(msg.message.token, 'tok_test_123')
 })
 
-test('android platform payload renders natively', () => {
+test('android legacy display payload still renders (non-android tokens)', () => {
   const msg = buildFcmMessage(ARGS)
   assert.equal(msg.message.android.priority, 'high')
   assert.equal(msg.message.android.notification.channelId, 'ezy-emails')
@@ -45,6 +45,35 @@ test('android platform payload renders natively', () => {
   assert.equal(msg.message.android.notification.priority, undefined)
   // icon must be an in-app drawable resource name, never a URL
   assert.equal(msg.message.android.notification.icon, 'ic_launcher')
+})
+
+test('android data-only (Gmail-style): no display block, bare sender title', () => {
+  const msg = buildFcmMessage({
+    ...ARGS,
+    senderEmail: 'ali@ezy.af',
+    avatarUrl: 'https://ezymail.vercel.app/a.png',
+    preview: 'Salam, how are you doing today my friend?',
+    androidDataOnly: true,
+  })
+  // Data-only: the native EzyMailMessagingService renders the notification
+  assert.equal(msg.message.android.notification, undefined)
+  assert.equal(msg.message.android.priority, 'high')
+  // Gmail style: sender name IS the title, subject is the text
+  assert.equal(msg.message.data.title, 'Ali')
+  assert.equal(msg.message.data.body, 'Salam')
+  // Renderer inputs: expandable preview, avatar, deep link
+  assert.equal(msg.message.data.preview, 'Salam, how are you doing today my friend?')
+  assert.equal(msg.message.data.senderEmail, 'ali@ezy.af')
+  assert.equal(msg.message.data.avatar, 'https://ezymail.vercel.app/a.png')
+  assert.equal(msg.message.data.url, '/?id=em_42')
+})
+
+test('android data-only omits optional fields when not provided', () => {
+  const msg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
+  assert.equal(msg.message.data.preview, undefined)
+  assert.equal(msg.message.data.senderEmail, undefined)
+  assert.equal(msg.message.data.avatar, undefined)
+  assert.equal(msg.message.data.title, 'Ali')
 })
 
 test('apns payload carries alert + sound + badge', () => {
@@ -67,4 +96,4 @@ test('message is JSON-serializable (FCM v1 wire-safe)', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(msg)), msg)
 })
 
-console.log('payload tests: all 8 passed')
+console.log('payload tests: all 10 passed')
