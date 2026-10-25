@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application
+        android:name=".EzyMailApp"
         android:allowBackup="true"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher"
@@ -40,6 +41,13 @@
         <!-- Handles Archive / Mark-as-read buttons on the notification -->
         <receiver
             android:name="af.ezy.mail.NotificationActionReceiver"
+            android:exported="false" />
+
+        <!-- TEMPORARY diagnostic screen: shows the crash report on screen
+             (separate process so it survives the dying main process). -->
+        <activity
+            android:name=".CrashReportActivity"
+            android:process=":crash"
             android:exported="false" />
 
         <provider

@@ -1697,3 +1697,23 @@ Stage Summary:
 - Crash verdict revised: NOT missing-Play-services (owner confirmed Play present + old APK works). All Task 69 native deltas provably off the startup path; no startup suspect found in code or merged manifest.
 - Owner given: Test 1 = clean uninstall/reinstall of ezymail-latest.apk (rules out broken install); Test 2 = adb logcat -b crash -d -> send crash file for exact stack trace.
 - Awaiting owner test results before any code change.
+
+---
+Task ID: 74
+Agent: Main
+Task: Owner reports crash also on a REAL Android device ("it still closes", icon shows a circle on touch) -> confirmed real bug, not environment. Built diagnostic crash-reporter APK.
+
+Work Log:
+- Real-device report kills all environment theories. Re-verified with fresh evidence: (a) push plugin's default firebase-messaging IS 25.0.1 (node_modules build.gradle line 7) -> explicit dep adds nothing; (b) variables.gradle unchanged since e5a25c6 -> same androidx pins; (c) git diff 01acec5..HEAD for android/ = exactly the 10 Task 69 files; (d) package.json/package-lock.json/capacitor.config.ts IDENTICAL 01acec5..HEAD; (e) full merged manifest remainder = standard (emoji2, lifecycle, profileinstaller, datatransport); (f) all 250 images in APK checked via PIL: sane, only assets/public/splash.png is 2732x2732 (unused webDir copy, not loaded at startup); (g) apksigner verify: valid debug cert.
+- exitApp lead investigated and closed: page.tsx App.exitApp only fires on double back-press within 2.5s at main view; cannot fire at startup.
+- static analysis exhausted -> decisive instrumentation: built crash-reporter APK.
+- NEW: EzyMailApp.java (Application; handler installed in attachBaseContext so it covers ContentProvider crashes — FirebaseInitProvider/InitializationProvider/FileProvider — plus Application.onCreate and Activity creation); writes device info + full stack trace + cause chain to files/crash-report.txt, launches CrashReportActivity, sleeps 800ms, chains to previous handler.
+- NEW: CrashReportActivity.java (process ":crash" so it survives main-process death; 100% programmatic UI — no resource inflation — title + scrollable monospace trace + Close button).
+- Manifest: android:name=".EzyMailApp" on <application>; CrashReportActivity (exported=false, :crash process).
+- Build: gradlew assembleDebug SUCCESS (8.9MB); EzyMailApp verified in classes9.dex; manifest entries verified via aapt2. download/ezymail-crash-reporter.apk = functionally identical to ezymail-latest.apk + crash catcher.
+- NOT pushed (no token). Committed locally.
+
+Stage Summary:
+- download/ezymail-crash-reporter.apk delivered: install -> open -> if it closes, a crash-report screen appears -> owner photographs and sends.
+- Interpretation matrix: report shown = exact exception+line -> targeted fix; closes with NO report = pre-attachBaseContext native/linker failure -> next step is old-state (01acec5) rebuild diff + fresh google-services.json from console.
+- Crash catcher is temporary; remove after diagnosis.
