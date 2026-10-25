@@ -1657,3 +1657,21 @@ Stage Summary:
 - Splash fix committed (web-only — Vercel deploy fixes the two-stage splash on the CURRENT APK too, no rebuild needed)
 - Crash verdict: emulator environment; owner asked to confirm Play Store presence on emulator + whether old APK opened on it
 - google-services.json lost — needed again before any future APK rebuild
+
+---
+Task ID: 72
+Agent: Main
+Task: Owner uploaded google-services.json + "Push and Deploy and do not touch anything else" — restore Firebase config, rebuild APK, push/deploy state.
+
+Work Log:
+- SWEEP EVENT #20: junk UUID commit 41e2afe (same 3c41980b... message, worklog-only 17-line re-wrap) re-appeared on HEAD after Task 70's reset; backup-junk-uuid-20 -> reset --mixed 07b3511 (tree clean, no data lost).
+- google-services.json: placed from upload/ to android/app/google-services.json; confirmed .gitignore line 95 covers it (NOT pushed — secret stays local-only).
+- TOOLCHAIN REBUILD (sandbox reset had wiped jdk21/, android-sdk/, ~/.gradle, cap-sync artifacts): system java was JRE-only (no javac — Gradle toolchain error) -> full JDK 21.0.13 via Adoptium direct tarball to jdk21/. Android SDK: dl.google.com intermittently blocked then unblocked; platform-36_r02.zip OK; build-tools direct zips 404 because Google CHANGED filename convention to underscores (build-tools_r35_linux.zip, found via repository2-3.xml) -> build-tools 35.0.0 installed; licenses written manually (3-hash android-sdk-license + preview); local.properties; npx cap sync android (5 plugins, committed wiring unchanged).
+- BUILD: gradlew assembleDebug (JAVA_HOME=jdk21) BUILD SUCCESSFUL in 2m56s, 247 tasks. APK 8.9MB.
+- APK VERIFICATION (aapt2 finally available — closes Task 71 verification gap): badging af.ezy.mail / minSdk 24 / targetSdk 36; merged manifest has af.ezy.mail.EzyMailMessagingService with MESSAGING_EVENT filter + NotificationActionReceiver; plugin's com.capacitorjs...MessagingService REMOVED (tools:node=remove worked); FirebaseInitProvider + firebase components present (google-services applied). No startup-path anomaly found — Task 71 emulator-environment verdict stands.
+- Deploy state: remote main already 07b3511 (splash fix) before this task; this task's push = worklog entry only. Vercel auto-deploys on push; site 200.
+
+Stage Summary:
+- Build pipeline fully restored (JDK 21 + SDK + google-services.json + cap sync); APK rebuilt and verified component-by-component
+- download/ezymail-latest.apk = fresh complete build for owner testing (emulator crash isolation: test this + old APK on same emulator)
+- google-services.json back on disk locally; owner should keep a copy (gitignored by design)
