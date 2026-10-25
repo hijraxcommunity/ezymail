@@ -144,22 +144,31 @@ export default function HomePage() {
       .finally(() => setIsCheckingAuth(false))
   }, [setUser])
 
-  // ─── Native splash dismissal — end of the launch handover ──────────────
+  // ─── Native splash dismissal — launch handover at first paint ───────────
   // The native shell keeps the branded splash visible while the remote site
-  // loads (no blank gap). This effect runs AFTER the real UI (or login) has
-  // painted, so hiding here cannot flash an empty screen. The plugin's 15s
+  // loads (no blank gap), then hands over to the in-app loading screen — the
+  // visible second splash stage (small logo + text). The plugin's 15s
   // launchShowDuration is the native fallback cap if this never runs.
   // Browsers: isNativePlatform() is false, the plugin is never imported, and
   // the website behavior is unchanged.
   const splashHiddenRef = useRef(false)
   useEffect(() => {
-    if (isCheckingAuth || splashHiddenRef.current) return
-    splashHiddenRef.current = true
-    if (!Capacitor.isNativePlatform()) return
-    void import('@capacitor/splash-screen')
-      .then(({ SplashScreen }) => SplashScreen.hide())
-      .catch(() => { /* never block the UI on splash dismissal */ })
-  }, [isCheckingAuth])
+    if (splashHiddenRef.current || !Capacitor.isNativePlatform()) return
+    // Hide the native splash once the in-app loading screen has painted —
+    // NOT when the auth check finishes. The loading screen (small logo +
+    // "Email made Ezy" + "From HijraX") is the visible second splash stage;
+    // tying the hide to auth completion kept the native splash covering it,
+    // so it was never seen. A short delay guarantees the loading screen is
+    // fully on screen before the handover — still never a blank flash.
+    const t = window.setTimeout(() => {
+      if (splashHiddenRef.current) return
+      splashHiddenRef.current = true
+      void import('@capacitor/splash-screen')
+        .then(({ SplashScreen }) => SplashScreen.hide())
+        .catch(() => { /* never block the UI on splash dismissal */ })
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [])
 
   // ─── Deep link: /?id=<emailId> opens that email (push notification taps) ─
   // Runs once after auth resolves; EmailDetail self-fetches by id, so no

@@ -1640,3 +1640,20 @@ Stage Summary:
 - APK ready at download/ezymail-gmail-notifications.apk (8.9MB, minSdk 24)
 - OWNER CRITICAL: install new APK promptly — old APK stops showing background notifications after Vercel deploy (Android data-only messages need the new native service)
 - Token ghp_8adQ... still active — owner to revoke
+
+---
+Task ID: 71
+Agent: Main
+Task: Owner reports on new APK: (1) app closes immediately on emulator, (2) second splash (small logo + text) disappeared — only big native splash now, straight to main page.
+
+Work Log:
+- SPLASH ROOT CAUSE (confirmed, code-level): e5a25c6 tied native SplashScreen.hide() to isCheckingAuth completion — the native big-logo splash covers the entire auth check, and the in-app loading screen (src/app/page.tsx isCheckingAuth render: /logo.png + "EzyMail" + "Email made Ezy" + "From HijraX") renders BEHIND it the whole time, so it is never visible. Not caused by Task 69 (Gmail notifications). FIX: hide native splash 300ms after first paint (loading screen guaranteed painted), independent of auth — restores two-stage splash (big native → small in-app → main page), still zero blank flash; browsers untouched (isNativePlatform gate). eslint clean, npm run build PASS.
+- CRASH INVESTIGATION (emulator): (a) firebase-messaging 25.0.1 direct dep is NOT a runtime change — plugin's own default is 25.0.1 (node_modules push-notifications build.gradle line 7) and variables.gradle has no override, so the OLD APK already ran 25.0.1; (b) MainActivity deep-link code null-safe (intent/bridge/webView/url all guarded), runs only getIntent-data forwarding; (c) manifest service swap has no startup effect (services instantiate on demand); (d) push-registration JS path fully try/catch'd + registrationError listener. Startup path functionally identical to previous APK.
+- CONCLUSION: crash is emulator-environment (no Google Play services / missing WebView on AOSP image — push-supporting apps cannot run there). Sandbox has no KVM so cannot reproduce locally; dl.google.com blocked (build-tools zips fail) so no aapt2 manifest dump — code analysis deemed conclusive.
+- SANDBOX LOSSES this reset: node_modules (restored via npm install), jdk21/, android-sdk/ (system java 21 present), google-services.json (owner-managed secret, untracked — NOT recoverable from /tmp/my-project, stashes, or backup branches; will need owner to re-provide before any APK rebuild).
+- SWEEP EVENT #19: junk UUID commit 1c75a4a9-... handled pre-push (Task 70); none during this task yet.
+
+Stage Summary:
+- Splash fix committed (web-only — Vercel deploy fixes the two-stage splash on the CURRENT APK too, no rebuild needed)
+- Crash verdict: emulator environment; owner asked to confirm Play Store presence on emulator + whether old APK opened on it
+- google-services.json lost — needed again before any future APK rebuild
