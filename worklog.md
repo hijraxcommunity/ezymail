@@ -1623,3 +1623,20 @@ Stage Summary:
 - Gmail-style notifications fully implemented + built; runtime notification rendering needs owner device test (sandbox has no device)
 - Not pushed yet (owner orders push; token required)
 - Reply action opens the email (full inline reply would need RemoteInput + compose API — future)
+
+---
+Task ID: 70
+Agent: Main
+Task: Push Task 69 (Gmail-style notifications) to GitHub per owner order ("push from old token" -> owner pasted fresh token ghp_8adQ...).
+
+Work Log:
+- Old token NOT recoverable (exhaustive re-search: shell history wiped by sandbox reset, no ~/.bash_history, no ~/.git-credentials/~/.netrc, git config clean, env empty, /tmp only redacted prefixes ghp_A4ua.../ghp_OuNV... in worklogs) -> told owner; owner pasted fresh token.
+- Token check: ghp_8adQ... 200 on repo API, X-OAuth-Scopes: repo.
+- SWEEP EVENT #18 (worst pattern): junk UUID commit ec74862 (1c75a4a9-...) on HEAD — 99 files: chmod mode changes on ~98 files + src/app/api/upload/route.ts DELETED again (89 lines). Backup branch backup-junk-uuid-18 kept -> reset --mixed d2f99b6 -> git restore . (working tree back to 0 mods, upload route 89 lines intact).
+- Push: 01acec5..d2f99b6 main -> main (clean fast-forward, one-shot token URL, nothing persisted). ls-remote verified: refs/heads/main = d2f99b6 (local == remote). Site 200, Vercel auto-deploy of backend data-only payload.
+
+Stage Summary:
+- GitHub main = d2f99b6 "Gmail-style push notifications: sender as title, avatar, expandable preview, Archive/Read/Reply actions, clean status-bar icon" (14 files, +570/-31)
+- APK ready at download/ezymail-gmail-notifications.apk (8.9MB, minSdk 24)
+- OWNER CRITICAL: install new APK promptly — old APK stops showing background notifications after Vercel deploy (Android data-only messages need the new native service)
+- Token ghp_8adQ... still active — owner to revoke
