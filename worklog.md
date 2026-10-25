@@ -1675,3 +1675,25 @@ Stage Summary:
 - Build pipeline fully restored (JDK 21 + SDK + google-services.json + cap sync); APK rebuilt and verified component-by-component
 - download/ezymail-latest.apk = fresh complete build for owner testing (emulator crash isolation: test this + old APK on same emulator)
 - google-services.json back on disk locally; owner should keep a copy (gitignored by design)
+
+---
+Task ID: 73
+Agent: Main
+Task: Owner answered Task 71 diagnostics: (1) emulator HAS Play Store, (2) old APK worked on same emulator -> "emulator environment" verdict overturned; re-investigate startup crash. Also verify push/deploy state from Task 72.
+
+Work Log:
+- Push/deploy state confirmed: local main == remote main == 5b1baf3; https://ezymail.vercel.app -> 200. Nothing unpushed, no sweep junk since Task 72.
+- KEY INSIGHT (capacitor.config.ts): server.url = https://ezymail.vercel.app -> the WebView loads the LIVE site; old APK and new APK execute IDENTICAL web code, so the crash must be native.
+- Native delta working->crashing enumerated: (a) if "old" = 01acec5 build: only Task 69 items (EzyMailNotification, EzyMailMessagingService, NotificationActionReceiver, 4 drawables, manifest service swap, explicit firebase-messaging 25.0.1 == plugin default). (b) if "old" = e5a25c6 build: additionally 01acec5 items (@capacitor/app, @capacitor/share, @capacitor/filesystem, FileProvider, requestLegacyExternalStorage). NOTE: android/ platform itself was first added in e5a25c6 -> only 3 APK builds ever existed.
+- Every delta item verified OFF the startup path: 3 new Java classes load only on FCM delivery / notification action press; services+receiver not instantiated at launch; drawables referenced only at notification time; file_paths.xml valid; splash themes (Theme.SplashScreen + values-v31) standard Capacitor template shared with previous build; MainActivity.openDeepLink null-safe no-op on launcher cold start.
+- APK ezymail-latest.apk inspected directly: full merged manifest via aapt2 (build-tools 35) — FirebaseInitProvider (af.ezy.mail.firebaseinitprovider), InitializationProvider, FileProvider (af.ezy.mail.fileprovider), Firebase registrars, c2dm receiver all standard; 10 dex, 4 ABIs incl. x86_64; capacitor.plugins.json = exactly 5 expected plugins; capacitor.config.json matches repo.
+- Push registration (push-notification-setup.tsx) gated on isAuthenticated && user -> not on cold-start path when logged out; all native calls try/catch'd + registrationError listener.
+- Old APK file (ezymail-gmail-notifications.apk) no longer on disk (only ezymail-latest.apk) -> direct binary diff impossible.
+- CONCLUSION: no code-level startup suspect remains in the native delta. Build-env deltas (debug.keystore regeneration after resets, build-tools 35 vs 36, 1-day androidx drift) affect install signature only. Definitive data required from the emulator: crash buffer via adb logcat -b crash; plus clean-reinstall isolation test (half-broken install / stale launcher stub can present as instant close).
+- Worklog committed locally (no push: token unavailable; owner advised to revoke ghp_8adQ... earlier).
+
+Stage Summary:
+- GitHub == local == 5b1baf3; site live 200. No code changes this task.
+- Crash verdict revised: NOT missing-Play-services (owner confirmed Play present + old APK works). All Task 69 native deltas provably off the startup path; no startup suspect found in code or merged manifest.
+- Owner given: Test 1 = clean uninstall/reinstall of ezymail-latest.apk (rules out broken install); Test 2 = adb logcat -b crash -d -> send crash file for exact stack trace.
+- Awaiting owner test results before any code change.
