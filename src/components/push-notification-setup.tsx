@@ -184,41 +184,65 @@ export function PushNotificationSetup() {
   useEffect(() => {
     if (!isAuthenticated || !user) return
 
-    // Native shells (Capacitor): register native FCM/APNs token — VAPID
-    // and web service-worker checks do not apply on this path
-    if (Capacitor.isNativePlatform()) {
-      void registerNativePush(true)
-      return
+    const autoSubscribe = async () => {
+      // Respect the user's switch across app restarts: when they turned
+      // notifications OFF, that choice is saved on the server — do NOT
+      // re-register the token behind their back. (Before, every app
+      // restart silently subscribed again, so OFF only "worked" via the
+      // phone's system settings — owner-reported bug.)
+      try {
+        const res = await fetch('/api/user/profile')
+        if (res.ok) {
+          const data = await res.json()
+          const prefs = data.user?.preferences
+          if (prefs) {
+            const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
+            if (parsed.desktopNotif === false) {
+              statusRef.current = 'prompt'
+              return
+            }
+          }
+        }
+      } catch { /* offline — fall through and behave like before */ }
+
+      // Native shells (Capacitor): register native FCM/APNs token — VAPID
+      // and web service-worker checks do not apply on this path
+      if (Capacitor.isNativePlatform()) {
+        void registerNativePush(true)
+        return
+      }
+
+      // Firebase config is hardcoded — only VAPID key needed for token generation
+      const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+      if (!vapidKey || vapidKey.length < 20) {
+        // Surfaced for diagnosability (was a fully silent no-op — made the
+        // "desktop works, mobile doesn't" investigation much harder)
+        console.warn('[Push] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped')
+        statusRef.current = 'unsupported'
+        return
+      }
+
+      // Check basic support
+      if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+        statusRef.current = 'unsupported'
+        return
+      }
+
+      if (Notification.permission === 'denied') {
+        statusRef.current = 'denied'
+        return
+      }
+
+      if (Notification.permission === 'granted') {
+        // Auto-subscribe silently when permission already granted
+        await requestPermissionAndSubscribe(true)
+      } else {
+        statusRef.current = 'prompt'
+      }
     }
 
-    // Firebase config is hardcoded — only VAPID key needed for token generation
-    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    if (!vapidKey || vapidKey.length < 20) {
-      // Surfaced for diagnosability (was a fully silent no-op — made the
-      // "desktop works, mobile doesn't" investigation much harder)
-      console.warn('[Push] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped')
-      statusRef.current = 'unsupported'
-      return
-    }
-
-    // Check basic support
-    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
-      statusRef.current = 'unsupported'
-      return
-    }
-
-    if (Notification.permission === 'denied') {
-      statusRef.current = 'denied'
-      return
-    }
-
-    if (Notification.permission === 'granted') {
-      // Auto-subscribe silently when permission already granted
-      requestPermissionAndSubscribe(true)
-    } else {
-      statusRef.current = 'prompt'
-    }
-  }, [isAuthenticated, user, requestPermissionAndSubscribe])
+    void autoSubscribe()
+  }, [isAuthenticated, user, requestPermissionAndSubscribe, registerNativePush])
 
   // Settings panel's "New Email Notifications" switch fires these events.
   // enable: complete the push subscription (native asks system permission,

@@ -1712,6 +1712,16 @@ function NotificationSettings({
   }
 
   const getPermissionBadge = () => {
+    // The switch is the user's choice — when it is OFF, say "Off" no matter
+    // what the system/browser permission is. (Before, Android showed a green
+    // "Enabled" badge next to an OFF switch — owner-reported contradiction.)
+    if (!desktopNotif && permissionStatus !== 'unsupported') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
+          Off
+        </span>
+      )
+    }
     switch (permissionStatus) {
       case 'granted':
         return (
@@ -1757,7 +1767,7 @@ function NotificationSettings({
                 <Bell className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">New Email Notifications</p>
+                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Notifications</p>
                 <p className="text-xs text-gray-500">
                   {permissionStatus === 'denied'
                     ? 'Blocked by your browser — allow notifications in the browser site settings'
