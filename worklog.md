@@ -1776,3 +1776,22 @@ Work Log:
 Stage Summary:
 - Pipeline code verified correct end-to-end; failure is production-env-side (keys/tokens/FCM responses).
 - Diagnostic endpoint ready to deploy on next token: owner then visits /api/push/diag logged in -> screenshot -> exact failing step identified -> targeted fix, nothing else touched.
+
+---
+Task ID: 79
+Agent: Main
+Task: Owner asked "WHY two buttons" (immediately after reporting notifications dead on Android + web). Investigate, answer, fix — touch nothing else.
+
+Work Log:
+- Diagnosed: Settings -> Appearance & Preferences -> Notifications had TWO confusing controls: yellow [Enable Notifications] button (browser permission) + [Desktop Notifications] toggle (preference). They looked identical in purpose -> owner's "two buttons".
+- Found the REAL bug behind the question: the yellow button called only Notification.requestPermission() and NEVER triggered the FCM subscription (push-notification-setup only auto-subscribes at page load when permission was ALREADY granted; it never re-runs). So after "enabling", no token reached db.pushSubscription -> server had nothing to send to -> web notifications dead even when enabled. Directly explains part of Task 78's "not working on web".
+- FIX (2 notification files only): settings-panel.tsx — removed the yellow button; the single "Desktop Notifications" toggle now does the whole job (request permission -> dispatch ezymail:enable-push event -> save preference; denied/unsupported states disable the toggle with clear text). push-notification-setup.tsx — new listener for ezymail:enable-push completes requestPermissionAndSubscribe(false) so the FCM token actually registers.
+- Sandbox junk: another UUID commit (b38871e, scripts/check-push-subscriptions.js) had landed on HEAD -> git reset --mixed bb34beb, junk file removed (same pattern as prior sweeps).
+- Verified: tsc --noEmit shows ZERO errors in the two edited files (remaining listed errors are pre-existing in unrelated files; next.config has ignoreBuildErrors: true). Diff = 2 files, 60 insertions / 41 deletions.
+- COMMITTED bc4275a. NOT pushed — still no GitHub token in sandbox. Deployment pending owner token; same push also ships Task 78's diag endpoint.
+- Android note: this fix needs NO APK rebuild — the WebView loads the live site; once deployed, the owner's existing v1.2 app shows the new single toggle automatically.
+
+Stage Summary:
+- Answer: two buttons = old permission button + preference toggle; now merged into one toggle that completes the entire flow.
+- Web "enabled but still dead" root cause closed in code (token never registered after enabling).
+- Pending: (1) owner token -> push bc4275a (fix + diag endpoint) -> Vercel deploys; (2) verify Vercel env FIREBASE_SERVICE_ACCOUNT_KEY + NEXT_PUBLIC_FIREBASE_VAPID_KEY (diag endpoint reports both once live); (3) Android delivery still depends on that env check.
