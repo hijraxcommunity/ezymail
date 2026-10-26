@@ -7,8 +7,8 @@ android {
         applicationId "af.ezy.mail"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -47,11 +47,24 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+// google-services.json is gitignored and can silently go missing (sandbox
+// resets, fresh clones). When it is absent the google-services plugin is
+// skipped, FirebaseInitProvider never creates the default FirebaseApp, and
+// PushNotificationsPlugin.register() CRASHED the app the moment the user
+// allowed notifications (Task 76 root cause). A missing config must now
+// fail the build LOUDLY instead of producing a crash-prone APK.
+//
+// Escape hatch: EzyMailApp.onCreate() initializes Firebase defensively from
+// the public web config, so building with
+//     -PallowMissingGoogleServices=true
+// is safe (push delivery may be limited, but the app cannot crash).
+def gsjsonFile = file('google-services.json')
+if (gsjsonFile.exists() && gsjsonFile.text) {
+    apply plugin: 'com.google.gms.google-services'
+} else if (project.hasProperty('allowMissingGoogleServices')) {
+    logger.warn("WARNING: google-services.json missing — building with defensive fallback Firebase init (EzyMailApp). Push delivery may be limited until the real config is added.")
+} else {
+    throw new GradleException("google-services.json is missing from android/app/. " +
+        "Add it (Firebase console → Project settings → Android app af.ezy.mail → google-services.json) " +
+        "or explicitly pass -PallowMissingGoogleServices=true to build with the defensive fallback init.")
 }
