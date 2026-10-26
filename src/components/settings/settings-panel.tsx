@@ -1587,7 +1587,7 @@ function NotificationSettings({
   setSoundNotif: (v: boolean) => void
 }) {
   const [permissionStatus, setPermissionStatus] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('default')
-  const [requesting, setRequesting] = useState(false)
+  const [enabling, setEnabling] = useState(false)
 
   // Check current notification permission
   useEffect(() => {
@@ -1598,21 +1598,49 @@ function NotificationSettings({
     setPermissionStatus(Notification.permission)
   }, [])
 
-  const handleRequestPermission = async () => {
-    setRequesting(true)
+  // One control does the whole job: browser permission + FCM push
+  // subscription + preference. (The old UI had a separate yellow
+  // "Enable Notifications" button next to this toggle — two buttons that
+  // looked identical, and the button only asked permission without ever
+  // subscribing push, so notifications stayed dead after enabling.)
+  const enableNotifications = async (): Promise<boolean> => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false
+    if (Notification.permission === 'granted') return true
+    if (Notification.permission === 'denied') {
+      setPermissionStatus('denied')
+      toast.error('Notifications blocked. Please enable them in your browser settings.')
+      return false
+    }
+    setEnabling(true)
     try {
       const permission = await Notification.requestPermission()
       setPermissionStatus(permission)
       if (permission === 'granted') {
-        toast.success('Browser notifications enabled!')
-      } else if (permission === 'denied') {
-        toast.error('Notifications blocked. Please enable them in your browser settings.')
+        // Complete the flow — register the FCM push subscription now
+        // (PushNotificationSetup listens for this event; without it the
+        // server has no token to send to)
+        try { window.dispatchEvent(new CustomEvent('ezymail:enable-push')) } catch { /* ignore */ }
+        toast.success('Notifications enabled!')
+        return true
       }
+      toast.error('Notifications blocked. Please enable them in your browser settings.')
+      return false
     } catch {
       toast.error('Failed to request notification permission')
+      return false
     } finally {
-      setRequesting(false)
+      setEnabling(false)
     }
+  }
+
+  const handleDesktopToggle = async (v: boolean) => {
+    if (!v) {
+      setDesktopNotif(false)
+      return
+    }
+    const ok = await enableNotifications()
+    if (!ok) return // permission refused — toggle stays off
+    setDesktopNotif(true)
   }
 
   const getPermissionBadge = () => {
@@ -1652,37 +1680,9 @@ function NotificationSettings({
       </div>
       <Card className="border-gray-200 dark:border-gray-800">
         <CardContent className="p-4 space-y-4">
-          {/* Permission request */}
-          {permissionStatus !== 'granted' && permissionStatus !== 'unsupported' && (
-            <div className="p-3 rounded-xl bg-[#FEF7E0] dark:bg-[#3B3117] border border-[#FBBC05]/30">
-              <div className="flex items-start gap-2">
-                <Bell className="w-4 h-4 text-[#FBBC05] mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-[#1F1F1F] dark:text-white">
-                    {permissionStatus === 'denied'
-                      ? 'Notifications are blocked by your browser'
-                      : 'Enable browser notifications for new emails'}
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
-                    {permissionStatus === 'denied'
-                      ? 'Go to your browser settings to allow notifications for this site'
-                      : 'Allow EzyMail to send you desktop notifications when you receive new emails'}
-                  </p>
-                  {permissionStatus === 'default' && (
-                    <button
-                      onClick={handleRequestPermission}
-                      disabled={requesting}
-                      className="mt-2 px-3 py-1.5 text-xs font-medium bg-[#4285F4] hover:bg-[#1a73e8] text-white rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {requesting ? 'Requesting...' : 'Enable Notifications'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Desktop notifications toggle */}
+          {/* Desktop notifications — the ONE control. Turning it on asks
+              for browser permission AND registers the FCM push subscription
+              AND saves the preference, in one action. */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
@@ -1690,14 +1690,18 @@ function NotificationSettings({
               </div>
               <div>
                 <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Desktop Notifications</p>
-                <p className="text-xs text-gray-500">Show browser push notifications for new emails</p>
+                <p className="text-xs text-gray-500">
+                  {permissionStatus === 'denied'
+                    ? 'Blocked by your browser — allow notifications in the browser site settings'
+                    : 'Show push notifications for new emails'}
+                </p>
               </div>
             </div>
             <Switch
               checked={desktopNotif}
-              onCheckedChange={setDesktopNotif}
+              onCheckedChange={handleDesktopToggle}
               className="data-[state=checked]:bg-[#4285F4]"
-              disabled={permissionStatus === 'unsupported'}
+              disabled={enabling || permissionStatus === 'unsupported' || permissionStatus === 'denied'}
             />
           </div>
 

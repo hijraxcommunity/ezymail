@@ -220,6 +220,21 @@ export function PushNotificationSetup() {
     }
   }, [isAuthenticated, user, requestPermissionAndSubscribe])
 
+  // Settings panel's unified "Desktop Notifications" toggle fires this event
+  // after browser permission is granted — completes the FCM subscription.
+  // (Before, enabling in Settings never subscribed push: the server had no
+  // token, so notifications stayed dead even when "enabled".)
+  useEffect(() => {
+    const handleEnablePush = () => {
+      if (statusRef.current === 'loading' || statusRef.current === 'subscribed') return
+      if (typeof window === 'undefined' || !('Notification' in window)) return
+      if (Notification.permission !== 'granted') return
+      void requestPermissionAndSubscribe(false)
+    }
+    window.addEventListener('ezymail:enable-push', handleEnablePush)
+    return () => window.removeEventListener('ezymail:enable-push', handleEnablePush)
+  }, [requestPermissionAndSubscribe])
+
   // Cleanup on logout
   useEffect(() => {
     if (isAuthenticated) return
