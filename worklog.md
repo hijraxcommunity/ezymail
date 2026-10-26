@@ -1760,3 +1760,19 @@ Stage Summary:
 - download/ezymail-v1.2.apk = fix + REAL Firebase config. Push registration can now complete: FirebaseInitProvider initializes from real resources, FCM token uses the Android API key -> full notification delivery path open.
 - google-services.json lives only in the sandbox (gitignored); owner should keep their own copy safe.
 - Remaining: owner installs v1.2, allows notifications, tests delivery from the app; crash catcher can be removed in a later cleanup task once stable.
+
+---
+Task ID: 78
+Agent: Main
+Task: Owner reports notifications not working on BOTH Android and web ("everything else fine now" — crash saga resolved, owner successfully self-built after following the stale-ZIP + missing-gitignored-config explanation). Asked to check and fix, touch nothing else.
+
+Work Log:
+- Self-build mystery closed: owner's crashing APKs were built from the PRE-FIX GitHub ZIP (fix pushed after their download) AND without google-services.json (gitignored, never on GitHub) -> old crash reproduced on every device. Explained + gave complete 9-step self-build recipe (fresh ZIP, npm ci, cap sync, place google-services.json into android/app/, Android Studio build); owner succeeded ("everything is fine now").
+- NEW issue: notification DELIVERY dead on both platforms. Traced the full pipeline in code: emails/reply routes call sendPushNotification via next/server after() (serverless-safe); sender uses FCM HTTP v1 (project customer-database-88e9f) with FIREBASE_SERVICE_ACCOUNT_KEY -> GoogleAuth; tokens from db.pushSubscription; subscribe route deployed+healthy (live probe: 401 unauthenticated = correct); sw.js handles web data-only payloads correctly; EzyMailNotification.java (Android renderer) reviewed — no defect found. Pipeline CODE is correct on all platforms.
+- Common-point failure therefore lives in the production environment (Vercel): FIREBASE_SERVICE_ACCOUNT_KEY missing/invalid, VAPID key missing (web), zero/stale tokens in DB (post-reinstall tokens possibly UNREGISTERED-wiped by sender cleanup), or FCM rejecting sends. Sandbox has no production DB access (.env is a SQLite leftover) and no Vercel log access.
+- Built TEMPORARY diagnostic endpoint src/app/api/push/diag/route.ts: GET = senderConfigured/vapidConfigured/tokenCount/masked token list; POST = real test send to each of the user's own tokens returning exact FCM v1 status+body per token. Auth-gated, masked, additive-only; marked for removal after fix (like the crash catcher).
+- COMMITTED locally; NOT pushed — no GitHub token in sandbox (both prior tokens advised revoked). Deployment (Vercel auto-deploy on push) blocked on a fresh owner token.
+
+Stage Summary:
+- Pipeline code verified correct end-to-end; failure is production-env-side (keys/tokens/FCM responses).
+- Diagnostic endpoint ready to deploy on next token: owner then visits /api/push/diag logged in -> screenshot -> exact failing step identified -> targeted fix, nothing else touched.
