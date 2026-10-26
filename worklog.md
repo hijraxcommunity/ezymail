@@ -1830,3 +1830,20 @@ Stage Summary:
 - Web switch OFF = server stops sending (token removed) + no popups/sounds/toasts; ON = full subscribe chain again.
 - Switch saves instantly, survives reload, no Save button needed.
 - Still open: production FCM delivery verification (Vercel env keys) via /diagnostic once owner tests.
+
+---
+Task ID: 82
+Agent: Main
+Task: Owner (screenshot from Android app) asked: why does the in-app switch OFF not stop notifications — only the SYSTEM setting (Apps -> EzyMail -> Permissions -> Notifications) does? Switch OFF but badge says "Enabled" — normal or missed? Also shorten title "New Email Notifications".
+
+Work Log:
+- Answer: NOT normal — two real bugs found, both fixed.
+- Bug A (the big one): the startup auto-subscribe never checked the user's preference — every app restart / page load silently called registerNativePush -> register() -> re-subscribed the FCM token even after the owner turned the switch OFF. So OFF "stuck" only when the SYSTEM permission blocked registration. Fix: autoSubscribe() in push-notification-setup now fetches /api/user/profile FIRST and skips registration entirely when preferences.desktopNotif === false (server = source of truth, survives app restarts; sessionStorage does not). Applies to BOTH native and web paths (web had the identical re-subscribe-after-reload bug).
+- Bug B: badge reflected the system/browser permission, not the user's choice -> green "Enabled" next to an OFF switch (owner's screenshot). Fix: getPermissionBadge returns a gray "Off" badge whenever desktopNotif is false (except unsupported).
+- Title shortened per owner: "New Email Notifications" -> "Notifications". Subtitle unchanged ("Popup + sound when a new email arrives").
+- tsc --noEmit clean for both files. COMMITTED 62d38b3, PUSHED (96a9065..62d38b3), remote == local.
+
+Stage Summary:
+- In-app switch is now the single source of truth on Android: OFF = token removed + never re-registered on restart (no system-settings trip needed); ON = native register + subscribe again.
+- Badge always matches the switch. Title = "Notifications".
+- Owner should fully close + reopen the Android app after deploy to pick up the new JS, then test OFF once more.
