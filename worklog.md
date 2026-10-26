@@ -1739,3 +1739,5 @@ Stage Summary:
 - Crash mechanism closed at both ends: runtime can no longer die from missing Firebase init (defensive init + try/catch), and builds can no longer silently produce that state (loud Gradle guard).
 - Real FCM delivery still needs the true google-services.json for af.ezy.mail from Firebase console (optional, owner-dependent); until then tokens may fail gracefully (JS rejection, no crash).
 - Local commit pending push (no token in sandbox).
+
+Task 76 ADDENDUM: owner supplied fresh GitHub token -> local commits 07dc03d + d4f1166 pushed to origin/main (fast-forward, remote == local). Token used one-shot in the push command only, never written to disk/config; owner advised to revoke it after confirming.
