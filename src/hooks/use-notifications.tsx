@@ -235,7 +235,9 @@ export function useNotifications() {
 
           // Show toast when app is in foreground
           // — suppressed when FCM push is active (onMessage toast covers it)
-          if (!isBackground && !pushActive) {
+          // — suppressed when the user turned notifications off (the switch
+          //   must silence EVERYTHING, otherwise "off" looks broken)
+          if (!isBackground && !pushActive && prefs.desktopNotif) {
             toast.info(`New email from ${senderName}`, {
               description: subject,
               icon: <Mail className="w-4 h-4 text-[#4285F4]" />,

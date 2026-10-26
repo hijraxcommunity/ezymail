@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
+import { Capacitor } from '@capacitor/core'
 import {
   X, Sun, Moon, Monitor, Bell, Save, Loader2, Camera,
   Eye, EyeOff, Shield, Smartphone, Globe, Clock, Lock, Download,
@@ -579,6 +580,36 @@ export function SettingsPanel() {
     }
   }
 
+  // Auto-save the notifications switch IMMEDIATELY (owner request: the
+  // toggle must work without pressing Save). Sends the FULL preferences
+  // object — the profile API replaces the whole object, a partial save
+  // would wipe density/date-format settings.
+  const handleToggleNotifications = async (desktop: boolean, sound: boolean) => {
+    setDesktopNotif(desktop)
+    setSoundNotif(sound)
+    // Update the live cache the polling hook reads in THIS tab
+    try {
+      sessionStorage.setItem('ezymail-notif-prefs', JSON.stringify({ desktopNotif: desktop, soundNotif: sound }))
+      window.dispatchEvent(new StorageEvent('storage', { key: 'ezymail-notif-prefs' }))
+    } catch { /* ignore */ }
+    try {
+      await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preferences: {
+            emailDensity,
+            previewLines,
+            conversationView,
+            desktopNotif: desktop,
+            soundNotif: sound,
+            dateFormat,
+          },
+        }),
+      })
+    } catch { /* ignore */ }
+  }
+
   // ─── Signature handlers ────────────────────────────────────────────────
   const handleSaveSignature = async () => {
     if (!signatureEditor) return
@@ -867,6 +898,7 @@ export function SettingsPanel() {
                     setDesktopNotif={setDesktopNotif}
                     soundNotif={soundNotif}
                     setSoundNotif={setSoundNotif}
+                    onToggleNotifications={handleToggleNotifications}
                     dateFormat={dateFormat}
                     setDateFormat={setDateFormat}
                     savingPrefs={savingPrefs}
@@ -1578,24 +1610,46 @@ function SecurityTabContent({
 // ─── Notification Settings ────────────────────────────────────────────────
 
 function NotificationSettings({
-  desktopNotif, setDesktopNotif,
-  soundNotif, setSoundNotif,
+  desktopNotif,
+  soundNotif,
+  onToggleNotifications,
 }: {
   desktopNotif: boolean
-  setDesktopNotif: (v: boolean) => void
   soundNotif: boolean
-  setSoundNotif: (v: boolean) => void
+  onToggleNotifications: (desktop: boolean, sound: boolean) => void
 }) {
   const [permissionStatus, setPermissionStatus] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('default')
   const [enabling, setEnabling] = useState(false)
 
-  // Check current notification permission
+  // Check current notification permission.
+  // Native app (Android): use the NATIVE push permission — the Android
+  // WebView has no web Notification API, so the old check always said
+  // "Not supported" there even though native FCM push works fine.
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      setPermissionStatus('unsupported')
-      return
+    let cancelled = false
+    const check = async () => {
+      if (typeof window === 'undefined') return
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { PushNotifications } = await import('@capacitor/push-notifications')
+          const perm = await PushNotifications.checkPermissions()
+          if (cancelled) return
+          setPermissionStatus(
+            perm.receive === 'granted' ? 'granted' : perm.receive === 'denied' ? 'denied' : 'default'
+          )
+        } catch {
+          if (!cancelled) setPermissionStatus('unsupported')
+        }
+        return
+      }
+      if (!('Notification' in window)) {
+        setPermissionStatus('unsupported')
+        return
+      }
+      setPermissionStatus(Notification.permission)
     }
-    setPermissionStatus(Notification.permission)
+    check()
+    return () => { cancelled = true }
   }, [])
 
   // One control does the whole job: browser permission + FCM push
@@ -1633,19 +1687,28 @@ function NotificationSettings({
     }
   }
 
-  // ONE switch for everything (owner request — no separate sound toggle):
-  // asks browser permission, registers the FCM push subscription, and saves
-  // popup + sound preferences together in one action
+  // ONE switch for everything (owner request — no separate sound toggle).
+  // ON: ask permission (web) / use native permission (Android app),
+  //     register the FCM push subscription, save popup+sound prefs.
+  // OFF: save prefs AND remove this device's push token so the server
+  //     stops sending — before, OFF left the token registered and
+  //     notifications kept arriving ("toggle does not work" bug).
   const handleNotificationsToggle = async (v: boolean) => {
     if (!v) {
-      setDesktopNotif(false)
-      setSoundNotif(false)
+      try { window.dispatchEvent(new CustomEvent('ezymail:disable-push')) } catch { /* ignore */ }
+      onToggleNotifications(false, false)
+      return
+    }
+    if (Capacitor.isNativePlatform()) {
+      // Native path — the push setup component asks the system permission
+      // and registers FCM (shows an error toast if it fails)
+      try { window.dispatchEvent(new CustomEvent('ezymail:enable-push')) } catch { /* ignore */ }
+      onToggleNotifications(true, true)
       return
     }
     const ok = await enableNotifications()
     if (!ok) return // permission refused — switch stays off
-    setDesktopNotif(true)
-    setSoundNotif(true)
+    onToggleNotifications(true, true)
   }
 
   const getPermissionBadge = () => {
@@ -1736,6 +1799,7 @@ function PreferencesTabContent({
   theme, setTheme,
   desktopNotif, setDesktopNotif,
   soundNotif, setSoundNotif,
+  onToggleNotifications,
   dateFormat, setDateFormat,
   savingPrefs, handleSavePreferences,
   signatureEditor, savingSignature, handleSaveSignature,
@@ -1752,6 +1816,7 @@ function PreferencesTabContent({
   setDesktopNotif: (v: boolean) => void
   soundNotif: boolean
   setSoundNotif: (v: boolean) => void
+  onToggleNotifications: (desktop: boolean, sound: boolean) => void
   dateFormat: '12h' | '24h'
   setDateFormat: (v: '12h' | '24h') => void
   savingPrefs: boolean
@@ -1866,9 +1931,8 @@ function PreferencesTabContent({
       {/* Notifications */}
       <NotificationSettings
         desktopNotif={desktopNotif}
-        setDesktopNotif={setDesktopNotif}
         soundNotif={soundNotif}
-        setSoundNotif={setSoundNotif}
+        onToggleNotifications={onToggleNotifications}
       />
 
       {/* Date Format */}

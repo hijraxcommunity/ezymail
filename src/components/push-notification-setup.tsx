@@ -220,20 +220,38 @@ export function PushNotificationSetup() {
     }
   }, [isAuthenticated, user, requestPermissionAndSubscribe])
 
-  // Settings panel's unified "Desktop Notifications" toggle fires this event
-  // after browser permission is granted — completes the FCM subscription.
-  // (Before, enabling in Settings never subscribed push: the server had no
-  // token, so notifications stayed dead even when "enabled".)
+  // Settings panel's "New Email Notifications" switch fires these events.
+  // enable: complete the push subscription (native asks system permission,
+  //         web uses the already-granted browser permission)
+  // disable: remove THIS device's token so the server stops sending —
+  //         before, turning the switch off left the token registered and
+  //         notifications kept arriving ("toggle does not work" bug)
   useEffect(() => {
     const handleEnablePush = () => {
       if (statusRef.current === 'loading' || statusRef.current === 'subscribed') return
+      if (Capacitor.isNativePlatform()) {
+        void registerNativePush(false)
+        return
+      }
       if (typeof window === 'undefined' || !('Notification' in window)) return
       if (Notification.permission !== 'granted') return
       void requestPermissionAndSubscribe(false)
     }
+    const handleDisablePush = () => {
+      if (tokenRef.current) {
+        void unsubscribeToken(tokenRef.current)
+        tokenRef.current = null
+      }
+      try { sessionStorage.removeItem('ezymail-push-active') } catch { /* ignore */ }
+      statusRef.current = 'prompt'
+    }
     window.addEventListener('ezymail:enable-push', handleEnablePush)
-    return () => window.removeEventListener('ezymail:enable-push', handleEnablePush)
-  }, [requestPermissionAndSubscribe])
+    window.addEventListener('ezymail:disable-push', handleDisablePush)
+    return () => {
+      window.removeEventListener('ezymail:enable-push', handleEnablePush)
+      window.removeEventListener('ezymail:disable-push', handleDisablePush)
+    }
+  }, [requestPermissionAndSubscribe, registerNativePush, unsubscribeToken])
 
   // Cleanup on logout
   useEffect(() => {
