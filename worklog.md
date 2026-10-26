@@ -1741,3 +1741,22 @@ Stage Summary:
 - Local commit pending push (no token in sandbox).
 
 Task 76 ADDENDUM: owner supplied fresh GitHub token -> local commits 07dc03d + d4f1166 pushed to origin/main (fast-forward, remote == local). Token used one-shot in the push command only, never written to disk/config; owner advised to revoke it after confirming.
+
+---
+Task ID: 77
+Agent: Main
+Task: Owner downloaded the real google-services.json (Android app af.ezy.mail) from Firebase console and sent it; goal = full FCM delivery. Owner clarified they will not clone git locally.
+
+Work Log:
+- Validated upload/google-services.json: JSON valid, package af.ezy.mail, mobilesdk_app_id 1:961040699391:android:3f69a1f46d5cd883ae21ca, project customer-database-88e9f (matches web config sender/project). Placed at android/app/google-services.json; git check-ignore confirms it stays local-only (secret-hygiene by design).
+- Sandbox wiped AGAIN mid-session (SWEEP #22: jdk21/, android-sdk/, node_modules gone): re-restored JDK 21.0.13, platform-36_r02, build-tools_r35 (licenses + local.properties), npm ci, npx cap sync android (5 plugins).
+- versionCode 2 -> 3, versionName 1.1 -> 1.2 (REQUIRED: Android refuses an update install when versionCode is not strictly higher than the installed v1.1).
+- BUILD: gradlew assembleDebug WITHOUT -PallowMissingGoogleServices -> SUCCESS in 3m30s (247 tasks). The new loud guard would have failed the build on a missing config, so this build proves the real google-services.json was accepted by the google-services plugin.
+- VERIFIED via aapt2: versionCode='3' versionName='1.2'; generated Firebase resources present in APK: google_app_id=1:961040699391:android:3f69a1f46d5cd883ae21ca, gcm_defaultSenderId=961040699391, default_web_client_id=961040699391-ainii...apps.googleusercontent.com.
+- DELIVERED: download/ezymail-v1.2.apk (8.9MB). Defensive fallback init (Task 76) stays as a permanent safety net — with the real config present it is a no-op (FirebaseApp already exists).
+- PUSH: committed version bump + worklog; pushed with the second owner-supplied token (explicitly provided earlier with "push it"; used one-shot in the command only, never stored; both tokens advised for revocation).
+
+Stage Summary:
+- download/ezymail-v1.2.apk = fix + REAL Firebase config. Push registration can now complete: FirebaseInitProvider initializes from real resources, FCM token uses the Android API key -> full notification delivery path open.
+- google-services.json lives only in the sandbox (gitignored); owner should keep their own copy safe.
+- Remaining: owner installs v1.2, allows notifications, tests delivery from the app; crash catcher can be removed in a later cleanup task once stable.
