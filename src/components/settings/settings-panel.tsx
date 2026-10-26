@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  X, Sun, Moon, Monitor, Bell, Volume2, Save, Loader2, Camera,
+  X, Sun, Moon, Monitor, Bell, Save, Loader2, Camera,
   Eye, EyeOff, Shield, Smartphone, Globe, Clock, Lock, Download,
   Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
   Bold, Italic, Link as LinkIcon, List, ChevronRight,
@@ -1633,14 +1633,19 @@ function NotificationSettings({
     }
   }
 
-  const handleDesktopToggle = async (v: boolean) => {
+  // ONE switch for everything (owner request — no separate sound toggle):
+  // asks browser permission, registers the FCM push subscription, and saves
+  // popup + sound preferences together in one action
+  const handleNotificationsToggle = async (v: boolean) => {
     if (!v) {
       setDesktopNotif(false)
+      setSoundNotif(false)
       return
     }
     const ok = await enableNotifications()
-    if (!ok) return // permission refused — toggle stays off
+    if (!ok) return // permission refused — switch stays off
     setDesktopNotif(true)
+    setSoundNotif(true)
   }
 
   const getPermissionBadge = () => {
@@ -1680,46 +1685,28 @@ function NotificationSettings({
       </div>
       <Card className="border-gray-200 dark:border-gray-800">
         <CardContent className="p-4 space-y-4">
-          {/* Desktop notifications — the ONE control. Turning it on asks
-              for browser permission AND registers the FCM push subscription
-              AND saves the preference, in one action. */}
+          {/* Notifications — the ONLY switch (owner request): popup + sound
+              together. Turning it on asks for browser permission AND
+              registers the FCM push subscription in one action. */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
                 <Bell className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Desktop Notifications</p>
+                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">New Email Notifications</p>
                 <p className="text-xs text-gray-500">
                   {permissionStatus === 'denied'
                     ? 'Blocked by your browser — allow notifications in the browser site settings'
-                    : 'Show push notifications for new emails'}
+                    : 'Popup + sound when a new email arrives'}
                 </p>
               </div>
             </div>
             <Switch
               checked={desktopNotif}
-              onCheckedChange={handleDesktopToggle}
+              onCheckedChange={handleNotificationsToggle}
               className="data-[state=checked]:bg-[#4285F4]"
               disabled={enabling || permissionStatus === 'unsupported' || permissionStatus === 'denied'}
-            />
-          </div>
-
-          {/* Sound toggle */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                <Volume2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Notification Sound</p>
-                <p className="text-xs text-gray-500">Play a sound when new emails arrive</p>
-              </div>
-            </div>
-            <Switch
-              checked={soundNotif}
-              onCheckedChange={setSoundNotif}
-              className="data-[state=checked]:bg-[#4285F4]"
             />
           </div>
 
