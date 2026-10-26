@@ -1812,3 +1812,21 @@ Stage Summary:
 - Live after Vercel deploy (~2 min); Android app needs NO rebuild (WebView loads live site).
 - Web push chain now complete in code: switch -> permission -> FCM token -> db.pushSubscription.
 - Still open from Task 78: verify Vercel env FIREBASE_SERVICE_ACCOUNT_KEY + NEXT_PUBLIC_FIREBASE_VAPID_KEY via /diagnostic page if delivery still fails.
+
+---
+Task ID: 81
+Agent: Main
+Task: Owner reported two bugs: (1) Android app shows "Not supported" on the notification switch; (2) on web, turning the switch OFF does not stop notifications. "Fix these, touch nothing else."
+
+Work Log:
+- Bug 1 root cause: the permission check used the WEB Notification API; Android WebView has none -> permissionStatus 'unsupported' -> switch disabled + "Not supported" badge, even though native FCM push works. Fix: NotificationSettings now branches on Capacitor.isNativePlatform() and reads the NATIVE permission via PushNotifications.checkPermissions() (granted/denied/prompt mapping); toggle-ON on native dispatches ezymail:enable-push -> registerNativePush(false) asks the system dialog and registers FCM.
+- Bug 2 root cause (3 layers): (a) toggle only changed local state — prefs persisted server-side only via the separate Save button (profile PUT replaces the WHOLE preferences object, so a partial save would have wiped density/dateFormat); (b) the FCM token stayed registered after OFF, so the server kept pushing and sw.js/onMessage kept showing notifications; (c) the 15s poller toast was not gated by the desktopNotif pref. Fixes: new parent handler handleToggleNotifications(desktop, sound) auto-saves the FULL preferences object + updates the sessionStorage cache + fires a synthetic StorageEvent so the running hook picks it up same-tab; OFF dispatches ezymail:disable-push -> push-notification-setup unsubscribes tokenRef via /api/push/unsubscribe, clears the push-active flag, resets status; use-notifications poller toast now gated by prefs.desktopNotif.
+- Prop wiring: parent -> PreferencesTabContent -> NotificationSettings via new onToggleNotifications prop; NotificationSettings no longer takes the raw setters. Component signature change caused one TS2322 at the call site -> removed stale setDesktopNotif/setSoundNotif props there.
+- tsc --noEmit: CLEAN for all 3 edited files. Diff = 3 notification-feature files (109 insertions / 25 deletions).
+- COMMITTED d20d57e; PUSHED with the owner's old token (standing do-not-ask instruction); remote == local pending worklog push.
+
+Stage Summary:
+- Android switch now shows the real native state (Enabled/Blocked) and toggles native FCM; "Not supported" gone.
+- Web switch OFF = server stops sending (token removed) + no popups/sounds/toasts; ON = full subscribe chain again.
+- Switch saves instantly, survives reload, no Save button needed.
+- Still open: production FCM delivery verification (Vercel env keys) via /diagnostic once owner tests.
