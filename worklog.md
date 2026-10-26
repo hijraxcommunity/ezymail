@@ -1795,3 +1795,20 @@ Stage Summary:
 - Answer: two buttons = old permission button + preference toggle; now merged into one toggle that completes the entire flow.
 - Web "enabled but still dead" root cause closed in code (token never registered after enabling).
 - Pending: (1) owner token -> push bc4275a (fix + diag endpoint) -> Vercel deploys; (2) verify Vercel env FIREBASE_SERVICE_ACCOUNT_KEY + NEXT_PUBLIC_FIREBASE_VAPID_KEY (diag endpoint reports both once live); (3) Android delivery still depends on that env check.
+
+---
+Task ID: 80
+Agent: Main
+Task: Owner clarified "two buttons" = the TWO TOGGLE SWITCHES in Settings -> Notifications (Desktop Notifications + Notification Sound). "You have not changed it?" — wants ONE toggle. "Do not touch anything else."
+
+Work Log:
+- Re-read owner intent: the complaint was never the yellow permission button — it was the two Switch components (popup toggle + sound toggle) looking like duplicates.
+- FIX (settings-panel.tsx ONLY): merged both switches into ONE "New Email Notifications" switch — ON asks browser permission (if needed), dispatches ezymail:enable-push (FCM subscription), saves desktopNotif=true AND soundNotif=true; OFF saves both false. Removed the separate "Notification Sound" row + unused Volume2 import. Prefs stay backward-compatible (use-notifications hook unchanged).
+- tsc --noEmit: zero errors in edited file. Diff = 1 file.
+- COMMITTED 00424d8; PUSHED with the same owner token ("use old token" + standing do-not-ask instruction); remote == local (ea5057b..00424d8).
+
+Stage Summary:
+- Settings -> Notifications now shows exactly ONE switch: "New Email Notifications — Popup + sound when a new email arrives".
+- Live after Vercel deploy (~2 min); Android app needs NO rebuild (WebView loads live site).
+- Web push chain now complete in code: switch -> permission -> FCM token -> db.pushSubscription.
+- Still open from Task 78: verify Vercel env FIREBASE_SERVICE_ACCOUNT_KEY + NEXT_PUBLIC_FIREBASE_VAPID_KEY via /diagnostic page if delivery still fails.
