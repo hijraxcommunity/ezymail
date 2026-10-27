@@ -43,10 +43,13 @@ interface FcmTokenPayload {
   senderEmail?: string
   avatarUrl?: string
   preview?: string
-  /** Android only: send data-only so the app builds the Gmail-style
-   *  notification (sender title, expandable body, actions, sender avatar).
-   *  FCM display notifications cannot do any of that and render the raw
-   *  launcher icon in the status bar. */
+  /** True for Android-app tokens: data.title carries the bare sender name
+   *  (Gmail style) instead of "New email from ...". The display notification
+   *  block below is ALWAYS sent — data-only messages silently vanish on any
+   *  APK without the native Gmail-style renderer (owner-reported: after the
+   *  expandable-notification change, phones stopped showing notifications
+   *  entirely). Reliability first: FCM displays it, and the app's renderer
+   *  upgrades the look when it can. */
   androidDataOnly?: boolean
 }
 
@@ -56,11 +59,15 @@ interface FcmTokenPayload {
 // browser auto-displays the message and onBackgroundMessage never fires,
 // so our sw.js click handler never sees data.url. Data-only guarantees
 // sw.js shows the notification itself with data.url attached (deep link).
-// Android is data-only too (androidDataOnly): the app's native service
-// (EzyMailMessagingService) receives the data and renders a Gmail-style
-// notification — sender name as title, subject as text, expandable body
-// preview, sender avatar and Archive / Mark-as-read / Reply actions.
-// APNs keeps the classic alert payload (no iOS app exists yet).
+// Android gets BOTH the data payload AND a display notification — pure
+// data-only messages are dropped silently by every APK that lacks the
+// native Gmail-style renderer (regression the owner reported: no
+// notifications at all after the expandable-notification change). No
+// channelId here: a channel that does not exist on the device makes
+// Android 8+ silently DROP the notification, and the channel is only
+// created by the native renderer in the app process. Omitting it lets FCM
+// use the always-present default channel, so the notification shows on
+// every APK. APNs keeps the classic alert payload (no iOS app exists yet).
 export function buildFcmMessage({
   fcmToken,
   senderName,
@@ -91,28 +98,22 @@ export function buildFcmMessage({
       webpush: {
         headers: { Urgency: 'high' },
       },
-      android: androidDataOnly
-        ? {
-            // Data-only: priority lives on AndroidConfig — AndroidNotification
-            // is omitted entirely so the native service renders the message.
-            priority: 'high' as const,
-          }
-        : {
-            // Legacy display-notification path (kept for tokens registered
-            // before the native renderer existed). FCM v1 schema: priority
-            // lives on AndroidConfig ONLY — AndroidNotification has no
-            // priority field (400 INVALID_ARGUMENT in production 2026-10-22).
-            priority: 'high' as const,
-            notification: {
-              channelId: 'ezy-emails',
-              title: `New email from ${senderName}`,
-              body,
-              defaultSound: true,
-              defaultVibrateTimings: true,
-              // Must be an in-app drawable resource name, not a URL
-              icon: 'ic_launcher',
-            },
-          },
+      android: {
+        // FCM v1 schema: priority lives on AndroidConfig ONLY —
+        // AndroidNotification has no priority field (400 INVALID_ARGUMENT
+        // in production 2026-10-22). Display block always present so the
+        // notification shows on every APK (see builder comment above).
+        priority: 'high' as const,
+        notification: {
+          title: `New email from ${senderName}`,
+          body,
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          // Must be an in-app drawable resource name, not a URL.
+          // Deliberately NO channelId — see builder comment above.
+          icon: 'ic_launcher',
+        },
+      },
       apns: {
         payload: {
           aps: {

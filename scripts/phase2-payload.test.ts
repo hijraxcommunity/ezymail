@@ -10,9 +10,13 @@ import { buildFcmMessage } from '../src/lib/notifications/sendPushNotification'
 
 const ARGS = { fcmToken: 'tok_test_123', senderName: 'Ali', subject: 'Salam', emailId: 'em_42' }
 
+// Loose view of the wire payload — lets tests assert fields that are ABSENT
+// (omitted properties don't exist on the builder's strict inferred type)
+const wire = (v: unknown): Record<string, any> => v as Record<string, any>
+
 test('web is data-only: no top-level notification field', () => {
   const msg = buildFcmMessage(ARGS)
-  assert.equal(msg.message.notification, undefined)
+  assert.equal(wire(msg.message).notification, undefined)
   assert.ok(msg.message.data && typeof msg.message.data === 'object')
 })
 
@@ -34,20 +38,28 @@ test('token is bound to the message', () => {
   assert.equal(msg.message.token, 'tok_test_123')
 })
 
-test('android legacy display payload still renders (non-android tokens)', () => {
+test('android display payload renders on EVERY apk (reliability fix)', () => {
   const msg = buildFcmMessage(ARGS)
   assert.equal(msg.message.android.priority, 'high')
-  assert.equal(msg.message.android.notification.channelId, 'ezy-emails')
   assert.equal(msg.message.android.notification.title, 'New email from Ali')
   assert.equal(msg.message.android.notification.body, 'Salam')
   // Regression lock (prod 400 INVALID_ARGUMENT 2026-10-22): FCM v1 AndroidNotification
   // has NO priority field — priority is AndroidConfig-level only
-  assert.equal(msg.message.android.notification.priority, undefined)
+  assert.equal(wire(msg.message.android.notification).priority, undefined)
   // icon must be an in-app drawable resource name, never a URL
   assert.equal(msg.message.android.notification.icon, 'ic_launcher')
 })
 
-test('android data-only (Gmail-style): no display block, bare sender title', () => {
+test('android display payload has NO channelId — a missing channel silently drops the notification on Android 8+', () => {
+  const msg = buildFcmMessage(ARGS)
+  assert.equal(wire(msg.message.android.notification).channelId, undefined)
+  // ...and the android token variant carries the same display block
+  const androidMsg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
+  assert.equal(wire(androidMsg.message.android.notification).channelId, undefined)
+  assert.equal(androidMsg.message.android.notification.title, 'New email from Ali')
+})
+
+test('android app token: display block + bare sender title in data (Gmail style for the native renderer)', () => {
   const msg = buildFcmMessage({
     ...ARGS,
     senderEmail: 'ali@ezy.af',
@@ -55,10 +67,11 @@ test('android data-only (Gmail-style): no display block, bare sender title', () 
     preview: 'Salam, how are you doing today my friend?',
     androidDataOnly: true,
   })
-  // Data-only: the native EzyMailMessagingService renders the notification
-  assert.equal(msg.message.android.notification, undefined)
+  // Display block ALWAYS present (data-only messages vanish on APKs
+  // without the native renderer — owner-reported regression)
+  assert.notEqual(msg.message.android.notification, undefined)
   assert.equal(msg.message.android.priority, 'high')
-  // Gmail style: sender name IS the title, subject is the text
+  // Gmail style: sender name IS the title in data, subject is the text
   assert.equal(msg.message.data.title, 'Ali')
   assert.equal(msg.message.data.body, 'Salam')
   // Renderer inputs: expandable preview, avatar, deep link
@@ -68,7 +81,7 @@ test('android data-only (Gmail-style): no display block, bare sender title', () 
   assert.equal(msg.message.data.url, '/?id=em_42')
 })
 
-test('android data-only omits optional fields when not provided', () => {
+test('android app token omits optional fields when not provided', () => {
   const msg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
   assert.equal(msg.message.data.preview, undefined)
   assert.equal(msg.message.data.senderEmail, undefined)
@@ -96,4 +109,4 @@ test('message is JSON-serializable (FCM v1 wire-safe)', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(msg)), msg)
 })
 
-console.log('payload tests: all 10 passed')
+console.log('payload tests: all 11 passed')

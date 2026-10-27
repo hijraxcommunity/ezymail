@@ -12,8 +12,16 @@ export function PushNotificationSetup() {
   const statusRef = useRef<PushStatus>('unknown')
   const tokenRef = useRef<string | null>(null)
   const nativeListenersBoundRef = useRef(false)
+  // Master OFF gate: while true, NO code path may (re)subscribe a token.
+  // This closes the race where the user turns the switch OFF while a native
+  // FCM registration is still in flight — the late 'registration' event used
+  // to re-add the token behind the switch's back, so notifications kept
+  // coming even though the switch said off (owner: "static not dynamic").
+  const pushDisabledRef = useRef(false)
 
   const subscribeToken = useCallback(async (token: string, platformOverride?: 'android' | 'ios') => {
+    // Switch is OFF — never resurrect the subscription (see pushDisabledRef)
+    if (pushDisabledRef.current) return
     try {
       const platform = platformOverride
         ?? (/Android/i.test(navigator.userAgent)
@@ -51,6 +59,23 @@ export function PushNotificationSetup() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fcmToken: token }),
+      })
+    } catch {
+      // Ignore
+    }
+  }, [])
+
+  // OFF must REALLY turn notifications off on this account: remove EVERY
+  // token stored for the user, not just the one this session happens to
+  // know. Stale tokens left behind by reinstalls used to keep receiving
+  // pushes after the switch was off — that was the real reason the owner
+  // had to disable notifications in the phone's system settings instead.
+  const unsubscribeAllTokens = useCallback(async () => {
+    try {
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
       })
     } catch {
       // Ignore
@@ -100,6 +125,9 @@ export function PushNotificationSetup() {
       const perm = await PushNotifications.requestPermissions()
       if (perm.receive !== 'granted') {
         statusRef.current = 'denied'
+        // Tell the user WHY nothing was enabled — a silent return here made
+        // the switch look broken (flipped on, nothing happened)
+        if (!silent) toast.error('Notifications are off. Allow them for EzyMail in your phone settings.')
         return
       }
       PushNotifications.register()
@@ -198,6 +226,9 @@ export function PushNotificationSetup() {
           if (prefs) {
             const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
             if (parsed.desktopNotif === false) {
+              // Switch is OFF on the server — keep it truly off: block every
+              // subscription path for this session (restart included)
+              pushDisabledRef.current = true
               statusRef.current = 'prompt'
               return
             }
@@ -208,6 +239,7 @@ export function PushNotificationSetup() {
       // Native shells (Capacitor): register native FCM/APNs token — VAPID
       // and web service-worker checks do not apply on this path
       if (Capacitor.isNativePlatform()) {
+        pushDisabledRef.current = false
         void registerNativePush(true)
         return
       }
@@ -235,6 +267,7 @@ export function PushNotificationSetup() {
 
       if (Notification.permission === 'granted') {
         // Auto-subscribe silently when permission already granted
+        pushDisabledRef.current = false
         await requestPermissionAndSubscribe(true)
       } else {
         statusRef.current = 'prompt'
@@ -244,14 +277,16 @@ export function PushNotificationSetup() {
     void autoSubscribe()
   }, [isAuthenticated, user, requestPermissionAndSubscribe, registerNativePush])
 
-  // Settings panel's "New Email Notifications" switch fires these events.
-  // enable: complete the push subscription (native asks system permission,
-  //         web uses the already-granted browser permission)
-  // disable: remove THIS device's token so the server stops sending —
-  //         before, turning the switch off left the token registered and
-  //         notifications kept arriving ("toggle does not work" bug)
+  // Settings panel's "Notifications" switch fires these events.
+  // enable: ASK for permission (native system dialog / browser prompt) and
+  //         complete the push subscription only when really allowed
+  // disable: remove THIS device's token AND every other token stored for
+  //         the user, then block re-subscription until the switch is back
+  //         on — before, OFF left tokens registered and notifications kept
+  //         arriving ("toggle does not work" bug)
   useEffect(() => {
     const handleEnablePush = () => {
+      pushDisabledRef.current = false
       if (statusRef.current === 'loading' || statusRef.current === 'subscribed') return
       if (Capacitor.isNativePlatform()) {
         void registerNativePush(false)
@@ -262,10 +297,16 @@ export function PushNotificationSetup() {
       void requestPermissionAndSubscribe(false)
     }
     const handleDisablePush = () => {
+      // Master gate FIRST — any in-flight registration that completes after
+      // this point is refused by subscribeToken
+      pushDisabledRef.current = true
       if (tokenRef.current) {
         void unsubscribeToken(tokenRef.current)
         tokenRef.current = null
       }
+      // Purge stale tokens too (reinstalls leave old rows that kept
+      // receiving pushes after OFF — the owner's original bug)
+      void unsubscribeAllTokens()
       try { sessionStorage.removeItem('ezymail-push-active') } catch { /* ignore */ }
       statusRef.current = 'prompt'
     }
@@ -275,7 +316,7 @@ export function PushNotificationSetup() {
       window.removeEventListener('ezymail:enable-push', handleEnablePush)
       window.removeEventListener('ezymail:disable-push', handleDisablePush)
     }
-  }, [requestPermissionAndSubscribe, registerNativePush, unsubscribeToken])
+  }, [requestPermissionAndSubscribe, registerNativePush, unsubscribeToken, unsubscribeAllTokens])
 
   // Cleanup on logout
   useEffect(() => {

@@ -23,9 +23,13 @@ public class EzyMailMessagingService extends MessagingService {
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         Map<String, String> data = remoteMessage.getData();
+        // Email payload = data carries emailId + title. The server now ALSO
+        // includes a display-notification block so messages still show on
+        // APKs without this renderer — here we upgrade the foreground case
+        // to the Gmail-style notification (background messages are shown by
+        // FCM itself before this service ever runs, so no doubles).
         boolean isEmailNotification =
-            remoteMessage.getNotification() == null
-                && data != null
+            data != null
                 && data.containsKey("emailId")
                 && data.containsKey("title");
 

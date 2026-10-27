@@ -10,7 +10,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { fcmToken } = body
+    const { fcmToken, all } = body
+
+    // all=true: remove EVERY token stored for this user. Used when the user
+    // turns the notifications switch off — stale tokens left by reinstalls
+    // used to keep receiving pushes after off ("toggle does not work" bug).
+    if (all === true) {
+      await db.pushSubscription.deleteMany({
+        where: { userId: session.userId },
+      })
+      return NextResponse.json({ success: true })
+    }
 
     if (!fcmToken || typeof fcmToken !== 'string') {
       return NextResponse.json({ error: 'FCM token is required' }, { status: 400 })

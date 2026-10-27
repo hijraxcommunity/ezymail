@@ -1688,8 +1688,12 @@ function NotificationSettings({
   }
 
   // ONE switch for everything (owner request — no separate sound toggle).
-  // ON: ask permission (web) / use native permission (Android app),
-  //     register the FCM push subscription, save popup+sound prefs.
+  // ON: ASK for permission first and WAIT for the real answer —
+  //     Android app: the phone's system Allow/Don't-allow dialog,
+  //     browser: the browser's allow/deny prompt — then subscribe push.
+  //     The switch only turns ON if permission was really granted
+  //     (before, it flipped ON optimistically and the phone could still
+  //     be silently denied — "static not dynamic" owner report).
   // OFF: save prefs AND remove this device's push token so the server
   //     stops sending — before, OFF left the token registered and
   //     notifications kept arriving ("toggle does not work" bug).
@@ -1699,16 +1703,36 @@ function NotificationSettings({
       onToggleNotifications(false, false)
       return
     }
-    if (Capacitor.isNativePlatform()) {
-      // Native path — the push setup component asks the system permission
-      // and registers FCM (shows an error toast if it fails)
-      try { window.dispatchEvent(new CustomEvent('ezymail:enable-push')) } catch { /* ignore */ }
+    setEnabling(true)
+    try {
+      if (Capacitor.isNativePlatform()) {
+        // Native app: ask the PHONE (mobile system dialog) right now and
+        // wait for the user's real answer before touching the switch.
+        try {
+          const { PushNotifications } = await import('@capacitor/push-notifications')
+          const perm = await PushNotifications.requestPermissions()
+          const granted = perm.receive === 'granted'
+          setPermissionStatus(granted ? 'granted' : perm.receive === 'denied' ? 'denied' : 'default')
+          if (!granted) {
+            toast.error('Notifications are off. Allow them for EzyMail in your phone settings.')
+            return // permission refused — switch stays off (dynamic, not static)
+          }
+        } catch {
+          // Plugin bridge missing — still try the registration path below
+        }
+        // Permission granted by the phone: register the FCM token
+        try { window.dispatchEvent(new CustomEvent('ezymail:enable-push')) } catch { /* ignore */ }
+        onToggleNotifications(true, true)
+        return
+      }
+      const ok = await enableNotifications()
+      if (!ok) return // permission refused — switch stays off
       onToggleNotifications(true, true)
-      return
+    } catch {
+      toast.error('Could not turn notifications on')
+    } finally {
+      setEnabling(false)
     }
-    const ok = await enableNotifications()
-    if (!ok) return // permission refused — switch stays off
-    onToggleNotifications(true, true)
   }
 
   const getPermissionBadge = () => {
