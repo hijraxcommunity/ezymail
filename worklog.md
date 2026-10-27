@@ -1865,3 +1865,24 @@ Stage Summary:
 - Notification delivery works on EVERY APK again (hybrid data+display payload, no channelId). Gmail-style foreground look returns with the next APK rebuild — not required for correctness.
 - Owner test flow after deploy: fully close + reopen the app; toggle OFF -> send test email -> expect silence; toggle ON -> phone/browser asks Allow -> send test email -> expect notification.
 - Reminders still open: delete the leaked GitHub token; verify Vercel env keys via /diagnostic; remove Task 74 crash catcher when stable.
+
+---
+Task ID: 84
+Agent: Main
+Task: CI job red — "MISSING CRITICAL FILES: src/app/api/upload/route.ts" + "fatal: No url found for submodule path 'ezymail' in .gitmodules" warning.
+
+Work Log:
+- Diagnosed the red Integrity Guard run: the audit expects src/app/api/upload/route.ts and the file was gone from origin/main AGAIN (6th silent deletion by a sandbox sweep). The workflow checks the RIGHT path — the file must exist (it serves attachment uploads; its deletion caused the old "upload fails (404)" bug).
+- Also found in the same run's tree: a stray gitlink entry (mode 160000) named 'ezymail' with no .gitmodules — the cause of the exit-128 submodule warning. Removed with git rm --cached.
+- Restored src/app/api/upload/route.ts from commit 042da52 (the previous restore, 89 lines) — byte-identical to what the frontend expects (compose-modal posts 'files' FormData, reads data.files).
+- BONUS find (same silent-deletion class, directly tied to the "notifications not working" report): public/firebase-messaging-sw.js was deleted from the repo by sweep commit de3c4a6 (Oct 18) — since then Vercel production has NO service worker, so WEB background notifications cannot display even with a valid token. Android logic was fixed in efe12c8; this restores the web side. Disk copy verified identical to de3c4a6^ (last good) and re-tracked.
+- Added public/firebase-messaging-sw.js to CRITICAL_FILES in .github/scripts/integrity.cjs so the guard catches future deletions (now 9 critical files).
+- False alarm avoided: ci.yml's 'branches: [main]' looked corrupted ('ain]') in terminal output, but od -c byte-dump proved disk and origin blobs are correct — no change made (display artifact only).
+- Dropped garbage commit 5ac45f4 (62MB bt35.zip + jdk/ tree injected by the sandbox) via git reset --mixed 3202675 before pushing.
+- Verified locally: node .github/scripts/integrity.cjs -> "Integrity OK: 168 TS files checked, all imports resolve, 9 critical files present".
+
+Stage Summary:
+- COMMITTED c47ffc2; PUSHED everything pending with owner token: efe12c8 (Task 83 fix, had never reached origin) + 3202675 (Task 83 worklog) + c47ffc2 (this fix). Remote == local.
+- CI integrity guard will run on this push (branches: [main] works) and should go GREEN.
+- Upload route + push service worker are back in the repo; guard now protects the SW too.
+- Still open: delete leaked GitHub token; verify Vercel env keys via /diagnostic; remove Task 74 crash catcher when stable.
