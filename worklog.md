@@ -1886,3 +1886,23 @@ Stage Summary:
 - CI integrity guard will run on this push (branches: [main] works) and should go GREEN.
 - Upload route + push service worker are back in the repo; guard now protects the SW too.
 - Still open: delete leaked GitHub token; verify Vercel env keys via /diagnostic; remove Task 74 crash catcher when stable.
+
+---
+Task ID: 85
+Agent: Main
+Task: Full evidence-based audit of BOTH notification pipelines (web + Android), per the owner's diagnose-and-repair brief. No blind rewrites — verify the repaired state end to end.
+
+Work Log:
+- Dropped fresh sandbox garbage commit 39fc100 (62MB bt35.zip + jdk/) via reset to 8b66989 before starting.
+- WEB pipeline traced and verified: Providers registers /sw.js (public/sw.js — confirmed TRACKED in git; an earlier 'untracked' reading was my own head-truncated listing, false alarm). sw.js contains the FCM onBackgroundMessage handler (web payloads are deliberately data-only so the handler runs), notificationclick deep-link to /?id=<emailId>, cache v6. push-notification-setup web path: Notification.requestPermission -> getToken(messaging, {vapidKey, serviceWorkerRegistration: navigator.serviceWorker.ready}) -> POST /api/push/subscribe -> sets ezymail-push-active. Polling (use-notifications, 15s): desktopNotif gate + pushActive dedup (poll suppresses browser Notification/toast when FCM owns surfaces), sound only in foreground, lastCheckTime prevents replaying old emails, interval keeps running after errors.
+- ANDROID pipeline traced and verified: native path uses @capacitor/push-notifications (no SW/VAPID); registerNativePush -> requestPermissions -> register -> 'registration' event -> subscribe (platform='android'); foreground messages render via EzyMailMessagingService -> EzyMailNotification (Gmail-style, own channel 'ezy-emails' created by ensureChannel, actions via NotificationActionReceiver); BACKGROUND display comes from the FCM android.notification block (always present in payload since efe12c8, no channelId -> FCM default channel -> works on EVERY APK incl. the owner's current v1.2, NO rebuild needed).
+- POST_NOTIFICATIONS concern RESOLVED with ground truth: neither the app manifest nor the plugin AAR declares it, but firebase-messaging 25.0.1's own AAR manifest DOES (verified via GitHub API on firebase-android-sdk source) -> merged manifest has it -> Android 13+ runtime permission dialog works. Also: targetSdk=36; 'firebase:n:25.0.1' seen in terminal was another display artifact, real bytes are firebase-messaging:25.0.1 (od -c verified).
+- Backend delivery verified: POST /api/emails + reply route both fire sendPushNotification in after() (serverless-safe); sender respects recipient desktopNotif pref; queries ALL pushSubscription rows for the recipient; builds per-platform message (web=data-only+Urgency high, android=data+display, apns=alert); deletes tokens ONLY on true UNREGISTERED (never on INVALID_ARGUMENT). Token ownership: subscribe upserts to session user; unsubscribe {all:true} purges user; logout cleans up; master OFF gate blocks late registrations.
+- Production checks (live): /sw.js 200 (content matches repo), /firebase-messaging-sw.js 200 (restored Task 84), /api/upload 401 (alive, auth-gated). Note: firebase-messaging-sw.js is actually UNUSED by the app flow (Providers pins /sw.js) — Task 84's restore was belt-and-braces, correcting that assumption here.
+- Tests RUN: scripts/phase2-payload.test.ts 11/11 pass; node .github/scripts/integrity.cjs OK (9 critical files); npx tsc --noEmit = 37 pre-existing errors (mostly scripts/ + temp diag route; next.config has ignoreBuildErrors:true — deploys unaffected; untouched per 'do not touch anything else').
+- COULD NOT verify from sandbox (no cheating): production Postgres unreachable (local .env DATABASE_URL is a file: SQLite — scripts/diag-subscriptions.ts added as a reusable read-only checker); no FIREBASE_SERVICE_ACCOUNT_KEY locally -> no real FCM send; VAPID-key-in-bundle probe inconclusive (chunk graph not followable through the terminal layer). These stay with the owner's /diagnostic page: button 1 = env presence, button 2 = REAL FCM send with exact HTTP status per token.
+- NO source changes needed: the repaired Task 79-83 state is correct as-is; this session only removed the garbage commit and added the diagnostic script.
+
+Stage Summary:
+- Both pipelines verified end-to-end statically + live-deployment asset checks; every historical root cause (FCM-never-subscribed, native permission path, OFF layers, restart re-subscribe, payload regression, channelId drop) is fixed in shipped code on origin (8b66989, CI green).
+- Remaining unverified = live-delivery items only the owner can run: /diagnostic (env + real push), real-device foreground/background tests.
