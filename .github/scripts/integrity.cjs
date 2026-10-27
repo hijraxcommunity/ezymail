@@ -18,6 +18,7 @@ const CRITICAL_FILES = [
   'src/app/api/upload/route.ts',
   'src/app/api/attachments/[path]/route.ts',
   'src/app/api/emails/route.ts',
+  'public/firebase-messaging-sw.js',
   '.github/workflows/ci.yml',
 ];
 
