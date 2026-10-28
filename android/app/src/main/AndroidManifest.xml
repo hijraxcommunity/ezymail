@@ -62,4 +62,10 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- REQUIRED on Android 13+: without this declaration the system never
+         shows the "Allow notifications" dialog, requestPermissions() returns
+         denied instantly, and FCM silently drops every notification
+         (owner-reported: phone never asked, nothing ever arrived). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
