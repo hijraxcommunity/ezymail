@@ -234,7 +234,13 @@ export function PushNotificationSetup() {
             }
           }
         }
-      } catch { /* offline — fall through and behave like before */ }
+      } catch {
+        // Profile fetch failed (offline/network): do NOT auto-subscribe —
+        // the user may have the switch OFF on the server; subscribing here
+        // would silently override their choice. The Settings switch still
+        // works and asks + subscribes on demand.
+        return
+      }
 
       // Native shells (Capacitor): register native FCM/APNs token — VAPID
       // and web service-worker checks do not apply on this path
@@ -271,6 +277,20 @@ export function PushNotificationSetup() {
         await requestPermissionAndSubscribe(true)
       } else {
         statusRef.current = 'prompt'
+        // Permission never decided — ASK NOW, right after login (owner
+        // request: "Chrome does not ask me to allow or not"). One ask per
+        // browser session; if the user dismisses it, the Settings switch
+        // still asks on demand (user-gesture prompt always goes through).
+        try {
+          if (!sessionStorage.getItem('ezymail-push-asked')) {
+            sessionStorage.setItem('ezymail-push-asked', '1')
+            const permission = await Notification.requestPermission()
+            if (permission === 'granted') {
+              pushDisabledRef.current = false
+              await requestPermissionAndSubscribe(true)
+            }
+          }
+        } catch { /* ignore */ }
       }
     }
 
@@ -293,7 +313,11 @@ export function PushNotificationSetup() {
         return
       }
       if (typeof window === 'undefined' || !('Notification' in window)) return
-      if (Notification.permission !== 'granted') return
+      // Ask whenever permission is not decided yet — requestPermission()
+      // resolves instantly when already granted and returns 'denied' when
+      // blocked. (Before, this handler only ran when permission was ALREADY
+      // granted, so it never actually asked — the browser prompt could never
+      // appear from the switch.)
       void requestPermissionAndSubscribe(false)
     }
     const handleDisablePush = () => {

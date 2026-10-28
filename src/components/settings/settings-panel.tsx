@@ -1659,7 +1659,14 @@ function NotificationSettings({
   // subscribing push, so notifications stayed dead after enabling.)
   const enableNotifications = async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !('Notification' in window)) return false
-    if (Notification.permission === 'granted') return true
+    if (Notification.permission === 'granted') {
+      // Already allowed — still complete the push subscription. (Before,
+      // this returned without dispatching the enable event, so the FCM
+      // token was never registered and no notification ever arrived even
+      // though the switch said on.)
+      try { window.dispatchEvent(new CustomEvent('ezymail:enable-push')) } catch { /* ignore */ }
+      return true
+    }
     if (Notification.permission === 'denied') {
       setPermissionStatus('denied')
       toast.error('Notifications blocked. Please enable them in your browser settings.')
