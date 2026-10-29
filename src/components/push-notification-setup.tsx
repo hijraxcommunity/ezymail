@@ -19,7 +19,7 @@ export function PushNotificationSetup() {
   // coming even though the switch said off (owner: "static not dynamic").
   const pushDisabledRef = useRef(false)
 
-  const subscribeToken = useCallback(async (token: string, platformOverride?: 'android' | 'ios') => {
+  const subscribeToken = useCallback(async (token: string, platformOverride?: 'android' | 'ios', showSuccess = false) => {
     // Switch is OFF — never resurrect the subscription (see pushDisabledRef)
     if (pushDisabledRef.current) return
     try {
@@ -45,6 +45,11 @@ export function PushNotificationSetup() {
         // own browser Notification/toast because FCM now owns those surfaces
         // (SW shows background notifications, onMessage shows foreground toast)
         try { sessionStorage.setItem('ezymail-push-active', '1') } catch { /* ignore */ }
+        // Positive confirmation (toggle-ON path only): this toast proves the
+        // device REALLY reached the server and registered. If the user flips
+        // the switch on and this never appears, registration failed upstream
+        // (permission dialog refused, Firebase init, Play Services...).
+        if (showSuccess) toast.success('Notifications enabled on this device')
       } else {
         statusRef.current = 'error'
       }
@@ -84,7 +89,9 @@ export function PushNotificationSetup() {
 
   // Native shells (Capacitor Android/iOS): FCM native registration token —
   // no VAPID key and no service worker involved. Inert in normal browsers.
+  const silentModeRef = useRef(true)
   const registerNativePush = useCallback(async (silent = false) => {
+    silentModeRef.current = silent
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
 
@@ -93,7 +100,7 @@ export function PushNotificationSetup() {
 
         PushNotifications.addListener('registration', (t) => {
           const platform: 'android' | 'ios' = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android'
-          subscribeToken(t.value, platform)
+          subscribeToken(t.value, platform, !silentModeRef.current)
         })
         PushNotifications.addListener('registrationError', (err) => {
           console.warn('[Push] native registration error:', err)
@@ -177,7 +184,7 @@ export function PushNotificationSetup() {
       })
 
       if (token) {
-        await subscribeToken(token)
+        await subscribeToken(token, undefined, !silent)
 
         // Foreground message handler — show notification + navigate to email when tapped
         onMessage(messaging, (payload) => {

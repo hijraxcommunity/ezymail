@@ -223,10 +223,18 @@ export async function sendPushNotification({
         // Clean up dead tokens — ONLY true UNREGISTERED signals. NEVER delete
         // on INVALID_ARGUMENT: that means OUR payload was schema-invalid
         // (builder bug), not the token; deleting would wipe every row.
-        if (result.error && (
-          result.error.status === 'UNREGISTERED' ||
-          result.error.message?.includes('Requested entity was not found')
-        )) {
+        // FCM v1 actually reports dead tokens as HTTP 404 with
+        // "status": "NOT_FOUND", details[].errorCode "UNREGISTERED" and
+        // message "Device unregistered." — the old check only matched
+        // status==='UNREGISTERED', which never occurs, so dead tokens were
+        // never purged and re-failed on every single send.
+        const errDetails = Array.isArray(result.error?.details) ? result.error.details : []
+        const fcmErrorCode = errDetails.map((d: { errorCode?: string }) => d?.errorCode).find(Boolean)
+        const isUnregistered =
+          result.error?.status === 'UNREGISTERED' ||
+          fcmErrorCode === 'UNREGISTERED' ||
+          /unregistered|Requested entity was not found/i.test(result.error?.message || '')
+        if (result.error && isUnregistered) {
           await db.pushSubscription.deleteMany({
             where: { fcmToken: sub.fcmToken },
           }).catch(() => {})
