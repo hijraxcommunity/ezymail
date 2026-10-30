@@ -1620,6 +1620,34 @@ function NotificationSettings({
 }) {
   const [permissionStatus, setPermissionStatus] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('default')
   const [enabling, setEnabling] = useState(false)
+  // Device diagnostics — the APK has no address bar, so the phone cannot
+  // reach /diagnostic. This button makes the device report its own push
+  // state (bridge, permission, login, switch pref, saved tokens) as a
+  // copyable JSON. Read-only; saved the owner from remote guessing.
+  const [diagOutput, setDiagOutput] = useState('')
+  const [diagBusy, setDiagBusy] = useState(false)
+
+  const runDeviceDiagnostics = async () => {
+    setDiagBusy(true)
+    try {
+      const { collectDeviceDiagnostics } = await import('@/lib/notifications/deviceDiagnostics')
+      const data = await collectDeviceDiagnostics()
+      setDiagOutput(JSON.stringify(data, null, 2))
+    } catch (e) {
+      setDiagOutput('Diagnostics failed: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setDiagBusy(false)
+    }
+  }
+
+  const copyDiag = async () => {
+    try {
+      await navigator.clipboard.writeText(diagOutput)
+      toast.success('Diagnostics copied')
+    } catch {
+      toast.error('Copy failed — select the text manually')
+    }
+  }
 
   // Check current notification permission.
   // Native app (Android): use the NATIVE push permission — the Android
@@ -1824,6 +1852,30 @@ function NotificationSettings({
                 {permissionStatus === 'denied' && ' To re-enable, go to your browser\'s site settings and reset notification permissions.'}
               </p>
             </div>
+          </div>
+
+          {/* Device diagnostics — read-only self report of THIS device */}
+          <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runDeviceDiagnostics}
+                disabled={diagBusy}
+                className="text-[11px] px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                {diagBusy ? 'Checking…' : 'Run device diagnostics'}
+              </button>
+              {diagOutput && (
+                <button
+                  onClick={copyDiag}
+                  className="text-[11px] px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Copy
+                </button>
+              )}
+            </div>
+            {diagOutput && (
+              <pre className="text-[10px] leading-relaxed bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded p-2 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">{diagOutput}</pre>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { collectDeviceDiagnostics, DEVICE_DIAGNOSTICS_VERSION as PAGE_VERSION } from '@/lib/notifications/deviceDiagnostics'
 
 /**
  * TEMPORARY diagnostic page (Task 78 — remove together with /api/push/diag
@@ -18,8 +19,6 @@ import { useState } from 'react'
  *                     answers per token.
  */
 
-const PAGE_VERSION = 'device-check-v3'
-
 type Busy = 'none' | 'device' | 'register' | 'check' | 'test'
 
 function mask(t: string): string {
@@ -35,44 +34,12 @@ export default function DiagnosticPage() {
   async function deviceCheck() {
     setBusy('device')
     setOutput('Checking this device…')
-    const out: Record<string, unknown> = { pageVersion: PAGE_VERSION }
     try {
-      const { Capacitor } = await import('@capacitor/core')
-      out.platform = Capacitor.getPlatform()
-      out.isNativePlatform = Capacitor.isNativePlatform()
+      const data = await collectDeviceDiagnostics()
+      setOutput(JSON.stringify(data, null, 2))
     } catch (e) {
-      out.capacitorError = e instanceof Error ? e.message : String(e)
+      setOutput('Diagnostics failed: ' + (e instanceof Error ? e.message : String(e)))
     }
-    out.webNotificationApi =
-      typeof window !== 'undefined' && 'Notification' in window
-    if (out.isNativePlatform === true) {
-      try {
-        const { PushNotifications } = await import('@capacitor/push-notifications')
-        const perm = await PushNotifications.checkPermissions()
-        out.nativePermission = perm.receive
-      } catch (e) {
-        out.nativePermissionError = e instanceof Error ? e.message : String(e)
-      }
-    } else if (out.webNotificationApi === true) {
-      out.webPermission = Notification.permission
-    }
-    try {
-      const res = await fetch('/api/user/profile')
-      out.profileHttp = res.status
-      if (res.ok) {
-        const data = await res.json()
-        const prefs = data.user?.preferences
-        const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
-        out.desktopNotifPref =
-          parsed && typeof parsed === 'object' && 'desktopNotif' in parsed
-            ? (parsed as { desktopNotif: unknown }).desktopNotif
-            : '(not set)'
-      }
-    } catch (e) {
-      out.profileError = e instanceof Error ? e.message : String(e)
-    }
-    out.userAgent = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : ''
-    setOutput(JSON.stringify(out, null, 2))
     setBusy('none')
   }
 
