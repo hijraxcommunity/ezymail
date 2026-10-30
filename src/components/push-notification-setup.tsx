@@ -18,6 +18,10 @@ export function PushNotificationSetup() {
   // to re-add the token behind the switch's back, so notifications kept
   // coming even though the switch said off (owner: "static not dynamic").
   const pushDisabledRef = useRef(false)
+  // onMessage must be registered ONCE per messaging instance — re-registering
+  // it on every login/toggle stacked duplicate handlers, so one message
+  // produced several toasts (and now would produce several OS popups).
+  const onMessageBoundRef = useRef(false)
 
   const subscribeToken = useCallback(async (token: string, platformOverride?: 'android' | 'ios', showSuccess = false) => {
     // Switch is OFF — never resurrect the subscription (see pushDisabledRef)
@@ -186,22 +190,46 @@ export function PushNotificationSetup() {
       if (token) {
         await subscribeToken(token, undefined, !silent)
 
-        // Foreground message handler — show notification + navigate to email when tapped
-        onMessage(messaging, (payload) => {
-          const data = payload.data || {}
-          const emailId = data.emailId || ''
-          const title = payload.notification?.title || 'New Email'
-          const body = payload.notification?.body || 'You received a new message'
+        // Foreground message handler — fires ONLY while the page is visible
+        // (when focused, the Firebase SDK routes the message here and the
+        // service worker does NOT show the OS notification). Owner request:
+        // the popup must appear OUTSIDE the app even while it is open, so
+        // this handler shows the system notification as well as the toast.
+        if (!onMessageBoundRef.current) {
+          onMessageBoundRef.current = true
+          onMessage(messaging, (payload) => {
+            const data = payload.data || {}
+            const emailId = data.emailId || ''
+            const title = payload.notification?.title || data.title || 'New Email'
+            const body = payload.notification?.body || data.body || 'You received a new message'
 
-          toast(title, {
-            description: body,
-            duration: 6000,
-            action: emailId ? {
-              label: 'View',
-              onClick: () => setSelectedEmailId(emailId),
-            } : undefined,
+            // OS-level popup while the app is open (page context)
+            try {
+              if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                const n = new Notification(title, {
+                  body,
+                  icon: '/logo.png',
+                  badge: '/logo.png',
+                  tag: data.tag || (emailId ? `email-${emailId}` : 'ezy-email'),
+                })
+                n.onclick = () => {
+                  try { window.focus() } catch { /* ignore */ }
+                  if (emailId) setSelectedEmailId(emailId)
+                  n.close()
+                }
+              }
+            } catch { /* OS popup is best-effort — the in-app toast still shows */ }
+
+            toast(title, {
+              description: body,
+              duration: 6000,
+              action: emailId ? {
+                label: 'View',
+                onClick: () => setSelectedEmailId(emailId),
+              } : undefined,
+            })
           })
-        })
+        }
 
         if (!silent) toast.success('Push notifications enabled')
       } else {
