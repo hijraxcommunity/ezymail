@@ -352,19 +352,23 @@ export function PushNotificationSetup() {
     void autoSubscribe()
   }, [isAuthenticated, user, requestPermissionAndSubscribe, registerNativePush])
 
-  // Self-heal: when the app returns to the foreground, make sure the server
-  // still has this device's token. A reinstall / clear-data / token refresh
-  // kills the old token (Google reports UNREGISTERED and the server purges
-  // the row); if the app stayed open in memory it used to keep NO token on
-  // the server until the next login — the phone then silently stopped
-  // receiving. Re-registering is an idempotent upsert, throttled to once
-  // per minute. It also picks up a permission the user just granted in the
-  // phone's system settings. The server preference is re-checked first so
-  // this can never resurrect a subscription the user turned OFF.
+  // Self-heal: make sure the server still has this device's token while the
+  // app is open. Two real scenarios left the phone dead with the app in the
+  // foreground:
+  //   1. The switch-OFF on ANY device removes EVERY token of the account
+  //      (the "OFF must really turn it off" rule). The desktop heals itself
+  //      on page reload; a phone app left open never re-registered — owner
+  //      report: "it was working minutes ago, then stopped".
+  //   2. A reinstall / token refresh kills the old token (Google reports
+  //      UNREGISTERED and the server purges the row).
+  // Re-registering is an idempotent upsert (same token, same row), so this
+  // runs on every return to foreground AND every 2 minutes while visible.
+  // The server preference is re-checked first, so this can never resurrect
+  // a subscription the user turned OFF, and it picks up a permission the
+  // user just granted in the phone's system settings.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
-    const onVisible = async () => {
-      if (document.visibilityState !== 'visible') return
+    const recheckAndRegister = async () => {
       if (!isAuthenticated || pushDisabledRef.current) return
       if (Date.now() - lastNativeRegisterRef.current < 60000) return
       lastNativeRegisterRef.current = Date.now()
@@ -379,15 +383,24 @@ export function PushNotificationSetup() {
             return
           }
         } else {
-          return // profile unavailable — retry on the next resume
+          return // profile unavailable — retry on the next tick
         }
       } catch {
-        return // offline — retry on the next resume
+        return // offline — retry on the next tick
       }
       void registerNativePush(true)
     }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void recheckAndRegister()
+    }
+    const tick = setInterval(() => {
+      if (document.visibilityState === 'visible') void recheckAndRegister()
+    }, 120000)
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(tick)
+    }
   }, [isAuthenticated, registerNativePush])
 
   // Settings panel's "Notifications" switch fires these events.
@@ -400,7 +413,11 @@ export function PushNotificationSetup() {
   useEffect(() => {
     const handleEnablePush = () => {
       pushDisabledRef.current = false
-      if (statusRef.current === 'loading' || statusRef.current === 'subscribed') return
+      // 'loading' only — 'subscribed' must NOT skip: the switch-OFF on
+      // another device (or the dead-token purge) deletes this device's row
+      // server-side while this session still believes it is subscribed.
+      // The registration upsert is idempotent, so always (re)register.
+      if (statusRef.current === 'loading') return
       if (Capacitor.isNativePlatform()) {
         void registerNativePush(false)
         return
