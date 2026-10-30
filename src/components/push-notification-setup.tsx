@@ -12,6 +12,13 @@ export function PushNotificationSetup() {
   const statusRef = useRef<PushStatus>('unknown')
   const tokenRef = useRef<string | null>(null)
   const nativeListenersBoundRef = useRef(false)
+  // Reinstalling the APK resets the Android notification permission, and a
+  // registration failure used to stay INVISIBLE on the silent auto path —
+  // the phone then showed nothing at all and the owner had no idea why
+  // ("android does not work"). These make the failure loud (once per
+  // session) and re-register the token when the app returns to foreground.
+  const nativeFailToastedRef = useRef(false)
+  const lastNativeRegisterRef = useRef(0)
   // Master OFF gate: while true, NO code path may (re)subscribe a token.
   // This closes the race where the user turns the switch OFF while a native
   // FCM registration is still in flight — the late 'registration' event used
@@ -109,7 +116,13 @@ export function PushNotificationSetup() {
         PushNotifications.addListener('registrationError', (err) => {
           console.warn('[Push] native registration error:', err)
           statusRef.current = 'error'
-          if (!silent) toast.error('Failed to enable push notifications')
+          // Always visible: manual attempts toast every time, the silent
+          // auto path toasts once per session. (silentModeRef, NOT the
+          // stale `silent` arg — listeners are bound only once.)
+          if (!silentModeRef.current || !nativeFailToastedRef.current) {
+            nativeFailToastedRef.current = true
+            toast.error('Could not enable notifications. Restart the app and try again.')
+          }
         })
         PushNotifications.addListener('pushNotificationReceived', (n) => {
           const emailId = n.data?.emailId || ''
@@ -134,11 +147,18 @@ export function PushNotificationSetup() {
       }
 
       const perm = await PushNotifications.requestPermissions()
+      lastNativeRegisterRef.current = Date.now()
       if (perm.receive !== 'granted') {
         statusRef.current = 'denied'
         // Tell the user WHY nothing was enabled — a silent return here made
-        // the switch look broken (flipped on, nothing happened)
-        if (!silent) toast.error('Notifications are off. Allow them for EzyMail in your phone settings.')
+        // the switch look broken (flipped on, nothing happened). This now
+        // also fires on the silent auto path (once per session): a reinstall
+        // resets the Android notification permission, and without this the
+        // phone fails with zero feedback.
+        if (!silent || !nativeFailToastedRef.current) {
+          nativeFailToastedRef.current = true
+          toast.error('Notifications are off. Allow them for EzyMail in your phone settings.')
+        }
         return
       }
       PushNotifications.register()
@@ -331,6 +351,44 @@ export function PushNotificationSetup() {
 
     void autoSubscribe()
   }, [isAuthenticated, user, requestPermissionAndSubscribe, registerNativePush])
+
+  // Self-heal: when the app returns to the foreground, make sure the server
+  // still has this device's token. A reinstall / clear-data / token refresh
+  // kills the old token (Google reports UNREGISTERED and the server purges
+  // the row); if the app stayed open in memory it used to keep NO token on
+  // the server until the next login — the phone then silently stopped
+  // receiving. Re-registering is an idempotent upsert, throttled to once
+  // per minute. It also picks up a permission the user just granted in the
+  // phone's system settings. The server preference is re-checked first so
+  // this can never resurrect a subscription the user turned OFF.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return
+      if (!isAuthenticated || pushDisabledRef.current) return
+      if (Date.now() - lastNativeRegisterRef.current < 60000) return
+      lastNativeRegisterRef.current = Date.now()
+      try {
+        const res = await fetch('/api/user/profile')
+        if (res.ok) {
+          const data = await res.json()
+          const prefs = data.user?.preferences
+          const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
+          if (parsed && parsed.desktopNotif === false) {
+            pushDisabledRef.current = true
+            return
+          }
+        } else {
+          return // profile unavailable — retry on the next resume
+        }
+      } catch {
+        return // offline — retry on the next resume
+      }
+      void registerNativePush(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [isAuthenticated, registerNativePush])
 
   // Settings panel's "Notifications" switch fires these events.
   // enable: ASK for permission (native system dialog / browser prompt) and
