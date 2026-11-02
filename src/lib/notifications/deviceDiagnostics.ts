@@ -77,3 +77,154 @@ export async function collectDeviceDiagnostics(): Promise<Record<string, unknown
   out.userAgent = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : ''
   return out
 }
+
+function maskToken(t: string): string {
+  return t.length > 16 ? `${t.slice(0, 10)}…${t.slice(-4)}` : '***'
+}
+
+interface TestSendRow {
+  platform?: string
+  httpStatus?: number
+  fcmResponse?: {
+    error?: {
+      details?: Array<{ errorCode?: string }>
+      message?: string
+    }
+  }
+}
+
+/**
+ * FULL push test — the one-button version for inside the APK (the APK has no
+ * address bar, so the /diagnostic page's Register/Test buttons were
+ * unreachable from the phone — this replaces that whole round trip):
+ *
+ * 1. collects the read-only device state ("before"),
+ * 2. requests permission and force-registers THIS device with FCM,
+ * 3. saves the fresh token server-side (same upsert the app flow uses),
+ * 4. test-sends to every saved token — the exact payload a real email sends,
+ * 5. writes a plain-English `diagnosis` so the verdict needs no extra round:
+ *    a BRAND-NEW token that is instantly "UNREGISTERED" proves the APK was
+ *    built with a google-services.json from the wrong Firebase project,
+ *    while an accepted send proves the old row was just a stale leftover.
+ */
+export async function runFullPushTest(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {
+    test: 'full-push-test',
+    time: new Date().toISOString(),
+  }
+
+  // 1) Device state BEFORE anything changes
+  const before = await collectDeviceDiagnostics()
+  out.before = before
+
+  if (before.isNativePlatform !== true) {
+    out.error = 'Not inside the EzyMail Android app.'
+    out.hint = 'Open the EzyMail app → Settings → Notifications → Full push test.'
+    return out
+  }
+
+  // 2) Permission + force registration
+  let fcmToken = ''
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications')
+    const perm = await PushNotifications.requestPermissions()
+    out.permission = perm.receive
+    if (perm.receive !== 'granted') {
+      out.error = 'Notification permission is not granted.'
+      out.hint = 'Phone Settings → Apps → EzyMail → Notifications → allow, then run this test again.'
+      return out
+    }
+
+    let settle!: (ok: boolean) => void
+    const registeredPromise = new Promise<boolean>((r) => { settle = r })
+    let done = false
+    const finish = (ok: boolean) => {
+      if (!done) {
+        done = true
+        settle(ok)
+      }
+    }
+    let regError: unknown = null
+    const okHandle = PushNotifications.addListener('registration', (t) => {
+      fcmToken = t.value
+      finish(true)
+    })
+    const errHandle = PushNotifications.addListener('registrationError', (e) => {
+      regError = e
+      finish(false)
+    })
+    const timer = setTimeout(() => finish(false), 20000)
+    PushNotifications.register()
+    out.registered = await registeredPromise
+    clearTimeout(timer)
+    try { (await okHandle).remove() } catch { /* listener cleanup is best-effort */ }
+    try { (await errHandle).remove() } catch { /* listener cleanup is best-effort */ }
+
+    if (out.registered !== true || !fcmToken) {
+      out.error = 'The phone did not return an FCM token.'
+      out.registrationError = regError ? JSON.stringify(regError) : 'no answer from Google within 20s'
+      out.hint = 'Check the phone has internet and Google Play services, then run again.'
+      return out
+    }
+    out.token = maskToken(fcmToken)
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e)
+    out.hint = 'Native push plugin not available — run this inside the EzyMail Android app.'
+    return out
+  }
+
+  // 3) Save the fresh token
+  try {
+    const res = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fcmToken, platform: 'android', deviceInfo: 'full push test' }),
+    })
+    out.savedHttp = res.status
+    if (res.status === 401) {
+      out.error = 'You are NOT logged in inside this app.'
+      out.hint = 'Login, then run this test again.'
+      return out
+    }
+    if (!res.ok) {
+      out.error = 'Could not save the token (HTTP ' + res.status + ').'
+      return out
+    }
+  } catch (e) {
+    out.error = 'Save failed: ' + (e instanceof Error ? e.message : String(e))
+    return out
+  }
+
+  // 4) Test-send to every saved token — exactly what a real email sends
+  try {
+    const res = await fetch('/api/push/diag', { method: 'POST' })
+    out.testSend = await res.json()
+  } catch (e) {
+    out.error = 'Test send failed: ' + (e instanceof Error ? e.message : String(e))
+    return out
+  }
+
+  // 5) Verdict — read the android row from the test-send results
+  const rows =
+    (out.testSend as { results?: TestSendRow[] } | null | undefined)?.results || []
+  const mine = rows.find((r) => r.platform === 'android')
+  out.androidResult = mine ?? null
+  if (!mine) {
+    out.diagnosis = 'No android token in the send list — saving the token above did not work.'
+  } else if (mine.httpStatus === 200) {
+    out.diagnosis =
+      'GOOD: Google accepted a real send to your brand-new android token. ' +
+      'The old row was a leftover from a previous install. Real emails will now ring.'
+  } else if (mine.httpStatus === 404) {
+    out.diagnosis =
+      'ROOT CAUSE FOUND: a brand-new android token is instantly "unregistered" — the APK was ' +
+      'built with a google-services.json from the WRONG Firebase project. Fix: in the Firebase ' +
+      'console open project customer-database-88e9f → Project settings → Your apps → Android app ' +
+      'af.ezy.mail → download google-services.json, replace android/app/google-services.json, ' +
+      'rebuild the APK.'
+  } else {
+    out.diagnosis =
+      'Unexpected FCM answer for the new token (HTTP ' + mine.httpStatus + ') — send this whole JSON.'
+  }
+  return out
+}

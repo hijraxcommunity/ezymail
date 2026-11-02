@@ -1649,6 +1649,23 @@ function NotificationSettings({
     }
   }
 
+  // Full push test — the ONE-button fix check for the APK: registers this
+  // device with FCM, saves the fresh token, test-sends (same payload as a
+  // real email) and writes a plain-English `diagnosis` into the JSON.
+  const [fullTestBusy, setFullTestBusy] = useState(false)
+  const runFullTest = async () => {
+    setFullTestBusy(true)
+    try {
+      const { runFullPushTest } = await import('@/lib/notifications/deviceDiagnostics')
+      const data = await runFullPushTest()
+      setDiagOutput(JSON.stringify(data, null, 2))
+    } catch (e) {
+      setDiagOutput('Full test failed: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setFullTestBusy(false)
+    }
+  }
+
   // Check current notification permission.
   // Native app (Android): use the NATIVE push permission — the Android
   // WebView has no web Notification API, so the old check always said
@@ -1859,10 +1876,17 @@ function NotificationSettings({
             <div className="flex items-center gap-2">
               <button
                 onClick={runDeviceDiagnostics}
-                disabled={diagBusy}
+                disabled={diagBusy || fullTestBusy}
                 className="text-[11px] px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               >
                 {diagBusy ? 'Checking…' : 'Run device diagnostics'}
+              </button>
+              <button
+                onClick={runFullTest}
+                disabled={diagBusy || fullTestBusy}
+                className="text-[11px] px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50"
+              >
+                {fullTestBusy ? 'Testing… (up to 30s)' : 'Full push test'}
               </button>
               {diagOutput && (
                 <button
