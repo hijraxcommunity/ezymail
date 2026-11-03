@@ -110,8 +110,16 @@ export function buildFcmMessage({
           defaultSound: true,
           defaultVibrateTimings: true,
           // Must be an in-app drawable resource name, not a URL.
-          // Deliberately NO channelId — see builder comment above.
           icon: 'ic_launcher',
+          // Target the app's own "New email" channel (IMPORTANCE_HIGH) instead
+          // of the FCM default "Miscellaneous" channel. Safe since 2026-11-03:
+          // EzyMailApp.onCreate calls EzyMailNotification.ensureChannel() on
+          // EVERY process start — including when FCM wakes the process in the
+          // background — so the channel always exists before this lands.
+          // Rationale: the owner's repeated ON/OFF toggles left the default
+          // category disabled while the app-level permission stayed "granted",
+          // which showed exactly as "works with app open, silent when closed".
+          channelId: 'ezy-emails',
         },
       },
       apns: {

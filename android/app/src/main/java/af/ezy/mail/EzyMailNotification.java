@@ -125,7 +125,11 @@ public final class EzyMailNotification {
         );
     }
 
-    private static void ensureChannel(Context context) {
+    // Package-visible: EzyMailApp.onCreate calls this on EVERY process start
+    // (including when FCM wakes the process in the background for a
+    // high-priority message), so the channel always exists BEFORE the FCM SDK
+    // posts a background notification that targets it.
+    static void ensureChannel(Context context) {
         NotificationManager nm =
             (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;

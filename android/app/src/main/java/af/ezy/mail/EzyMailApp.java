@@ -104,6 +104,15 @@ public class EzyMailApp extends Application {
     public void onCreate() {
         super.onCreate();
         ensureFirebaseInitialized();
+        // Create the "New email" notification channel on EVERY process start —
+        // Application.onCreate also runs when FCM wakes the process in the
+        // background, so the channel exists before any background push lands.
+        // createNotificationChannel is idempotent (no-op if it exists).
+        try {
+            EzyMailNotification.ensureChannel(this);
+        } catch (Throwable t) {
+            Log.w(TAG, "Channel creation failed — push will use the default channel", t);
+        }
     }
 
     /**
