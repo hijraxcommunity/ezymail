@@ -66,6 +66,24 @@ export async function POST() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
+    // Read the account's Notifications switch exactly the way a REAL email
+    // does (sendPushNotification skips every send while desktopNotif is
+    // false). This test deliberately does NOT honor the switch — but the
+    // response must SHOW it, otherwise "test rings, real email silent" is
+    // impossible to explain from the JSON alone.
+    let desktopNotifPref: unknown = '(not set)'
+    try {
+      const u = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { preferences: true },
+      })
+      const prefs = u?.preferences
+      const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
+      if (parsed && typeof parsed === 'object' && 'desktopNotif' in parsed) {
+        desktopNotifPref = (parsed as { desktopNotif: unknown }).desktopNotif
+      }
+    } catch { /* preference read is best-effort — never block the test */ }
+
     const creds = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
     if (!creds) {
       return NextResponse.json(
@@ -100,6 +118,10 @@ export async function POST() {
     if (subs.length === 0) {
       return NextResponse.json({
         step: 'database',
+        desktopNotifPref,
+        ...(desktopNotifPref === false
+          ? { warning: 'Your Notifications switch is OFF on the server. While it is OFF, no device re-registers, so no token can come back. Turn the switch ON in Settings → Notifications first.' }
+          : {}),
         error:
           'No FCM tokens saved for your user — devices never subscribed. Open the app, login, allow notifications, then check GET /api/push/diag.',
       })
@@ -132,7 +154,18 @@ export async function POST() {
       })
     }
 
-    return NextResponse.json({ step: 'fcm-send', sentTo: results.length, results })
+    return NextResponse.json({
+      step: 'fcm-send',
+      sentTo: results.length,
+      desktopNotifPref,
+      ...(desktopNotifPref === false
+        ? {
+            warning:
+              'Your Notifications switch is OFF on the server. This test bypasses the switch, but REAL emails are silently skipped while it is OFF — that is exactly "test rings, real email never comes". Turn the switch ON in Settings → Notifications (it must say it saved).',
+          }
+        : {}),
+      results,
+    })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'diagnostic failed' },

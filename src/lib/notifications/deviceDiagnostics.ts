@@ -226,5 +226,17 @@ export async function runFullPushTest(): Promise<Record<string, unknown>> {
     out.diagnosis =
       'Unexpected FCM answer for the new token (HTTP ' + mine.httpStatus + ') — send this whole JSON.'
   }
+
+  // The one gate this test CANNOT bypass: real emails are skipped while the
+  // account's Notifications switch is OFF on the server (sendPushNotification
+  // honors it; this test does not). Surface it as the headline problem.
+  if (before.desktopNotifPref === false) {
+    out.switchWarning =
+      'IMPORTANT: your Notifications switch is OFF on the server for this account. ' +
+      'This test bypasses the switch, but REAL emails are silently skipped while it is OFF — ' +
+      'that is exactly why the test rings and real emails never come. ' +
+      'Fix: EzyMail → Settings → Notifications → turn the switch ON (you must see it stay on).'
+    out.diagnosis = out.switchWarning
+  }
   return out
 }

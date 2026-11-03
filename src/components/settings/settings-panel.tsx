@@ -585,6 +585,8 @@ export function SettingsPanel() {
   // object — the profile API replaces the whole object, a partial save
   // would wipe density/date-format settings.
   const handleToggleNotifications = async (desktop: boolean, sound: boolean) => {
+    const prevDesktop = desktopNotif
+    const prevSound = soundNotif
     setDesktopNotif(desktop)
     setSoundNotif(sound)
     // Update the live cache the polling hook reads in THIS tab
@@ -592,8 +594,12 @@ export function SettingsPanel() {
       sessionStorage.setItem('ezymail-notif-prefs', JSON.stringify({ desktopNotif: desktop, soundNotif: sound }))
       window.dispatchEvent(new StorageEvent('storage', { key: 'ezymail-notif-prefs' }))
     } catch { /* ignore */ }
+    // The save MUST succeed: real-email push is gated on the SERVER copy of
+    // this switch. A failed save used to be swallowed, so the UI showed ON
+    // while the server kept OFF — exactly "test works but real emails never
+    // ring". On any failure: revert the switch and say so loudly.
     try {
-      await fetch('/api/user/profile', {
+      const res = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -607,7 +613,16 @@ export function SettingsPanel() {
           },
         }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      setDesktopNotif(prevDesktop)
+      setSoundNotif(prevSound)
+      try {
+        sessionStorage.setItem('ezymail-notif-prefs', JSON.stringify({ desktopNotif: prevDesktop, soundNotif: prevSound }))
+        window.dispatchEvent(new StorageEvent('storage', { key: 'ezymail-notif-prefs' }))
+      } catch { /* ignore */ }
+      toast.error('Could not save the switch — check your internet and try again')
+    }
   }
 
   // ─── Signature handlers ────────────────────────────────────────────────
