@@ -551,12 +551,15 @@ export function SettingsPanel() {
   const handleSavePreferences = async () => {
     setSavingPrefs(true)
     try {
+      // NOTE: desktopNotif/soundNotif are deliberately NOT sent here. The
+      // profile API merges preferences, and the Notifications switch is
+      // owned EXCLUSIVELY by the toggle (which verifies its save). Sending
+      // the switch from this stale-prone panel state used to flip it back
+      // to false behind the user's back — the "toggle does not persist" bug.
       const prefs = {
         emailDensity,
         previewLines,
         conversationView,
-        desktopNotif,
-        soundNotif,
         dateFormat,
       }
       const res = await fetch('/api/user/profile', {
@@ -598,18 +601,17 @@ export function SettingsPanel() {
     // this switch. A failed save used to be swallowed, so the UI showed ON
     // while the server kept OFF — exactly "test works but real emails never
     // ring". On any failure: revert the switch and say so loudly.
+    // Sends ONLY the two switch keys — the API merges, so the other
+    // preferences (density, date format…) can never be clobbered here and
+    // this call can never overwrite anything it does not own.
     try {
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           preferences: {
-            emailDensity,
-            previewLines,
-            conversationView,
             desktopNotif: desktop,
             soundNotif: sound,
-            dateFormat,
           },
         }),
       })

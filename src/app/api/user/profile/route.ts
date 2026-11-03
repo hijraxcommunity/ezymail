@@ -117,7 +117,35 @@ export async function PUT(request: NextRequest) {
       updateData.signature = signature;
     }
     if (preferences !== undefined) {
-      updateData.preferences = typeof preferences === 'string' ? preferences : JSON.stringify(preferences);
+      // MERGE with the stored preferences instead of replacing the object.
+      // Replace semantics let ANY stale or partial write (second device, an
+      // old Save button, a tab opened before a toggle) silently flip the
+      // Notifications switch back to false — the exact "toggle does not
+      // persist" report. With merge, keys a caller does not send keep their
+      // stored value, so only the toggle can move desktopNotif.
+      const current = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { preferences: true },
+      });
+      let existing: Record<string, unknown> = {};
+      try {
+        existing =
+          typeof current?.preferences === 'string'
+            ? JSON.parse(current.preferences)
+            : current?.preferences || {};
+      } catch {
+        existing = {};
+      }
+      let incoming: Record<string, unknown> | null = null;
+      if (typeof preferences === 'string') {
+        try { incoming = JSON.parse(preferences); } catch { incoming = null; }
+      } else if (preferences && typeof preferences === 'object') {
+        incoming = preferences;
+      }
+      if (!incoming || typeof incoming !== 'object') {
+        return NextResponse.json({ error: 'Invalid preferences payload' }, { status: 400 });
+      }
+      updateData.preferences = JSON.stringify({ ...existing, ...incoming });
     }
 
     if (Object.keys(updateData).length === 0) {

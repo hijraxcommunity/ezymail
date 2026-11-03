@@ -42,6 +42,7 @@ export async function GET() {
     const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
     return NextResponse.json({
       diagnostic: 'v1',
+      account: { userId: session.userId, email: session.email },
       senderConfigured: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY),
       vapidConfigured: Boolean(vapid && vapid.length > 20),
       tokenCount: subs.length,
@@ -102,7 +103,7 @@ export async function POST() {
     const token =
       typeof accessToken === 'string'
         ? accessToken
-        : (accessToken as { token?: string }).token
+        : (accessToken as unknown as { token?: string } | null | undefined)?.token
     if (!token) {
       return NextResponse.json(
         { step: 'google-auth', error: 'Could not obtain Google access token' },
@@ -127,7 +128,12 @@ export async function POST() {
       })
     }
 
-    const results = []
+    const results: Array<{
+      token: string
+      platform: string
+      httpStatus: number
+      fcmResponse: unknown
+    }> = []
     for (const s of subs) {
       const message = buildFcmMessage({
         fcmToken: s.fcmToken,
@@ -156,6 +162,7 @@ export async function POST() {
 
     return NextResponse.json({
       step: 'fcm-send',
+      account: { userId: session.userId, email: session.email },
       sentTo: results.length,
       desktopNotifPref,
       ...(desktopNotifPref === false

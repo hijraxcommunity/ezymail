@@ -50,6 +50,11 @@ export async function collectDeviceDiagnostics(): Promise<Record<string, unknown
     out.profileHttp = res.status
     if (res.ok) {
       const data = await res.json()
+      // Account identity — proves WHICH account this device is checking.
+      // The owner ran diagnostics on two devices that turned out to be two
+      // different accounts; without this field that is invisible in JSON.
+      out.accountEmail = data.user?.email || '(unknown)'
+      out.accountId = data.user?.id || '(unknown)'
       const prefs = data.user?.preferences
       const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
       out.desktopNotifPref =

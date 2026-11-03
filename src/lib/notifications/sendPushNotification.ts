@@ -3,6 +3,11 @@ import { GoogleAuth } from 'google-auth-library'
 
 const FCM_V1_URL = 'https://fcm.googleapis.com/v1/projects/customer-database-88e9f/messages:send'
 
+// Masked token for logs — never print a full FCM token
+function maskTokenLocal(t: string): string {
+  return t.length > 16 ? `${t.slice(0, 10)}…${t.slice(-4)}` : '***'
+}
+
 let authClient: GoogleAuth | null = null
 
 function getAuthClient(): GoogleAuth | null {
@@ -144,9 +149,17 @@ export async function sendPushNotification({
   avatarUrl,
   preview,
 }: PushPayload): Promise<void> {
+  // Structured trace of the REAL incoming-email dispatch path (Vercel logs,
+  // grep: [PushDispatch]). Every decision point logs one JSON line so a
+  // silent skip is distinguishable from a failed send.
+  const trace = (obj: Record<string, unknown>) =>
+    console.log('[PushDispatch] ' + JSON.stringify(obj))
+  trace({ step: 'start', recipientUserId, emailId })
+
   const auth = getAuthClient()
   if (!auth) {
     console.warn('[Push] FIREBASE_SERVICE_ACCOUNT_KEY not configured, skipping push notification')
+    trace({ step: 'skip', reason: 'sender-env-missing', recipientUserId })
     return
   }
 
@@ -163,8 +176,14 @@ export async function sendPushNotification({
           typeof recipient.preferences === 'string'
             ? JSON.parse(recipient.preferences)
             : recipient.preferences
+        const prefValue =
+          prefs && typeof prefs === 'object' && 'desktopNotif' in prefs
+            ? (prefs as { desktopNotif: unknown }).desktopNotif
+            : '(not set)'
+        trace({ step: 'prefs', recipientUserId, desktopNotif: prefValue })
         if (prefs && prefs.desktopNotif === false) {
           console.log('[Push] Skipped — recipient has desktop notifications disabled:', recipientUserId)
+          trace({ step: 'skip', reason: 'switch-off', recipientUserId, desktopNotif: prefValue })
           return
         }
       } catch {
@@ -180,10 +199,12 @@ export async function sendPushNotification({
 
     if (subscriptions.length === 0) {
       console.log('[Push] No push subscriptions found for user:', recipientUserId)
+      trace({ step: 'skip', reason: 'no-tokens', recipientUserId })
       return
     }
 
     console.log('[Push] Sending to', subscriptions.length, 'token(s) for user:', recipientUserId)
+    trace({ step: 'dispatch', recipientUserId, tokenCount: subscriptions.length, platforms: subscriptions.map((s) => s.platform || 'unknown') })
 
     const accessToken = await auth.getAccessToken()
     if (!accessToken) {
@@ -222,11 +243,28 @@ export async function sendPushNotification({
 
         const result = await res.json()
 
+        // Dead-token cleanup bookkeeping for the trace below
+        const errDetails = Array.isArray(result.error?.details) ? result.error.details : []
+        const fcmErrorCode = errDetails.map((d: { errorCode?: string }) => d?.errorCode).find(Boolean)
+        const isUnregistered =
+          result.error?.status === 'UNREGISTERED' ||
+          fcmErrorCode === 'UNREGISTERED' ||
+          /unregistered|Requested entity was not found/i.test(result.error?.message || '')
+
         if (!res.ok) {
           console.error('[Push] FCM API error:', res.status, JSON.stringify(result))
         } else {
           console.log('[Push] FCM success for token:', sub.fcmToken.substring(0, 20) + '...')
         }
+        trace({
+          step: 'fcm',
+          recipientUserId,
+          platform: sub.platform || 'unknown',
+          token: maskTokenLocal(sub.fcmToken),
+          httpStatus: res.status,
+          accepted: res.ok,
+          errorType: res.ok ? undefined : (fcmErrorCode || result.error?.status || 'unknown'),
+        })
 
         // Clean up dead tokens — ONLY true UNREGISTERED signals. NEVER delete
         // on INVALID_ARGUMENT: that means OUR payload was schema-invalid
@@ -236,12 +274,6 @@ export async function sendPushNotification({
         // message "Device unregistered." — the old check only matched
         // status==='UNREGISTERED', which never occurs, so dead tokens were
         // never purged and re-failed on every single send.
-        const errDetails = Array.isArray(result.error?.details) ? result.error.details : []
-        const fcmErrorCode = errDetails.map((d: { errorCode?: string }) => d?.errorCode).find(Boolean)
-        const isUnregistered =
-          result.error?.status === 'UNREGISTERED' ||
-          fcmErrorCode === 'UNREGISTERED' ||
-          /unregistered|Requested entity was not found/i.test(result.error?.message || '')
         if (result.error && isUnregistered) {
           await db.pushSubscription.deleteMany({
             where: { fcmToken: sub.fcmToken },
