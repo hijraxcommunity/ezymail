@@ -18,13 +18,21 @@ const messaging = firebase.messaging()
 
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
-  const notificationTitle = payload.notification?.title || 'New Email'
+  // Web messages are deliberately data-only (no top-level `notification`),
+  // so the Gmail-style display fields live in payload.data: sender as title,
+  // subject as body, expandable preview as the second line. The EzyMail logo
+  // (/logo.png) is a same-origin remote asset — it never travels in the
+  // payload, so it renders no matter how large the email is.
+  const d = payload.data || {}
+  const notificationTitle = d.title || payload.notification?.title || 'New Email'
+  const bodyText =
+    [d.body, d.preview].filter(Boolean).join('\n') || payload.notification?.body || ''
   const notificationOptions = {
-    body: payload.notification?.body || '',
+    body: bodyText,
     icon: '/logo.png',
     badge: '/logo.png',
-    data: payload.data || {},
-    tag: payload.data?.tag || 'ezy-email',
+    data: d,
+    tag: d.tag || 'ezy-email',
     renotify: true,
   }
 

@@ -6,7 +6,10 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildFcmMessage } from '../src/lib/notifications/sendPushNotification'
+import {
+  buildFcmMessage,
+  measureFcmMessageBytes,
+} from '../src/lib/notifications/sendPushNotification'
 
 const ARGS = { fcmToken: 'tok_test_123', senderName: 'Ali', subject: 'Salam', emailId: 'em_42' }
 
@@ -50,12 +53,16 @@ test('android display payload renders on EVERY apk (reliability fix)', () => {
   assert.equal(msg.message.android.notification.icon, 'ic_launcher')
 })
 
-test('android display payload has NO channelId — a missing channel silently drops the notification on Android 8+', () => {
+test('android display payload targets the app "New email" channel (created on every process start)', () => {
+  // Since 2026-11-03 (329c0e2) EzyMailApp.onCreate calls ensureChannel() on
+  // EVERY process start — including when FCM wakes the process in the
+  // background — so targeting 'ezy-emails' (IMPORTANCE_HIGH) is safe and
+  // avoids the disabled "Miscellaneous" default channel.
   const msg = buildFcmMessage(ARGS)
-  assert.equal(wire(msg.message.android.notification).channelId, undefined)
+  assert.equal(msg.message.android.notification.channelId, 'ezy-emails')
   // ...and the android token variant carries the same display block
   const androidMsg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
-  assert.equal(wire(androidMsg.message.android.notification).channelId, undefined)
+  assert.equal(androidMsg.message.android.notification.channelId, 'ezy-emails')
   assert.equal(androidMsg.message.android.notification.title, 'New email from Ali')
 })
 
@@ -109,4 +116,83 @@ test('message is JSON-serializable (FCM v1 wire-safe)', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(msg)), msg)
 })
 
-console.log('payload tests: all 11 passed')
+// ---------------------------------------------------------------------------
+// Payload size guard — FCM v1 rejects messages > 4096 bytes with HTTP 400
+// "Message is too large". Real-email dispatch passes the sender's avatar
+// (stored in the DB as a Base64 data URL) as avatarUrl, which blew the limit
+// on EVERY real email while the avatar-less diagnostic test kept working.
+// ---------------------------------------------------------------------------
+
+test('Base64 data-URL avatars never enter the payload (real-email 400 fix)', () => {
+  const hugeAvatar = 'data:image/jpeg;base64,' + 'A'.repeat(200_000)
+  const msg = buildFcmMessage({ ...ARGS, avatarUrl: hugeAvatar, preview: 'hello' })
+  assert.equal(wire(msg.message.data).avatar, undefined)
+  assert.ok(measureFcmMessageBytes(msg) <= 3584, 'payload must stay under the safe limit')
+})
+
+test('remote http(s) avatar URLs are kept for the Android native renderer', () => {
+  const msg = buildFcmMessage({ ...ARGS, avatarUrl: 'https://cdn.ezy.af/a/1.png' })
+  assert.equal(msg.message.data.avatar, 'https://cdn.ezy.af/a/1.png')
+})
+
+test('oversized remote avatar URLs are dropped too (512-char cap)', () => {
+  const msg = buildFcmMessage({ ...ARGS, avatarUrl: 'https://cdn.ezy.af/' + 'x'.repeat(600) })
+  assert.equal(wire(msg.message.data).avatar, undefined)
+})
+
+test('worst case (huge avatar + long subject + long preview) stays under the safe limit with navigation intact', () => {
+  const hugeAvatar = 'data:image/jpeg;base64,' + 'A'.repeat(1_000_000)
+  const longSubject = 'Salam kabir how are you doing today my good friend. '.repeat(200)
+  const longPreview = 'Body text with some content. '.repeat(5000)
+  const msg = buildFcmMessage({
+    ...ARGS,
+    avatarUrl: hugeAvatar,
+    subject: longSubject,
+    preview: longPreview,
+    senderEmail: 'sender@ezy.af',
+  })
+  const bytes = measureFcmMessageBytes(msg)
+  assert.ok(bytes <= 3584, `payload ${bytes} bytes must be <= 3584`)
+  // navigation data never touched
+  assert.equal(msg.message.data.url, '/?id=em_42')
+  assert.equal(msg.message.data.emailId, 'em_42')
+  assert.equal(msg.message.data.tag, 'email-em_42')
+  assert.ok(msg.message.data.title.length > 0)
+  assert.ok(msg.message.data.body.length > 0)
+  assert.ok(msg.message.data.body.length <= 160, 'subject capped at 160 chars')
+  // optional content was shed in a measurable order
+  assert.equal(wire(msg.message.data).avatar, undefined)
+})
+
+test('short email keeps full preview + remote avatar (no unnecessary reduction)', () => {
+  const msg = buildFcmMessage({
+    ...ARGS,
+    subject: 'Salam',
+    preview: 'Short body',
+    avatarUrl: 'https://cdn.ezy.af/a.png',
+    senderEmail: 'a@ezy.af',
+    androidDataOnly: true,
+  })
+  assert.equal(msg.message.data.preview, 'Short body')
+  assert.equal(msg.message.data.avatar, 'https://cdn.ezy.af/a.png')
+  assert.equal(msg.message.data.senderEmail, 'a@ezy.af')
+  assert.ok(measureFcmMessageBytes(msg) <= 3584)
+})
+
+test('realistic avatar payload (128x128 JPEG data URL as stored by /api/user/avatar) is rejected from the wire', () => {
+  // ~6 KB Base64 — typical sharp-resized avatar — previously pushed the real
+  // email payload past 4096 bytes while diag (no avatar) stayed tiny
+  const realAvatar = 'data:image/jpeg;base64,' + Buffer.from('x'.repeat(6000)).toString('base64')
+  const msg = buildFcmMessage({ ...ARGS, avatarUrl: realAvatar })
+  assert.equal(wire(msg.message.data).avatar, undefined)
+  assert.ok(measureFcmMessageBytes(msg) <= 3584)
+})
+
+test('measureFcmMessageBytes counts UTF-8 bytes (not JS chars)', () => {
+  const ascii = { a: 'abc' }
+  assert.equal(measureFcmMessageBytes(ascii), Buffer.byteLength(JSON.stringify(ascii), 'utf8'))
+  const unicode = { a: 'سلام' } // 4 Arabic letters = 8 UTF-8 bytes
+  assert.equal(measureFcmMessageBytes(unicode), Buffer.byteLength(JSON.stringify(unicode), 'utf8'))
+})
+
+console.log('payload tests: all passed (incl. size-guard battery)')

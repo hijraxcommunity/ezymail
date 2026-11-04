@@ -8,6 +8,61 @@ function maskTokenLocal(t: string): string {
   return t.length > 16 ? `${t.slice(0, 10)}…${t.slice(-4)}` : '***'
 }
 
+// ---------------------------------------------------------------------------
+// Payload size guard — FCM v1 rejects any message whose serialized JSON is
+// larger than 4096 bytes with HTTP 400 INVALID_ARGUMENT "Message is too
+// large. The maximum is 4K (4096 bytes)."
+//
+// User avatars are stored in the database as Base64 data URLs
+// (src/app/api/user/avatar/route.ts) and the real-email dispatch passes that
+// string in as avatarUrl. A ~128x128 JPEG is 3-8 KB raw → 4-11 KB Base64,
+// which 400'd EVERY real incoming email while the avatar-less diagnostic
+// payload (POST /api/push/diag) stayed under the limit and returned 200 —
+// exactly "test rings, real email silent".
+//
+// Guards (all inside buildFcmMessage, the single choke point for both paths):
+//   - data: / inline Base64 avatars are DROPPED. They never rendered on
+//     Android anyway (java.net.URL cannot open data: URIs → the Gmail-style
+//     letter-avatar fallback already shows) and the web service worker never
+//     reads data.avatar (it always renders /logo.png). Nothing visible
+//     changes on either platform.
+//   - remote http(s) avatar URLs are KEPT (EzyMailNotification.fetchBitmap
+//     renders them) but must be ≤ 512 chars.
+//   - sender name, subject, preview and sender email are whitespace-collapsed
+//     and length-capped.
+//   - a final measured fit loop sheds OPTIONAL content first (avatar →
+//     preview → senderEmail → subject text) and never touches navigation
+//     data (url / emailId / tag / title), so tapping the notification always
+//     opens the correct email.
+// ---------------------------------------------------------------------------
+const FCM_MAX_MESSAGE_BYTES = 4096
+const FCM_SAFE_MESSAGE_BYTES = 3584 // 12.5% headroom under the hard limit
+const MAX_SENDER_NAME_CHARS = 80
+const MAX_SUBJECT_CHARS = 160
+const MAX_PREVIEW_CHARS = 200
+const MAX_AVATAR_URL_CHARS = 512
+const MAX_SENDER_EMAIL_CHARS = 254
+
+const payloadEncoder = new TextEncoder()
+
+/** Serialized UTF-8 byte size of the outgoing FCM v1 JSON body. */
+export function measureFcmMessageBytes(message: unknown): number {
+  return payloadEncoder.encode(JSON.stringify(message)).length
+}
+
+function oneLine(value: string, maxChars: number): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, maxChars)
+}
+
+/** Only compact remote URLs may travel in the payload — never inline Base64. */
+function safeAvatarUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!/^https?:\/\//i.test(trimmed)) return undefined
+  if (trimmed.length > MAX_AVATAR_URL_CHARS) return undefined
+  return trimmed
+}
+
 let authClient: GoogleAuth | null = null
 
 function getAuthClient(): GoogleAuth | null {
@@ -83,20 +138,20 @@ export function buildFcmMessage({
   preview,
   androidDataOnly,
 }: FcmTokenPayload) {
-  const body = subject || '(No subject)'
-  const data: Record<string, string> = {
-    url: `/?id=${emailId}`,
-    emailId,
-    tag: `email-${emailId}`,
-    // Web SW renders data.title verbatim → keep the classic wording there.
-    // Android's native renderer wants the bare sender name (Gmail style).
-    title: androidDataOnly ? senderName : `New email from ${senderName}`,
-    body,
-  }
-  if (preview) data.preview = preview
-  if (senderEmail) data.senderEmail = senderEmail
-  if (avatarUrl) data.avatar = avatarUrl
-  return {
+  // Size-guarded inputs — collapse whitespace, cap lengths, drop inline Base64
+  const safeSender = oneLine(senderName || 'Someone', MAX_SENDER_NAME_CHARS) || 'Someone'
+  const safeSubject = oneLine(subject || '', MAX_SUBJECT_CHARS)
+  const safePreview = preview ? oneLine(preview, MAX_PREVIEW_CHARS) : undefined
+  const safeAvatar = safeAvatarUrl(avatarUrl)
+  const safeSenderEmail =
+    senderEmail && senderEmail.trim().length > 0 && senderEmail.length <= MAX_SENDER_EMAIL_CHARS
+      ? oneLine(senderEmail, MAX_SENDER_EMAIL_CHARS)
+      : undefined
+  const body = safeSubject || '(No subject)'
+
+  // Wire message assembly — parameterized so the fit loop below can rebuild
+  // the exact same structure with progressively less OPTIONAL content.
+  const assemble = (data: Record<string, string>, bodyText: string) => ({
     message: {
       token: fcmToken,
       data,
@@ -110,8 +165,8 @@ export function buildFcmMessage({
         // notification shows on every APK (see builder comment above).
         priority: 'high' as const,
         notification: {
-          title: `New email from ${senderName}`,
-          body,
+          title: `New email from ${safeSender}`,
+          body: bodyText,
           defaultSound: true,
           defaultVibrateTimings: true,
           // Must be an in-app drawable resource name, not a URL.
@@ -130,14 +185,60 @@ export function buildFcmMessage({
       apns: {
         payload: {
           aps: {
-            alert: { title: `New email from ${senderName}`, body },
+            alert: { title: `New email from ${safeSender}`, body: bodyText },
             sound: 'default',
             badge: 1,
           },
         },
       },
     },
+  })
+
+  const dataFields = (withPreview?: string, withAvatar?: string, withSenderEmail?: string) => {
+    const data: Record<string, string> = {
+      url: `/?id=${emailId}`,
+      emailId,
+      tag: `email-${emailId}`,
+      // Web SW renders data.title verbatim → keep the classic wording there.
+      // Android's native renderer wants the bare sender name (Gmail style).
+      title: androidDataOnly ? safeSender : `New email from ${safeSender}`,
+      body,
+    }
+    if (withPreview) data.preview = withPreview
+    if (withSenderEmail) data.senderEmail = withSenderEmail
+    if (withAvatar) data.avatar = withAvatar
+    return data
   }
+
+  // Fit-to-size loop: start with everything the notification UI can use, then
+  // shed OPTIONAL content (avatar → preview 100 → preview 50 → senderEmail →
+  // preview → subject text) until the serialized UTF-8 size is safely below
+  // FCM's 4096-byte limit. Navigation data (url / emailId / tag / title) is
+  // NEVER dropped or truncated — every variant keeps the exact deep link, so
+  // tapping the notification always opens the correct email.
+  const data = dataFields(safePreview, safeAvatar, safeSenderEmail)
+  let bodyText = body
+  const measure = () => measureFcmMessageBytes(assemble({ ...data }, bodyText))
+  const reductions: Array<() => boolean> = [
+    () => delete data.avatar, // inline Base64 or remote — optional either way
+    () => (data.preview ? ((data.preview = data.preview.slice(0, 100)), true) : false),
+    () => (data.preview ? ((data.preview = data.preview.slice(0, 50)), true) : false),
+    () => delete data.senderEmail,
+    () => delete data.preview,
+    // Last resort (caps make this unreachable today): shrink the subject text
+    () => {
+      if (bodyText.length <= 40) return false
+      bodyText = bodyText.slice(0, Math.max(40, Math.floor(bodyText.length / 2)))
+      return true
+    },
+  ]
+  let message = assemble({ ...data }, bodyText)
+  for (const reduce of reductions) {
+    if (measure() <= FCM_SAFE_MESSAGE_BYTES) break
+    reduce()
+    message = assemble({ ...data }, bodyText)
+  }
+  return message
 }
 
 export async function sendPushNotification({
@@ -243,6 +344,10 @@ export async function sendPushNotification({
 
         const result = await res.json()
 
+        // Serialized UTF-8 size of exactly what we sent — the trace pairs it
+        // with the FCM status so a size rejection is visible without guessing
+        const payloadBytes = measureFcmMessageBytes(message)
+
         // Dead-token cleanup bookkeeping for the trace below
         const errDetails = Array.isArray(result.error?.details) ? result.error.details : []
         const fcmErrorCode = errDetails.map((d: { errorCode?: string }) => d?.errorCode).find(Boolean)
@@ -261,9 +366,16 @@ export async function sendPushNotification({
           recipientUserId,
           platform: sub.platform || 'unknown',
           token: maskTokenLocal(sub.fcmToken),
+          payloadBytes,
           httpStatus: res.status,
           accepted: res.ok,
           errorType: res.ok ? undefined : (fcmErrorCode || result.error?.status || 'unknown'),
+          // FCM's own rejection reason (e.g. "Message is too large. The
+          // maximum is 4K (4096 bytes).") — capped, contains no user content
+          fcmError:
+            res.ok
+              ? undefined
+              : oneLine(String(result.error?.message || ''), 200) || undefined,
         })
 
         // Clean up dead tokens — ONLY true UNREGISTERED signals. NEVER delete
