@@ -103,13 +103,18 @@ interface FcmTokenPayload {
   senderEmail?: string
   avatarUrl?: string
   preview?: string
-  /** True for Android-app tokens: data.title carries the bare sender name
-   *  (Gmail style) instead of "New email from ...". The display notification
-   *  block below is ALWAYS sent — data-only messages silently vanish on any
-   *  APK without the native Gmail-style renderer (owner-reported: after the
-   *  expandable-notification change, phones stopped showing notifications
-   *  entirely). Reliability first: FCM displays it, and the app's renderer
-   *  upgrades the look when it can. */
+  /** True for Android-app tokens: the message is pure DATA — no
+   *  android.notification block at all — so FCM never auto-posts its plain
+   *  title/body notification and the app's native Gmail-style renderer
+   *  (EzyMailMessagingService → EzyMailNotification) builds the rich one in
+   *  BOTH foreground and background: BigTextStyle expandable preview, sender
+   *  avatar, Archive / Mark-as-read / Reply buttons. With a display block
+   *  present, FCM itself posts a plain notification when the app is in the
+   *  background and onMessageReceived never fires — that is exactly the
+   *  "not expandable, no avatar, no buttons" look the owner reported
+   *  2026-11-05. data.title carries the bare sender name (Gmail style).
+   *  Silence risk guard: the renderer wraps everything in try/catch and
+   *  posts a plain fallback notification if the rich build ever fails. */
   androidDataOnly?: boolean
 }
 
@@ -119,15 +124,19 @@ interface FcmTokenPayload {
 // browser auto-displays the message and onBackgroundMessage never fires,
 // so our sw.js click handler never sees data.url. Data-only guarantees
 // sw.js shows the notification itself with data.url attached (deep link).
-// Android gets BOTH the data payload AND a display notification — pure
-// data-only messages are dropped silently by every APK that lacks the
-// native Gmail-style renderer (regression the owner reported: no
-// notifications at all after the expandable-notification change). No
-// channelId here: a channel that does not exist on the device makes
-// Android 8+ silently DROP the notification, and the channel is only
-// created by the native renderer in the app process. Omitting it lets FCM
-// use the always-present default channel, so the notification shows on
-// every APK. APNs keeps the classic alert payload (no iOS app exists yet).
+// Android is data-only too (androidDataOnly, since 2026-11-05): any
+// android.notification block makes FCM auto-post a PLAIN notification when
+// the app is backgrounded and suppresses onMessageReceived — the owner saw
+// exactly that (no expand, no avatar, no buttons). Data-only lets the
+// native renderer build the Gmail-style notification everywhere. The old
+// 2026-10-27 "no notifications at all" failure of data-only was the
+// previous APK lacking the renderer plus a channel that only existed after
+// app start — both fixed since (channel now ensured on EVERY process start,
+// EzyMailApp.onCreate; renderer ships a plain fallback if its rich build
+// throws). The display-block branch below is kept ONLY for tokens that are
+// neither 'android' nor web — a belt-and-braces default so an unknown
+// platform still gets something FCM can render. APNs keeps the classic
+// alert payload (no iOS app exists yet).
 export function buildFcmMessage({
   fcmToken,
   senderName,
@@ -158,30 +167,33 @@ export function buildFcmMessage({
       webpush: {
         headers: { Urgency: 'high' },
       },
-      android: {
-        // FCM v1 schema: priority lives on AndroidConfig ONLY —
-        // AndroidNotification has no priority field (400 INVALID_ARGUMENT
-        // in production 2026-10-22). Display block always present so the
-        // notification shows on every APK (see builder comment above).
-        priority: 'high' as const,
-        notification: {
-          title: `New email from ${safeSender}`,
-          body: bodyText,
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          // Must be an in-app drawable resource name, not a URL.
-          icon: 'ic_launcher',
-          // Target the app's own "New email" channel (IMPORTANCE_HIGH) instead
-          // of the FCM default "Miscellaneous" channel. Safe since 2026-11-03:
-          // EzyMailApp.onCreate calls EzyMailNotification.ensureChannel() on
-          // EVERY process start — including when FCM wakes the process in the
-          // background — so the channel always exists before this lands.
-          // Rationale: the owner's repeated ON/OFF toggles left the default
-          // category disabled while the app-level permission stayed "granted",
-          // which showed exactly as "works with app open, silent when closed".
-          channelId: 'ezy-emails',
-        },
-      },
+      android: androidDataOnly
+        ? {
+            // Data-only: FCM must NOT auto-post anything — the native
+            // renderer builds the Gmail-style notification (see above).
+            // High priority makes Android wake the app process even when
+            // backgrounded/killed so onMessageReceived runs.
+            priority: 'high' as const,
+          }
+        : {
+            // Fallback branch for unknown platforms (see builder comment).
+            // FCM v1 schema: priority lives on AndroidConfig ONLY —
+            // AndroidNotification has no priority field (400 INVALID_ARGUMENT
+            // in production 2026-10-22).
+            priority: 'high' as const,
+            notification: {
+              title: `New email from ${safeSender}`,
+              body: bodyText,
+              defaultSound: true,
+              defaultVibrateTimings: true,
+              // Must be an in-app drawable resource name, not a URL.
+              icon: 'ic_launcher',
+              // Target the app's own "New email" channel (IMPORTANCE_HIGH).
+              // Safe: EzyMailApp.onCreate calls ensureChannel() on EVERY
+              // process start — including background FCM wake-ups.
+              channelId: 'ezy-emails',
+            },
+          },
       apns: {
         payload: {
           aps: {

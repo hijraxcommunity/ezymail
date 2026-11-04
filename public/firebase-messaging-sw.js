@@ -29,11 +29,17 @@ messaging.onBackgroundMessage((payload) => {
     [d.body, d.preview].filter(Boolean).join('\n') || payload.notification?.body || ''
   const notificationOptions = {
     body: bodyText,
-    icon: '/logo.png',
+    // Sender photo when the payload carried a compact remote URL; the logo
+    // otherwise. (Base64 avatars never reach the payload — FCM 4KB guard.)
+    icon: d.avatar || '/logo.png',
     badge: '/logo.png',
     data: d,
     tag: d.tag || 'ezy-email',
     renotify: true,
+    // Gmail-style Reply button (Chrome on Android; desktop browsers ignore
+    // notification actions). Tapping it opens the app's compose window with
+    // the reply pre-filled — same deep link the Android app uses.
+    actions: [{ action: 'reply', title: 'Reply' }],
   }
 
   self.registration.showNotification(notificationTitle, notificationOptions)
@@ -43,7 +49,13 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const urlToOpen = event.notification.data?.url || '/'
+  const d = event.notification.data || {}
+  // Reply action → compose pre-filled from that email (?compose=reply&id=…);
+  // everything else (card tap) → the email itself (?id=…)
+  const urlToOpen =
+    event.action === 'reply' && d.emailId
+      ? `/?compose=reply&id=${encodeURIComponent(d.emailId)}`
+      : d.url || '/'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

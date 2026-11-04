@@ -41,32 +41,35 @@ test('token is bound to the message', () => {
   assert.equal(msg.message.token, 'tok_test_123')
 })
 
-test('android display payload renders on EVERY apk (reliability fix)', () => {
+test('android data-only: NO android.notification block (native renderer posts the rich one)', () => {
+  // Since 2026-11-05: any android.notification block makes FCM auto-post a
+  // PLAIN notification in background and suppresses onMessageReceived — the
+  // owner saw "not expandable, no avatar, no buttons". Android tokens are
+  // pure data; the native renderer builds the Gmail-style notification in
+  // foreground AND background (with a plain fallback if the rich build
+  // throws, so it can never be silent again).
+  const msg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
+  assert.equal(wire(msg.message.android).notification, undefined)
+  assert.equal(msg.message.android.priority, 'high')
+  assert.ok(msg.message.data && typeof msg.message.data === 'object')
+})
+
+test('unknown-platform fallback branch still carries a display notification', () => {
+  // Belt-and-braces: tokens that are neither 'android' nor web get the
+  // classic FCM-rendered display block so they are never silent.
   const msg = buildFcmMessage(ARGS)
   assert.equal(msg.message.android.priority, 'high')
-  assert.equal(msg.message.android.notification.title, 'New email from Ali')
-  assert.equal(msg.message.android.notification.body, 'Salam')
+  assert.equal(wire(msg.message.android.notification).title, 'New email from Ali')
+  assert.equal(wire(msg.message.android.notification).body, 'Salam')
   // Regression lock (prod 400 INVALID_ARGUMENT 2026-10-22): FCM v1 AndroidNotification
   // has NO priority field — priority is AndroidConfig-level only
   assert.equal(wire(msg.message.android.notification).priority, undefined)
   // icon must be an in-app drawable resource name, never a URL
-  assert.equal(msg.message.android.notification.icon, 'ic_launcher')
+  assert.equal(wire(msg.message.android.notification).icon, 'ic_launcher')
+  assert.equal(wire(msg.message.android.notification).channelId, 'ezy-emails')
 })
 
-test('android display payload targets the app "New email" channel (created on every process start)', () => {
-  // Since 2026-11-03 (329c0e2) EzyMailApp.onCreate calls ensureChannel() on
-  // EVERY process start — including when FCM wakes the process in the
-  // background — so targeting 'ezy-emails' (IMPORTANCE_HIGH) is safe and
-  // avoids the disabled "Miscellaneous" default channel.
-  const msg = buildFcmMessage(ARGS)
-  assert.equal(msg.message.android.notification.channelId, 'ezy-emails')
-  // ...and the android token variant carries the same display block
-  const androidMsg = buildFcmMessage({ ...ARGS, androidDataOnly: true })
-  assert.equal(androidMsg.message.android.notification.channelId, 'ezy-emails')
-  assert.equal(androidMsg.message.android.notification.title, 'New email from Ali')
-})
-
-test('android app token: display block + bare sender title in data (Gmail style for the native renderer)', () => {
+test('android app token: data-only + bare sender title (Gmail style for the native renderer)', () => {
   const msg = buildFcmMessage({
     ...ARGS,
     senderEmail: 'ali@ezy.af',
@@ -74,9 +77,8 @@ test('android app token: display block + bare sender title in data (Gmail style 
     preview: 'Salam, how are you doing today my friend?',
     androidDataOnly: true,
   })
-  // Display block ALWAYS present (data-only messages vanish on APKs
-  // without the native renderer — owner-reported regression)
-  assert.notEqual(msg.message.android.notification, undefined)
+  // Pure data — FCM never auto-posts (renderer does, in any app state)
+  assert.equal(wire(msg.message.android).notification, undefined)
   assert.equal(msg.message.android.priority, 'high')
   // Gmail style: sender name IS the title in data, subject is the text
   assert.equal(msg.message.data.title, 'Ali')
@@ -107,7 +109,6 @@ test('apns payload carries alert + sound + badge', () => {
 test('empty subject falls back to (No subject)', () => {
   const msg = buildFcmMessage({ ...ARGS, subject: '' })
   assert.equal(msg.message.data.body, '(No subject)')
-  assert.equal(msg.message.android.notification.body, '(No subject)')
   assert.equal(msg.message.apns.payload.aps.alert.body, '(No subject)')
 })
 

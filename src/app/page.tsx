@@ -171,6 +171,8 @@ export default function HomePage() {
   }, [])
 
   // ─── Deep link: /?id=<emailId> opens that email (push notification taps) ─
+  //           /?compose=reply&id=<emailId> opens the reply compose pre-filled
+  //           (Gmail-style Reply button on notification cards).
   // Runs once after auth resolves; EmailDetail self-fetches by id, so no
   // dependency on the inbox list having loaded.
   const deepLinkHandledRef = useRef(false)
@@ -178,11 +180,26 @@ export default function HomePage() {
     if (isCheckingAuth || !isAuthenticated || deepLinkHandledRef.current) return
     deepLinkHandledRef.current = true
     try {
-      const id = new URLSearchParams(window.location.search).get('id')
+      const params = new URLSearchParams(window.location.search)
+      const id = params.get('id')
       if (!id) return
       // Email deep links only exist in the personal mail UI
       if (user && (user.role === 'admin' || user.accountType === 'business')) {
         window.history.replaceState({ ezView: true }, '', '/')
+        return
+      }
+      // Reply from a notification card: open the compose window pre-filled
+      // from the real email (To / Subject / quoted body). The email is
+      // fetched fresh so the quoted body is complete — not the size-capped
+      // preview that traveled in the push payload.
+      if (params.get('compose') === 'reply') {
+        window.history.replaceState({ ezView: true }, '', '/')
+        fetch(`/api/emails/${encodeURIComponent(id)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.email) setReplyToEmail(data.email, 'reply')
+          })
+          .catch(() => { /* silent — compose simply doesn't open */ })
         return
       }
       setCurrentFolder('inbox')
@@ -191,7 +208,7 @@ export default function HomePage() {
       // the back-navigation guard state intact
       window.history.replaceState({ ezView: true }, '', '/')
     } catch { /* silent */ }
-  }, [isCheckingAuth, isAuthenticated, user, setCurrentFolder, setSelectedEmailId])
+  }, [isCheckingAuth, isAuthenticated, user, setCurrentFolder, setSelectedEmailId, setReplyToEmail])
 
   // ─── Fetch emails when authenticated ─────────────────────────────────────
   const fetchEmails = useCallback(async () => {

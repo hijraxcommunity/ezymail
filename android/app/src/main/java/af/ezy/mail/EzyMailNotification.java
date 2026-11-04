@@ -31,9 +31,17 @@ import java.util.Map;
  *   - status bar: clean white envelope glyph (ic_notification), never the
  *     colorful launcher icon
  *
- * Reply opens the email in the app (deep link via MainActivity); Archive and
- * Mark as read run directly on the device through NotificationActionReceiver
- * using the WebView session cookie, with the app-open fallback on failure.
+ * Reply opens the app's compose window with the reply pre-filled (deep link
+ * /?compose=reply&id=<emailId> — the web app fetches the full email and opens
+ * the compose with To / Subject / quoted body). Archive and Mark as read run
+ * directly on the device through NotificationActionReceiver using the WebView
+ * session cookie, with the app-open fallback on failure.
+ *
+ * Never silent: show() wraps the rich build in try/catch — if ANYTHING in
+ * the rich path throws (avatar, style, actions), a plain fallback
+ * notification with the same tap-to-open deep link is posted instead. This
+ * guards the data-only server change: with no android.notification block,
+ * FCM posts nothing on its own — this class is the only thing that shows.
  */
 public final class EzyMailNotification {
 
@@ -52,12 +60,29 @@ public final class EzyMailNotification {
         String emailId = data.get("emailId");
         String senderName = data.get("title");
         String subject = data.get("body");
-        String preview = data.get("preview");
-        String avatarUrl = data.get("avatar");
         if (emailId == null || senderName == null) return;
         if (subject == null || subject.trim().isEmpty()) subject = "(No subject)";
 
         ensureChannel(context);
+        try {
+            showRich(context, data, emailId, senderName, subject);
+        } catch (Exception richFailed) {
+            // Never silent: data-only FCM messages post NOTHING on their own,
+            // so any failure here must still land a (plain) notification.
+            try {
+                showFallback(context, emailId, senderName, subject);
+            } catch (Exception ignored) {
+                // No notification is possible — nothing else to try.
+            }
+        }
+    }
+
+    /** Gmail-style rich notification: BigTextStyle, avatar, three actions. */
+    private static void showRich(
+            Context context, Map<String, String> data,
+            String emailId, String senderName, String subject) {
+        String preview = data.get("preview");
+        String avatarUrl = data.get("avatar");
 
         Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(SERVER_BASE + "/?id=" + emailId));
         open.setPackage(context.getPackageName());
@@ -102,14 +127,53 @@ public final class EzyMailNotification {
             R.drawable.ic_action_read,
             "Mark as read",
             actionIntent(context, NotificationActionReceiver.ACTION_MARK_READ, emailId));
-        // Reply — opens the email in the app (reply from the compose there)
+        // Reply — opens the compose window with the reply pre-filled
+        // (?compose=reply&id=<emailId>; the web app fetches the email and
+        // opens the compose with To / Subject / quoted body filled in).
+        Intent reply = new Intent(Intent.ACTION_VIEW,
+            Uri.parse(SERVER_BASE + "/?compose=reply&id=" + emailId));
+        reply.setPackage(context.getPackageName());
+        reply.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent replyIntent = PendingIntent.getActivity(
+            context,
+            ("reply" + emailId).hashCode(),
+            reply,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
         builder.addAction(
             R.drawable.ic_action_reply,
             "Reply",
-            contentIntent);
+            replyIntent);
 
         NotificationManagerCompat.from(context)
             .notify(NOTIFICATION_ID_BASE + (emailId.hashCode() & 0xFFFF), builder.build());
+    }
+
+    /** Plain fallback — same look the FCM display block used to produce.
+     *  Only reached when the rich build throws (never in normal flow). */
+    private static void showFallback(
+            Context context, String emailId, String senderName, String subject) {
+        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(SERVER_BASE + "/?id=" + emailId));
+        open.setPackage(context.getPackageName());
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+            context,
+            emailId.hashCode(),
+            open,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        NotificationCompat.Builder fallback =
+            new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(senderName)
+                .setContentText(subject)
+                .setContentIntent(contentIntent)
+                .setCategory(NotificationCompat.CATEGORY_EMAIL)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setDefaults(NotificationCompat.DEFAULT_ALL);
+        NotificationManagerCompat.from(context)
+            .notify(NOTIFICATION_ID_BASE + (emailId.hashCode() & 0xFFFF), fallback.build());
     }
 
     private static PendingIntent actionIntent(
