@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Minimal equivalents of the Tailwind utilities used by page.tsx + mail-header.tsx */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  .h-dvh { height: 100vh; }
+  .flex-col { flex-direction: column; }
+  .flex { display: flex; }
+  .flex-1 { flex: 1 1 0%; }
+  .items-center { align-items: center; }
+  .shrink-0 { flex-shrink: 0; }
+  .min-h-0 { min-height: 0; }
+  .overflow-hidden { overflow: hidden; }
+  .px-4 { padding-left: 1rem; padding-right: 1rem; }
+  .gap-3 { gap: 0.75rem; }
+  .h-14 { height: 3.5rem; }
+  .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+  .border-gray-200 { border-bottom-color: #e5e7eb; }
+  .bg-gray-50 { background-color: #f9fafb; }
+  .bg-white { background-color: #ffffff; }
+  .z-30 { z-index: 30; }
+
+  /* Exact copy of the EzyMail elevation system (src/app/globals.css lines 167-179) */
+  .elevation-2 {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+  }
+  .transition-shadow { transition-property: box-shadow; }
+  .duration-200 { transition-duration: 200ms; }
+
+  /* email rows to fill the content area */
+  .row { height: 56px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; padding: 0 1rem; color: #374151; font-family: sans-serif; font-size: 14px; }
+  .search-pill { flex: 1; max-width: 560px; height: 36px; border-radius: 9999px; background: #f3f4f6; display: flex; align-items: center; padding: 0 14px; color: #9ca3af; font-family: sans-serif; font-size: 14px; }
+  .logo { font-family: sans-serif; font-weight: 700; font-size: 18px; white-space: nowrap; }
+  .logo .b { color: #4285F4; } .logo .m { color: #1F1F1F; }
+  .avatar { width: 32px; height: 32px; border-radius: 9999px; background: #D3E3FD; color: #4285F4; display: flex; align-items: center; justify-content: center; font-family: sans-serif; font-size: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+<!-- Structure mirrors src/app/page.tsx lines 372-406 -->
+<div class="h-dvh flex flex-col bg-gray-50 overflow-hidden">
+  <div class="shrink-0">
+    <!-- header class = mail-header.tsx line 381 (BEFORE: exactly as deployed) -->
+    <header id="hdr" class="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-3 shrink-0 z-30 elevation-2 transition-shadow duration-200">
+      <span class="logo"><span class="b">Ezy</span><span class="m">Mail</span></span>
+      <div class="flex flex-1" style="justify-content:center">
+        <div class="search-pill">Search... (e.g. from:ahmad is:unread)</div>
+      </div>
+      <div class="avatar">NA</div>
+    </header>
+  </div>
+  <div class="flex-1 flex overflow-hidden min-h-0" style="opacity:1">
+    <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-white overflow-hidden">
+      <div class="row">Muhammad Wasil Amiri — Check CC</div>
+      <div class="row">Ahmad Nazir — Weekly report</div>
+      <div class="row">Seyam — Meeting notes</div>
+      <div class="row">Mudasir Khan — Invoice #42</div>
+      <div class="row">Team Ezy — Welcome</div>
+      <div class="row">Naveed — Production deploy</div>
+      <div class="row">Support — Ticket closed</div>
+      <div class="row">Billing — Receipt</div>
+      <div class="row">Wasil — Re: Check CC</div>
+      <div class="row">HR — Schedule update</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
