@@ -33,7 +33,7 @@ public class MainActivity extends BridgeActivity {
             // Gmail-like: opening the email (content tap) or the reply compose
             // (Reply action tap) clears that email's notification card. The
             // card's id is derived from the emailId exactly like the renderer
-            // and NotificationActionReceiver compute it.
+            // and NotificationActionActivity compute it.
             cancelEmailNotification(url);
             final String target = url;
             bridge.getWebView().post(() -> bridge.getWebView().loadUrl(target));

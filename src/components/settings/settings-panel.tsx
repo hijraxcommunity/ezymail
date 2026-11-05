@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
+import { getDevicePushToken } from '@/components/push-notification-setup'
 import { Capacitor } from '@capacitor/core'
 import {
   X, Sun, Moon, Monitor, Bell, Save, Loader2, Camera,
@@ -821,7 +822,14 @@ export function SettingsPanel() {
                 <button
                   type="button"
                   onClick={async () => {
-                    await fetch('/api/auth/logout', { method: 'POST' })
+                    // Carry the device's push token so the logout route
+                    // deletes the row server-side (post-logout cleanup
+                    // 401'd — see profile-menu).
+                    await fetch('/api/auth/logout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ fcmToken: getDevicePushToken() || undefined }),
+                    })
                     toast.success('Logged out')
                     useAppStore.getState().logout()
                   }}

@@ -307,7 +307,7 @@ export async function POST(request: NextRequest) {
     if (!isScheduled) {
       const sender = await db.user.findUnique({
         where: { id: session.userId },
-        select: { firstName: true, lastName: true, email: true, avatar: true },
+        select: { id: true, firstName: true, lastName: true, email: true, avatar: true },
       });
       const senderName = sender
         ? `${sender.firstName} ${sender.lastName}`
@@ -315,6 +315,19 @@ export async function POST(request: NextRequest) {
       // Gmail-style notification preview: collapsed body text (~200 chars)
       const preview =
         emailBody.trim().replace(/\s+/g, ' ').slice(0, 200) || undefined;
+      // Avatar as a compact remote URL, never inline Base64. The DB stores
+      // the avatar as a data URL — that would blow FCM's 4096-byte limit, so
+      // safeAvatarUrl() would drop it and the notification showed only the
+      // letter-avatar fallback (owner report: "only letter inside avatar").
+      // Serving the same bytes from the short /api/user/avatar/<id> URL keeps
+      // the real sender image AND the payload small (remote URLs survive the
+      // size guard up to 512 chars).
+      const APP_BASE_URL = 'https://ezymail.vercel.app';
+      const avatarUrl = sender?.avatar?.startsWith('http')
+        ? sender.avatar
+        : sender?.avatar?.startsWith('data:')
+          ? `${APP_BASE_URL}/api/user/avatar/${sender.id}`
+          : undefined;
 
       after(() =>
         sendPushNotification({

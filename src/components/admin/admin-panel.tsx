@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { getDevicePushToken } from '@/components/push-notification-setup'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -223,7 +224,13 @@ export function AdminPanel() {
 
   const handleSignOut = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      // Carry the device's push token so the logout route deletes the row
+      // server-side (post-logout cleanup 401'd — see profile-menu).
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fcmToken: getDevicePushToken() || undefined }),
+      })
       toast.success('Logged out')
       logout()
     } catch {

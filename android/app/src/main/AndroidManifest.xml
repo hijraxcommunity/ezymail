@@ -38,9 +38,16 @@
             </intent-filter>
         </service>
 
-        <!-- Handles Archive / Mark-as-read buttons on the notification -->
-        <receiver
-            android:name="af.ezy.mail.NotificationActionReceiver"
+        <!-- Handles Archive / Mark-as-read buttons on the notification:
+             an invisible ACTIVITY, not a broadcast receiver — Android 12+
+             blocks receiver trampolines from starting activities after a
+             notification tap, so the old receiver path made the buttons
+             look dead. Tapping the button launches this activity directly
+             (the allowed pattern); it patches the email, clears the card,
+             toasts the result and finishes without any UI. -->
+        <activity
+            android:name="af.ezy.mail.NotificationActionActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:exported="false" />
 
         <!-- TEMPORARY diagnostic screen: shows the crash report on screen

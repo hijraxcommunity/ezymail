@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getDevicePushToken } from '@/components/push-notification-setup'
 import { useAppStore } from '@/store/use-app-store'
 import { BusinessDashboard } from './business-dashboard'
 import { BusinessEmail } from './business-email'
@@ -179,7 +180,15 @@ export function BusinessApp() {
 
   async function handleLogout() {
     setLoggingOut(true)
-    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* silent */ }
+    try {
+      // Carry the device's push token so the logout route deletes the row
+      // server-side (post-logout cleanup 401'd — see profile-menu).
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fcmToken: getDevicePushToken() || undefined }),
+      })
+    } catch { /* silent */ }
     useAppStore.getState().logout()
   }
 

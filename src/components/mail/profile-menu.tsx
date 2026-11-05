@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
+import { getDevicePushToken } from '@/components/push-notification-setup'
 import { useAppStore } from '@/store/use-app-store'
 
 interface ProfileMenuProps {
@@ -54,7 +55,15 @@ export function ProfileMenu({ open, onOpenChange }: ProfileMenuProps) {
 
   const handleSignOut = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      // Carry this device's push token — the logout route deletes the token
+      // row server-side in the same request (post-logout cleanup 401'd and
+      // left the row under the old account, so the device kept ringing for
+      // that account's new mail).
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fcmToken: getDevicePushToken() || undefined }),
+      })
       toast.success('Logged out')
       logout()
     } catch {

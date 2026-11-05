@@ -34,8 +34,16 @@ import java.util.Map;
  * Reply opens the app's compose window with the reply pre-filled (deep link
  * /?compose=reply&id=<emailId> — the web app fetches the full email and opens
  * the compose with To / Subject / quoted body). Archive and Mark as read run
- * directly on the device through NotificationActionReceiver using the WebView
+ * directly on the device through NotificationActionActivity using the WebView
  * session cookie, with the app-open fallback on failure.
+ *
+ * EVERY PendingIntent targets MainActivity / NotificationActionActivity
+ * EXPLICITLY (no implicit ACTION_VIEW resolution): the manifest has no
+ * intent-filter for https://ezymail.vercel.app, so implicit VIEW intents
+ * never resolve — the owner saw the card dismiss on tap but the app never
+ * open, and the Reply button did nothing. Explicit component intents always
+ * resolve, and a notification tap may launch an activity directly (Android
+ * 12+ only blocks broadcast/service trampolines).
  *
  * Never silent: show() wraps the rich build in try/catch — if ANYTHING in
  * the rich path throws (avatar, style, actions), a plain fallback
@@ -84,9 +92,10 @@ public final class EzyMailNotification {
         String preview = data.get("preview");
         String avatarUrl = data.get("avatar");
 
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(SERVER_BASE + "/?id=" + emailId));
-        open.setPackage(context.getPackageName());
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // Explicit component intent — an implicit ACTION_VIEW here never
+        // resolved (no manifest intent-filter for this host) and the tap
+        // only dismissed the card without opening anything.
+        Intent open = openEmailIntent(context, emailId);
         PendingIntent contentIntent = PendingIntent.getActivity(
             context,
             emailId.hashCode(),
@@ -100,7 +109,9 @@ public final class EzyMailNotification {
                 .setContentTitle(senderName)
                 .setContentText(subject)
                 .setContentIntent(contentIntent)
-                .setColor(0xFF202124)
+                // EzyMail brand blue (sampled from the logo) — colors the
+                // notification accent and the icon tint on supported surfaces.
+                .setColor(0xFF1870E8)
                 .setCategory(NotificationCompat.CATEGORY_EMAIL)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
@@ -121,19 +132,17 @@ public final class EzyMailNotification {
         builder.addAction(
             R.drawable.ic_action_archive,
             "Archive",
-            actionIntent(context, NotificationActionReceiver.ACTION_ARCHIVE, emailId));
+            actionIntent(context, NotificationActionActivity.ACTION_ARCHIVE, emailId));
         // Mark as read — direct native action
         builder.addAction(
             R.drawable.ic_action_read,
             "Mark as read",
-            actionIntent(context, NotificationActionReceiver.ACTION_MARK_READ, emailId));
+            actionIntent(context, NotificationActionActivity.ACTION_MARK_READ, emailId));
         // Reply — opens the compose window with the reply pre-filled
         // (?compose=reply&id=<emailId>; the web app fetches the email and
         // opens the compose with To / Subject / quoted body filled in).
-        Intent reply = new Intent(Intent.ACTION_VIEW,
-            Uri.parse(SERVER_BASE + "/?compose=reply&id=" + emailId));
-        reply.setPackage(context.getPackageName());
-        reply.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // Same explicit-intent rule as the content tap.
+        Intent reply = composeReplyIntent(context, emailId);
         PendingIntent replyIntent = PendingIntent.getActivity(
             context,
             ("reply" + emailId).hashCode(),
@@ -153,9 +162,7 @@ public final class EzyMailNotification {
      *  Only reached when the rich build throws (never in normal flow). */
     private static void showFallback(
             Context context, String emailId, String senderName, String subject) {
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(SERVER_BASE + "/?id=" + emailId));
-        open.setPackage(context.getPackageName());
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        Intent open = openEmailIntent(context, emailId);
         PendingIntent contentIntent = PendingIntent.getActivity(
             context,
             emailId.hashCode(),
@@ -176,12 +183,35 @@ public final class EzyMailNotification {
             .notify(NOTIFICATION_ID_BASE + (emailId.hashCode() & 0xFFFF), fallback.build());
     }
 
+    /** Open-the-email intent: explicit MainActivity target (singleTask),
+     *  the URL in Intent data exactly as MainActivity.openDeepLink reads it. */
+    static Intent openEmailIntent(Context context, String emailId) {
+        Intent open = new Intent(context, MainActivity.class);
+        open.setAction(Intent.ACTION_VIEW);
+        open.setData(Uri.parse(SERVER_BASE + "/?id=" + emailId));
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return open;
+    }
+
+    /** Reply-compose deep link — same explicit-target rule. */
+    static Intent composeReplyIntent(Context context, String emailId) {
+        Intent reply = new Intent(context, MainActivity.class);
+        reply.setAction(Intent.ACTION_VIEW);
+        reply.setData(Uri.parse(SERVER_BASE + "/?compose=reply&id=" + emailId));
+        reply.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return reply;
+    }
+
+    /** Archive / Mark-as-read: an ACTIVITY PendingIntent, not a broadcast —
+     *  Android 12+ blocks receiver trampolines from starting activities
+     *  (the old broadcast path's buttons looked dead). The transparent
+     *  NotificationActionActivity does the work directly. */
     private static PendingIntent actionIntent(
         Context context, String action, String emailId) {
-        Intent intent = new Intent(context, NotificationActionReceiver.class);
+        Intent intent = new Intent(context, NotificationActionActivity.class);
         intent.setAction(action);
-        intent.putExtra(NotificationActionReceiver.EXTRA_EMAIL_ID, emailId);
-        return PendingIntent.getBroadcast(
+        intent.putExtra(NotificationActionActivity.EXTRA_EMAIL_ID, emailId);
+        return PendingIntent.getActivity(
             context,
             (action + emailId).hashCode(),
             intent,

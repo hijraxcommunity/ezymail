@@ -116,11 +116,22 @@ export async function POST(
     if (replyRecipientUser) {
       const senderUser = await db.user.findUnique({
         where: { id: session.userId },
-        select: { firstName: true, lastName: true },
+        select: { id: true, firstName: true, lastName: true, email: true, avatar: true },
       });
       const senderName = senderUser
         ? `${senderUser.firstName} ${senderUser.lastName}`
         : 'Someone';
+      // Mirror the compose path: real sender avatar via the compact public
+      // URL (the DB data URL would be dropped by the FCM size guard) and the
+      // collapsed body preview for the expandable notification. Without
+      // these the reply card always showed the letter avatar and no preview.
+      const APP_BASE_URL = 'https://ezymail.vercel.app';
+      const avatarUrl = senderUser?.avatar?.startsWith('http')
+        ? senderUser.avatar
+        : senderUser?.avatar?.startsWith('data:')
+          ? `${APP_BASE_URL}/api/user/avatar/${senderUser.id}`
+          : undefined;
+      const preview = replyBody.trim().replace(/\s+/g, ' ').slice(0, 200) || undefined;
 
       after(() =>
         sendPushNotification({
@@ -128,6 +139,9 @@ export async function POST(
           senderName,
           subject: reply.subject,
           emailId: reply.id,
+          senderEmail: senderUser?.email,
+          avatarUrl,
+          preview,
         }).catch(() => {})
       );
     }

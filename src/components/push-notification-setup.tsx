@@ -7,6 +7,20 @@ import { useAppStore } from '@/store/use-app-store'
 
 type PushStatus = 'unknown' | 'unsupported' | 'prompt' | 'granted' | 'denied' | 'subscribed' | 'loading' | 'error'
 
+/** The FCM token this device registered for the CURRENT account (persisted
+ *  in localStorage because tokenRef dies with the page). Logout reads it and
+ *  sends it to /api/auth/logout so the server can delete the device's token
+ *  row in the same request that destroys the session — the old post-logout
+ *  cleanup always 401'd (session already gone), leaving the row registered
+ *  under the previous account so the device kept ringing for its mail. */
+export function getDevicePushToken(): string | null {
+  try {
+    return localStorage.getItem('ezymail-fcm-token')
+  } catch {
+    return null
+  }
+}
+
 export function PushNotificationSetup() {
   const { isAuthenticated, user, setSelectedEmailId } = useAppStore()
   const statusRef = useRef<PushStatus>('unknown')
@@ -52,6 +66,9 @@ export function PushNotificationSetup() {
       if (res.ok) {
         statusRef.current = 'subscribed'
         tokenRef.current = token
+        // Persist for logout (getDevicePushToken above) — survives reloads,
+        // so signing out always carries the device token with it.
+        try { localStorage.setItem('ezymail-fcm-token', token) } catch { /* ignore */ }
         // Foreground dedup flag — tells use-notifications to suppress its
         // own browser Notification/toast because FCM now owns those surfaces
         // (SW shows background notifications, onMessage shows foreground toast)
@@ -456,11 +473,14 @@ export function PushNotificationSetup() {
   useEffect(() => {
     if (isAuthenticated) return
 
-    // Unsubscribe when user logs out
+    // Unsubscribe when user logs out. Best effort only: the session is gone
+    // by now so the endpoint 401s — the REAL row deletion happens inside
+    // /api/auth/logout (which the logout buttons call with the token).
     if (tokenRef.current) {
       unsubscribeToken(tokenRef.current)
       tokenRef.current = null
     }
+    try { localStorage.removeItem('ezymail-fcm-token') } catch { /* ignore */ }
     try { sessionStorage.removeItem('ezymail-push-active') } catch { /* ignore */ }
     statusRef.current = 'unknown'
   }, [isAuthenticated, unsubscribeToken])
