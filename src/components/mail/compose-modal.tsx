@@ -16,6 +16,7 @@ import {
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { getDevicePushToken } from '@/components/push-notification-setup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -614,6 +615,10 @@ export function ComposeModal() {
         subject: data.subject,
         body: data.html.replace(/<[^>]*>/g, ''),
         bodyHtml: data.html,
+        // This device's own FCM token — the server SKIPS it at dispatch, so
+        // the sender's phone/browser never rings for its own outgoing mail
+        // (the "notification comes back to A" wrong-device bug).
+        senderFcmToken: getDevicePushToken() || undefined,
       }
       if (data.cc.trim()) payload.cc = processRecipients(data.cc)
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)
@@ -849,6 +854,10 @@ export function ComposeModal() {
         subject: data.subject,
         body: data.html.replace(/<[^>]*>/g, ''),
         bodyHtml: data.html,
+        // This device's own FCM token — the server SKIPS it at dispatch, so
+        // the sender's phone/browser never rings for its own outgoing mail
+        // (the "notification comes back to A" wrong-device bug).
+        senderFcmToken: getDevicePushToken() || undefined,
       }
       if (data.cc.trim()) payload.cc = processRecipients(data.cc)
       if (data.bcc.trim()) payload.bcc = processRecipients(data.bcc)

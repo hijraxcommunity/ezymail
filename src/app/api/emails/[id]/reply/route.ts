@@ -16,7 +16,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { body: replyBody, bodyHtml } = body;
+    const { body: replyBody, bodyHtml, senderFcmToken } = body;
 
     // Validate
     if (!replyBody || !replyBody.trim()) {
@@ -142,6 +142,13 @@ export async function POST(
           senderEmail: senderUser?.email,
           avatarUrl,
           preview,
+          // Same wrong-device guard as the compose path: the sending device
+          // is skipped by token value even if a stale row binds it to the
+          // recipient's account.
+          skipFcmToken:
+            typeof senderFcmToken === 'string' && senderFcmToken.length >= 32
+              ? senderFcmToken
+              : undefined,
         }).catch(() => {})
       );
     }

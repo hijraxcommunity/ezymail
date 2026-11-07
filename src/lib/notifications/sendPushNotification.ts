@@ -93,6 +93,17 @@ interface PushPayload {
   senderEmail?: string
   avatarUrl?: string
   preview?: string
+  /** The SENDING device's own FCM token (from localStorage via the compose
+   *  client). Skipped at dispatch — this is the hard guarantee that the
+   *  sender's phone/browser NEVER rings for an email it just sent, even when
+   *  a stale row still ties that token to the recipient's account (token
+   *  ownership drift: a device that once logged into account B keeps its row
+   *  under B until it re-registers; the owner saw "A sends to B → the ring
+   *  comes back to A"). Combined with the logout row deletion and the
+   *  upsert-by-token re-registration this closes the wrong-device loop for
+   *  good: the only token guaranteed to be the sender's own device is
+   *  excluded by VALUE, no matter which account row it sits under. */
+  skipFcmToken?: string
 }
 
 interface FcmTokenPayload {
@@ -261,6 +272,7 @@ export async function sendPushNotification({
   senderEmail,
   avatarUrl,
   preview,
+  skipFcmToken,
 }: PushPayload): Promise<void> {
   // Structured trace of the REAL incoming-email dispatch path (Vercel logs,
   // grep: [PushDispatch]). Every decision point logs one JSON line so a
@@ -305,10 +317,26 @@ export async function sendPushNotification({
     }
 
     // Fetch all active FCM tokens for this user
-    const subscriptions = await db.pushSubscription.findMany({
+    const allSubscriptions = await db.pushSubscription.findMany({
       where: { userId: recipientUserId },
       select: { fcmToken: true, platform: true },
     })
+
+    // Never ring the SENDING device (wrong-device loop closure — see
+    // PushPayload.skipFcmToken). Matched by token VALUE, so it works even
+    // when a stale row still binds that token to the recipient's account.
+    const subscriptions = skipFcmToken
+      ? allSubscriptions.filter((s) => s.fcmToken !== skipFcmToken)
+      : allSubscriptions
+    if (skipFcmToken && subscriptions.length < allSubscriptions.length) {
+      trace({
+        step: 'skip-sender-device',
+        recipientUserId,
+        emailId,
+        token: maskTokenLocal(skipFcmToken),
+        removed: allSubscriptions.length - subscriptions.length,
+      })
+    }
 
     if (subscriptions.length === 0) {
       console.log('[Push] No push subscriptions found for user:', recipientUserId)

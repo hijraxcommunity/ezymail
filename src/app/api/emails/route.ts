@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { to, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority } = body;
+    const { to, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority, senderFcmToken } = body;
 
     // Validate fields
     if (!to || !to.trim()) {
@@ -336,8 +336,15 @@ export async function POST(request: NextRequest) {
           subject: subject.trim(),
           emailId: inboxEmail.id,
           senderEmail: sender?.email,
-          avatarUrl: sender?.avatar || undefined,
+          avatarUrl,
           preview,
+          // The SENDING device never rings for its own outgoing mail — even
+          // when a stale token row still binds this device to the recipient's
+          // account (the "notification comes back to A" wrong-device bug).
+          skipFcmToken:
+            typeof senderFcmToken === 'string' && senderFcmToken.length >= 32
+              ? senderFcmToken
+              : undefined,
         }).catch(() => {})
       );
     }
