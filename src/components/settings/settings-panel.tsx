@@ -1838,18 +1838,6 @@ function NotificationSettings({
               disabled={enabling || permissionStatus === 'unsupported' || permissionStatus === 'denied'}
             />
           </div>
-
-          {/* Info about how it works */}
-          <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
-              <p className="text-[11px] text-gray-400 leading-relaxed">
-                EzyMail checks for new emails every 15 seconds while the app is open.
-                The popup appears outside the app even while it is open.
-                {permissionStatus === 'denied' && ' To re-enable, go to your browser\'s site settings and reset notification permissions.'}
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </motion.div>
