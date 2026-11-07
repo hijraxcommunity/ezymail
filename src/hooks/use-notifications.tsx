@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
-import { Mail } from 'lucide-react'
 
 const POLL_INTERVAL = 15000 // 15 seconds
 
@@ -94,7 +92,7 @@ function getStoredPreferences(): NotificationPreferences {
 // ─── Main Hook ─────────────────────────────────────────────────────────────
 
 export function useNotifications() {
-  const { isAuthenticated, setCurrentFolder, appendEmails, setTotalEmails, setNewEmailNotification, setSelectedEmailId } = useAppStore()
+  const { isAuthenticated, appendEmails, setTotalEmails } = useAppStore()
   const isInitializedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prefsRef = useRef<NotificationPreferences>(getStoredPreferences())
@@ -188,7 +186,7 @@ export function useNotifications() {
         const isBackground = document.visibilityState === 'hidden'
         // When FCM push is subscribed (flag set by push-notification-setup),
         // FCM owns the notification surfaces: SW shows background system
-        // notifications, onMessage shows the instant foreground toast.
+        // notifications, onMessage shows the instant foreground popup.
         // Polling then only refreshes the list + plays sound — no doubles.
         let pushActive = false
         try { pushActive = sessionStorage.getItem('ezymail-push-active') === '1' } catch { /* ignore */ }
@@ -233,33 +231,16 @@ export function useNotifications() {
             playNotificationSound()
           }
 
-          // Show toast when app is in foreground
-          // — suppressed when FCM push is active (onMessage toast covers it)
-          // — suppressed when the user turned notifications off (the switch
-          //   must silence EVERYTHING, otherwise "off" looks broken)
-          if (!isBackground && !pushActive && prefs.desktopNotif) {
-            toast.info(`New email from ${senderName}`, {
-              description: subject,
-              icon: <Mail className="w-4 h-4 text-[#4285F4]" />,
-              duration: 6000,
-              action: {
-                label: 'View',
-                onClick: () => {
-                  setNewEmailNotification(e.id)
-                  setSelectedEmailId(e.id)
-                  setCurrentFolder('inbox')
-                },
-              },
-            })
-
-            setCurrentFolder('inbox')
-          }
+          // Owner request 2026-11-08: NO in-app popup for new mail — the
+          // popup must be the one OUTSIDE the app (browser notification above,
+          // or the FCM/SW/native renderer when push is active). The list
+          // refresh + sound above are the only in-app signals.
         }
       }
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, setCurrentFolder, appendEmails, setTotalEmails, setSelectedEmailId, setNewEmailNotification])
+  }, [isAuthenticated, appendEmails, setTotalEmails])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {

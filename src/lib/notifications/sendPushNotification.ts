@@ -336,6 +336,20 @@ export async function sendPushNotification({
         token: maskTokenLocal(skipFcmToken),
         removed: allSubscriptions.length - subscriptions.length,
       })
+      // The skipped row is stale BY CONSTRUCTION: the token belongs to the
+      // device that is sending right now (it reported it itself), so any row
+      // binding it to the RECIPIENT's account survived an account switch
+      // without cleanup and would ring this device for the recipient's mail
+      // forever. Purge it — after this first send the row is gone and the
+      // dispatch stays clean even if the sender device stops reporting.
+      void db.pushSubscription
+        .deleteMany({ where: { fcmToken: skipFcmToken } })
+        .then((r) => {
+          if (r.count > 0) {
+            trace({ step: 'purge-sender-stale-row', recipientUserId, emailId, token: maskTokenLocal(skipFcmToken), purged: r.count })
+          }
+        })
+        .catch(() => {})
     }
 
     if (subscriptions.length === 0) {

@@ -21,6 +21,44 @@ export function getDevicePushToken(): string | null {
   }
 }
 
+/** Silent LOCAL-ONLY backfill of the device's FCM token into localStorage —
+ *  NEVER subscribes, never calls any EzyMail endpoint. Used when auto-subscribe
+ *  is blocked (account switch OFF on the server, or the profile fetch failed)
+ *  so subscribeToken() never ran on this device and localStorage stayed empty.
+ *  Why it matters: the compose send request carries getDevicePushToken() as
+ *  senderFcmToken and the server uses it to skip this device at dispatch —
+ *  the hard guarantee that a phone that once hosted account A does not ring
+ *  when its current account B sends mail to A. Without the backfill, a
+ *  blocked device reports no token, the skip is dead, and the stale row
+ *  (recipient's account ↔ this device's token) rings — exactly the
+ *  "notification comes on mobile chrome" owner report 2026-11-08.
+ *  Runs at most once per session, and only when permission is already
+ *  granted, so it can never pop a prompt. */
+async function backfillDeviceToken(): Promise<void> {
+  try {
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return
+    if (Notification.permission !== 'granted') return
+    try { if (sessionStorage.getItem('ezymail-token-backfill') === '1') return } catch { /* ignore */ }
+    try { sessionStorage.setItem('ezymail-token-backfill', '1') } catch { /* ignore */ }
+
+    const { getFirebaseMessaging } = await import('@/lib/firebase')
+    const { getToken } = await import('firebase/messaging')
+    const messaging = await getFirebaseMessaging()
+    if (!messaging) return
+
+    const swRegistration = await navigator.serviceWorker.ready
+    const token = await getToken(messaging, {
+      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: swRegistration,
+    })
+    if (token) {
+      try { localStorage.setItem('ezymail-fcm-token', token) } catch { /* ignore */ }
+    }
+  } catch {
+    // Best effort — the sender-device skip simply stays without it
+  }
+}
+
 export function PushNotificationSetup() {
   const { isAuthenticated, user, setSelectedEmailId } = useAppStore()
   const statusRef = useRef<PushStatus>('unknown')
@@ -141,17 +179,11 @@ export function PushNotificationSetup() {
             toast.error('Could not enable notifications. Restart the app and try again.')
           }
         })
-        PushNotifications.addListener('pushNotificationReceived', (n) => {
-          const emailId = n.data?.emailId || ''
-          toast(n.title || 'New Email', {
-            description: n.body || 'You received a new message',
-            duration: 6000,
-            action: emailId ? {
-              label: 'View',
-              onClick: () => setSelectedEmailId(emailId),
-            } : undefined,
-          })
-        })
+        // Owner request 2026-11-08: no in-app toast for a received push.
+        // In the foreground Android's native renderer (EzyMailMessagingService
+        // → EzyMailNotification) already posts the OS notification, so the
+        // toast was a duplicate popup INSIDE the app — the popup must live
+        // OUTSIDE the app only. Nothing to do here anymore.
         // Tap on a native notification → open the email (Phase 2c `?id=`
         // handling picks it up post-auth on cold start; replaceState is
         // cleaned by the existing page.tsx logic)
@@ -231,7 +263,9 @@ export function PushNotificationSetup() {
         // (when focused, the Firebase SDK routes the message here and the
         // service worker does NOT show the OS notification). Owner request:
         // the popup must appear OUTSIDE the app even while it is open, so
-        // this handler shows the system notification as well as the toast.
+        // this handler shows the system notification. Owner request
+        // 2026-11-08: the in-app toast is GONE — the OS notification IS
+        // the popup; no duplicate inside the app.
         if (!onMessageBoundRef.current) {
           onMessageBoundRef.current = true
           onMessage(messaging, (payload) => {
@@ -255,16 +289,7 @@ export function PushNotificationSetup() {
                   n.close()
                 }
               }
-            } catch { /* OS popup is best-effort — the in-app toast still shows */ }
-
-            toast(title, {
-              description: body,
-              duration: 6000,
-              action: emailId ? {
-                label: 'View',
-                onClick: () => setSelectedEmailId(emailId),
-              } : undefined,
-            })
+            } catch { /* OS popup is best-effort */ }
           })
         }
 
@@ -299,9 +324,13 @@ export function PushNotificationSetup() {
             const parsed = typeof prefs === 'string' ? JSON.parse(prefs) : prefs
             if (parsed.desktopNotif === false) {
               // Switch is OFF on the server — keep it truly off: block every
-              // subscription path for this session (restart included)
+              // subscription path for this session (restart included).
+              // Still backfill the device token LOCALLY (no subscribe) so the
+              // send request can report this device and the server-side skip
+              // keeps other accounts' mail off this phone.
               pushDisabledRef.current = true
               statusRef.current = 'prompt'
+              void backfillDeviceToken()
               return
             }
           }
@@ -310,7 +339,9 @@ export function PushNotificationSetup() {
         // Profile fetch failed (offline/network): do NOT auto-subscribe —
         // the user may have the switch OFF on the server; subscribing here
         // would silently override their choice. The Settings switch still
-        // works and asks + subscribes on demand.
+        // works and asks + subscribes on demand. Backfill the device token
+        // locally so the sender-device skip stays alive regardless.
+        void backfillDeviceToken()
         return
       }
 
@@ -370,12 +401,15 @@ export function PushNotificationSetup() {
   }, [isAuthenticated, user, requestPermissionAndSubscribe, registerNativePush])
 
   // Self-heal: make sure the server still has this device's token while the
-  // app is open. Two real scenarios left the phone dead with the app in the
-  // foreground:
+  // app is open. Two real scenarios left the phone/desktop dead with the app
+  // in the foreground:
   //   1. The switch-OFF on ANY device removes EVERY token of the account
   //      (the "OFF must really turn it off" rule). The desktop heals itself
-  //      on page reload; a phone app left open never re-registered — owner
-  //      report: "it was working minutes ago, then stopped".
+  //      on page reload; a phone app or an open desktop TAB left alone never
+  //      re-registered — owner report: "it was working minutes ago, then
+  //      stopped" (2026-11-08: the desktop browser notification silently
+  //      stopped because the tab was open for days through such an OFF/ON
+  //      cycle).
   //   2. A reinstall / token refresh kills the old token (Google reports
   //      UNREGISTERED and the server purges the row).
   // Re-registering is an idempotent upsert (same token, same row), so this
@@ -383,8 +417,10 @@ export function PushNotificationSetup() {
   // The server preference is re-checked first, so this can never resurrect
   // a subscription the user turned OFF, and it picks up a permission the
   // user just granted in the phone's system settings.
+  // Runs for NATIVE shells (FCM native registration) and — since 2026-11-08 —
+  // for WEB/desktop too (silent FCM re-subscribe, only when browser
+  // permission is already granted so it can never pop the prompt).
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return
     const recheckAndRegister = async () => {
       if (!isAuthenticated || pushDisabledRef.current) return
       if (Date.now() - lastNativeRegisterRef.current < 60000) return
@@ -405,7 +441,22 @@ export function PushNotificationSetup() {
       } catch {
         return // offline — retry on the next tick
       }
-      void registerNativePush(true)
+      if (Capacitor.isNativePlatform()) {
+        void registerNativePush(true)
+      } else if (
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted'
+      ) {
+        // Web/desktop heal — the same wiped-row scenarios as native, plus
+        // the web-only one: an open desktop tab never reloads, so once the
+        // account's rows were wiped (OFF/ON from another device, purge) the
+        // browser notification silently died until a manual reload. The
+        // re-subscribe is silent and idempotent; permission is already
+        // granted so requestPermission() resolves instantly — this can
+        // never pop the browser prompt.
+        void requestPermissionAndSubscribe(true)
+      }
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') void recheckAndRegister()
@@ -418,7 +469,7 @@ export function PushNotificationSetup() {
       document.removeEventListener('visibilitychange', onVisible)
       clearInterval(tick)
     }
-  }, [isAuthenticated, registerNativePush])
+  }, [isAuthenticated, registerNativePush, requestPermissionAndSubscribe])
 
   // Settings panel's "Notifications" switch fires these events.
   // enable: ASK for permission (native system dialog / browser prompt) and
