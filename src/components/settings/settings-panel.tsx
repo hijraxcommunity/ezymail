@@ -1645,51 +1645,6 @@ function NotificationSettings({
 }) {
   const [permissionStatus, setPermissionStatus] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('default')
   const [enabling, setEnabling] = useState(false)
-  // Device diagnostics — the APK has no address bar, so the phone cannot
-  // reach /diagnostic. This button makes the device report its own push
-  // state (bridge, permission, login, switch pref, saved tokens) as a
-  // copyable JSON. Read-only; saved the owner from remote guessing.
-  const [diagOutput, setDiagOutput] = useState('')
-  const [diagBusy, setDiagBusy] = useState(false)
-
-  const runDeviceDiagnostics = async () => {
-    setDiagBusy(true)
-    try {
-      const { collectDeviceDiagnostics } = await import('@/lib/notifications/deviceDiagnostics')
-      const data = await collectDeviceDiagnostics()
-      setDiagOutput(JSON.stringify(data, null, 2))
-    } catch (e) {
-      setDiagOutput('Diagnostics failed: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setDiagBusy(false)
-    }
-  }
-
-  const copyDiag = async () => {
-    try {
-      await navigator.clipboard.writeText(diagOutput)
-      toast.success('Diagnostics copied')
-    } catch {
-      toast.error('Copy failed — select the text manually')
-    }
-  }
-
-  // Full push test — the ONE-button fix check for the APK: registers this
-  // device with FCM, saves the fresh token, test-sends (same payload as a
-  // real email) and writes a plain-English `diagnosis` into the JSON.
-  const [fullTestBusy, setFullTestBusy] = useState(false)
-  const runFullTest = async () => {
-    setFullTestBusy(true)
-    try {
-      const { runFullPushTest } = await import('@/lib/notifications/deviceDiagnostics')
-      const data = await runFullPushTest()
-      setDiagOutput(JSON.stringify(data, null, 2))
-    } catch (e) {
-      setDiagOutput('Full test failed: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setFullTestBusy(false)
-    }
-  }
 
   // Check current notification permission.
   // Native app (Android): use the NATIVE push permission — the Android
@@ -1894,37 +1849,6 @@ function NotificationSettings({
                 {permissionStatus === 'denied' && ' To re-enable, go to your browser\'s site settings and reset notification permissions.'}
               </p>
             </div>
-          </div>
-
-          {/* Device diagnostics — read-only self report of THIS device */}
-          <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={runDeviceDiagnostics}
-                disabled={diagBusy || fullTestBusy}
-                className="text-[11px] px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-              >
-                {diagBusy ? 'Checking…' : 'Run device diagnostics'}
-              </button>
-              <button
-                onClick={runFullTest}
-                disabled={diagBusy || fullTestBusy}
-                className="text-[11px] px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50"
-              >
-                {fullTestBusy ? 'Testing… (up to 30s)' : 'Full push test'}
-              </button>
-              {diagOutput && (
-                <button
-                  onClick={copyDiag}
-                  className="text-[11px] px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  Copy
-                </button>
-              )}
-            </div>
-            {diagOutput && (
-              <pre className="text-[10px] leading-relaxed bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded p-2 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">{diagOutput}</pre>
-            )}
           </div>
         </CardContent>
       </Card>

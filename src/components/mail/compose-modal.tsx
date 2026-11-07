@@ -187,11 +187,20 @@ export function ComposeModal() {
           const contact = contacts.find(c => c.email.toLowerCase() === trimmed)
           if (contact) {
             setToChips(prev => [...prev, { email: trimmed, name: contact.name, avatar: contact.avatar || null }])
-            setToInput('')
           } else {
             setToChips(prev => [...prev, { email: trimmed, name: '', avatar: null }])
-            setToInput('')
           }
+          setToInput('')
+          // handleSend validates and sends from the raw `to` state, not from
+          // toChips — every other chip-add path (addToChip, paste, blur)
+          // syncs it via setField. The contact-panel prefill skipped that,
+          // so Send failed with "Recipient is required" while the chip was
+          // visibly there (owner report 2026-11-07).
+          setTo(prev => {
+            const existing = prev.split(',').map(s => s.trim()).filter(Boolean)
+            if (!existing.includes(trimmed)) return [...existing, trimmed].join(', ')
+            return prev
+          })
         }
       }, 300)
       return () => clearTimeout(timer)
