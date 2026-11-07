@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-"""Generate the EzyMail notification small-icon PNGs (white glyph).
+"""Generate the EzyMail notification small-icon PNGs (white mark on blue).
 
-Owner request 2026-11-07: the notification icon should be the FULL app-logo
-badge — the square shape like other apps' logos — not the bare letter "e".
+Owner request 2026-11-07 (v3): "the notification color should be DARK, not
+white circle with blue icon — keep it full shape, not only E."
 
-Android renders status-bar small icons from the ALPHA channel only (one flat
-color), so a colored logo is impossible there. The standard "app icon on a
-notification" pattern is therefore: the logo's rounded-square badge silhouette
-rendered white, with the white e+envelope mark knocked out (transparent).
-  - dark status bar  → white square badge, e-envelope shows as the background
-  - notification shade → the accent color (brand blue, setColor in
-    EzyMailNotification) fills behind the cutout — the same colors as the app
-    logo, just inverted by the system's single-color rule.
+Why the previous white-badge icon failed: Android 12+ renders small-icon
+pixels WHITE on an accent-colored circle, so the badge silhouette showed as
+a big WHITE square with the blue mark inside — the exact "white circle with
+blue color icon" the owner rejected.
 
-The cutout reuses the exact white-stroke detection of the v1 script (the
-e+envelope shape the owner already approved), inverted: badge = logo alpha,
-glyph = badge MINUS the e+envelope strokes.
+The fix keeps the standard Android pattern (Gmail / WhatsApp) and makes it
+read like the app logo:
+  - the icon content is the FULL e+envelope logo mark (never a bare "E")
+    rendered white from the logo's own white strokes,
+  - scaled to ~58% of the canvas so the brand-blue accent circle (setColor
+    in EzyMailNotification) shows around it → the notification icon area is
+    BLUE-dominant ("dark"), with the white mark centered = the logo look,
+  - status bar (dark background) shows the clean white mark with natural
+    padding, like every standard app.
 
 Densities: mdpi 24, hdpi 36, xhdpi 48, xxhdpi 72, xxxhdpi 96.
 """
@@ -24,6 +26,10 @@ import os
 from collections import deque
 
 SRC = 'public/logo.png'
+# Mark size relative to the icon canvas. 0.58 keeps the accent circle
+# clearly visible around the mark (dark/blue-dominant) while staying
+# legible at 24dp — same proportion Gmail's "M" uses inside its icon.
+MARK_FILL = 0.58
 OUT_SIZES = {
     'drawable-mdpi': 24,
     'drawable-hdpi': 36,
@@ -36,8 +42,7 @@ img = Image.open(SRC).convert('RGBA')
 w, h = img.size
 px = img.load()
 
-# 1) White-pixel mask (the glyph strokes in the logo are pure white) — same
-#    detection as v1, whose output shape the owner approved.
+# 1) White-pixel mask — the e+envelope mark strokes in the logo are white.
 mask = [[False] * w for _ in range(h)]
 for y in range(h):
     for x in range(w):
@@ -45,9 +50,8 @@ for y in range(h):
         if a > 100 and r > 205 and g > 205 and b > 205:
             mask[y][x] = True
 
-# 2) Keep only components CONNECTED to the glyph's white ring (same rule as
-#    v1): thin white streaks inside the blue plane connect to the ring and
-#    stay, isolated specks (>=500 px rule) are dropped.
+# 2) Keep components ≥ 500 px (specks dropped) — same rule that produced
+#    the mark the owner approved in v1.
 visited = [[False] * w for _ in range(h)]
 keep = [[False] * w for _ in range(h)]
 for y0 in range(h):
@@ -68,36 +72,66 @@ for y0 in range(h):
                 for x, y in comp:
                     keep[y][x] = True
 
-# 3) Badge silhouette = the logo's own alpha (rounded square), rendered white.
-#    The e+envelope strokes become transparent cutouts.
-out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-opx = out.load()
+# 3) Render white-on-transparent, crop tight to the mark.
+mark = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+mpx = mark.load()
 for y in range(h):
     for x in range(w):
-        r, g, b, a = px[x, y]
-        if a > 10 and not keep[y][x]:
-            opx[x, y] = (255, 255, 255, 255)
+        if keep[y][x]:
+            mpx[x, y] = (255, 255, 255, 255)
+bbox = mark.getbbox()
+mark = mark.crop(bbox)
 
-bbox = out.getbbox()
-m = int(max(bbox[2] - bbox[0], bbox[3] - bbox[1]) * 0.06)
-crop = out.crop((max(0, bbox[0] - m), max(0, bbox[1] - m),
-                 min(w, bbox[2] + m), min(h, bbox[3] + m)))
-
-# 4) Emit densities
-preview = None
+# 4) Compose the final canvas: mark centered at MARK_FILL of the canvas.
+first = None
 for d, s in OUT_SIZES.items():
-    # draw at 4x then downscale for clean antialiased edges
-    hi = crop.resize((s * 4, s * 4), Image.LANCZOS)
-    final = hi.resize((s, s), Image.LANCZOS)
+    hi = s * 4  # draw at 4x, downscale for clean antialiased edges
+    canvas = Image.new('RGBA', (hi, hi), (0, 0, 0, 0))
+    ms = round(hi * MARK_FILL)
+    scaled = mark.resize((ms, ms), Image.LANCZOS)
+    off = (hi - ms) // 2
+    canvas.alpha_composite(scaled, (off, off))
+    final = canvas.resize((s, s), Image.LANCZOS)
     os.makedirs(f'android/app/src/main/res/{d}', exist_ok=True)
     final.save(f'android/app/src/main/res/{d}/ic_notification.png')
-    if preview is None:
-        preview = final
+    if first is None:
+        first = final
 
-# previews: dark status bar + brand-blue shade badge, to eyeball both surfaces
-for name, bg_rgb in (('dark', (32, 33, 36)), ('blue', (24, 112, 232))):
-    pv = preview.resize((96, 96), Image.NEAREST)
-    bg = Image.new('RGBA', (96, 96), bg_rgb + (255,))
-    bg.alpha_composite(pv)
-    bg.convert('RGB').save(f'/tmp/icon-preview-{name}.png')
+# 5) Previews — how the icon will actually look on each surface.
+BIG = 144
+big = first.resize((BIG, BIG), Image.LANCZOS)
+
+# (a) Status bar: white mark on dark background
+sb = Image.new('RGBA', (BIG, BIG), (28, 28, 30, 255))
+sb.alpha_composite(big)
+sb.convert('RGB').save('/tmp/icon-preview-statusbar.png')
+
+# (b) Stock Android 12+ shade: white mark centered on the accent circle.
+from PIL import ImageDraw
+BRAND = (24, 112, 232, 255)
+shade = Image.new('RGBA', (BIG, BIG), (250, 250, 250, 255))
+d2 = ImageDraw.Draw(shade)
+d2.ellipse((2, 2, BIG - 2, BIG - 2), fill=BRAND)
+shade.alpha_composite(big)
+shade.convert('RGB').save('/tmp/icon-preview-shade-circle.png')
+
+# (c) 24px legibility check: rendered at true size, zoomed 8x on both.
+tiny = first.resize((24, 24), Image.LANCZOS)
+zoom = tiny.resize((192, 192), Image.NEAREST)
+z1 = Image.new('RGBA', (192, 192), (28, 28, 30, 255))
+z1.alpha_composite(zoom)
+z2 = Image.new('RGBA', (192, 192), (24, 112, 232, 255))
+z2.alpha_composite(zoom)
+duo = Image.new('RGB', (192 * 2 + 8, 192), (240, 240, 240))
+duo.paste(z1.convert('RGB'), (0, 0))
+duo.paste(z2.convert('RGB'), (200, 0))
+duo.save('/tmp/icon-preview-24px-zoom.png')
+
+# (d) Side-by-side strip.
+strip = Image.new('RGB', (BIG * 2 + 10, BIG), (240, 240, 240))
+strip.paste(sb.convert('RGB'), (0, 0))
+strip.paste(shade.convert('RGB'), (BIG + 10, 0))
+strip.save('/tmp/icon-preview-all.png')
+
 print('generated:', ', '.join(f'{d}/{s}px' for d, s in OUT_SIZES.items()))
+print('previews: /tmp/icon-preview-{statusbar,shade-circle,24px-zoom,all}.png')
