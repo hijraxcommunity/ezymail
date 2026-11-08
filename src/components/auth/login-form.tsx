@@ -9,7 +9,6 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
 
 const loginSchema = z.object({
@@ -23,7 +22,9 @@ export function LoginForm() {
   const { setUser, setAuthView } = useAppStore()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // "Remember me" removed (owner request 2026-11-08): the session cookie is
+  // already persistent for 30 days on EVERY login and the API never read
+  // this flag — the checkbox was purely decorative.
 
   const {
     register,
@@ -55,7 +56,6 @@ export function LoginForm() {
         body: JSON.stringify({
           email: data.email,
           password: data.password,
-          rememberMe,
         }),
       })
 
@@ -161,22 +161,9 @@ export function LoginForm() {
             )}
           </div>
 
-          {/* Remember me & Forgot password */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked === true)}
-                className="data-[state=checked]:bg-[#4285F4] data-[state=checked]:border-[#4285F4]"
-              />
-              <label
-                htmlFor="remember"
-                className="text-sm text-[#444746] dark:text-gray-400 cursor-pointer"
-              >
-                Remember me
-              </label>
-            </div>
+          {/* Forgot password ("Remember me" removed — sessions already
+              persist 30 days; see comment at the state declarations) */}
+          <div className="flex items-center justify-end">
             <button
               type="button"
               onClick={() => setAuthView('forgot-password')}
