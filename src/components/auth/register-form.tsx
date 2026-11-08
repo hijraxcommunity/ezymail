@@ -111,8 +111,11 @@ export function RegisterForm() {
   // Build the full email from username + @ezy.af
   const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
 
-  // Validate username (letters, numbers, dots, underscores, hyphens)
-  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length > 0
+  // Validate username (letters, numbers, dots, underscores, hyphens).
+  // Minimum 8 characters (before @ezy.af) — 1-2 letter addresses look
+  // unprofessional (owner request 2026-11-08). The server register route
+  // enforces the same rule.
+  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length >= 8
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,6 +143,10 @@ export function RegisterForm() {
     const ln = nameForm.getValues('lastName')
     if (fn.length < 2 || ln.length < 2) {
       toast.error('Please enter your first and last name (min 2 chars each)')
+      return
+    }
+    if (emailUsername.trim().length < 8) {
+      toast.error('Your email must be at least 8 characters before @ezy.af')
       return
     }
     if (!fullEmail || !isValidUsername) {
@@ -372,6 +379,7 @@ export function RegisterForm() {
                         )}
                       </div>
                     )}
+                    <p className="text-[11px] text-gray-400">At least 8 characters. Letters, numbers, dots, underscores and hyphens only.</p>
                   </div>
                 </div>
               </motion.div>

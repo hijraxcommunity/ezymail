@@ -50,6 +50,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email must end with @ezy.af' }, { status: 400 });
     }
 
+    // Username part (before @ezy.af) must be at least 8 characters —
+    // 1-2 letter addresses (a@ezy.af) look unprofessional and are trivially
+    // squatted (owner request 2026-11-08: "when someone add one letters the
+    // app accept"). Only registration is gated — existing accounts, login
+    // and sending to existing addresses are unaffected.
+    const emailLocalPart = email.trim().toLowerCase().slice(0, -'@ezy.af'.length);
+    if (emailLocalPart.length < 8) {
+      return NextResponse.json(
+        { error: 'Email username must be at least 8 characters before @ezy.af' },
+        { status: 400 }
+      );
+    }
+
     // Validate password strength
     if (password.length < 8) {
       return NextResponse.json(
