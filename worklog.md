@@ -1906,3 +1906,20 @@ Work Log:
 Stage Summary:
 - Both pipelines verified end-to-end statically + live-deployment asset checks; every historical root cause (FCM-never-subscribed, native permission path, OFF layers, restart re-subscribe, payload regression, channelId drop) is fixed in shipped code on origin (8b66989, CI green).
 - Remaining unverified = live-delivery items only the owner can run: /diagnostic (env + real push), real-device foreground/background tests.
+
+---
+Task ID: 86
+Agent: Super Z
+Task: WhatsApp OTP phone verification for Personal + Business registration — reuse the existing OpenWA sender (audit first, rewrite nothing, touch nothing else). Owner asked "What should I check?" after implementation surfaced from a cut-off session.
+
+Work Log:
+- AUDIT (everything found working, reused as-is; zero rewrites): src/lib/whatsapp/openwa.ts is the single OpenWA sender (already supports purpose 'registration' + 'password-recovery'); src/lib/phone-verification.ts owns the secure OTP lifecycle (E.164 normalization, crypto.randomInt 6-digit, salted sha256 hash-only storage, 5-min TTL, 5 attempts, 60s resend cooldown, per-phone 3/15min + per-IP 10/15min caps, signed number-bound single-use proof tokens); /api/auth/verify-phone (send/verify); BOTH register APIs re-verify + consume the proof token server-side and store normalized E.164; prisma User.phone + @@unique([phone]); WhatsAppOtpVerify component (6 boxes, auto-focus, backspace, paste, auto-verify on 6th digit, subtle green verified status, 60s resend countdown, change number) wired into register-form.tsx + business-register-form.tsx.
+- Critical find: the finished feature existed ONLY as local commit 8cca626 (sweep-style UUID message) and had NEVER been pushed — GitHub main was at 46a065d, so production did not have registration OTP at all.
+- Sandbox verification (real backend + mock gateway, never production): embedded Postgres :5433 + scripts/mock-openwa.mjs :2785 + next dev :3005 booted in one invocation (scratch scripts/run-otp-e2e.sh). Committed suite scripts/test-otp-flows.mjs: 37/37 PASS — input validation, E.164 normalization, delivery with registration wording + 5-min text, wrong-OTP attemptsLeft, proof-token binding/one-time use, full no-frontend-trust matrix (missing/forged/cross-number/reused token, no-phone), attempt lockout, 60s cooldown + previous-code invalidation, 3-per-15min phone window, abandoned registration reserves nothing, duplicate 409 incl. intl-format variant, business optional/unverified/verified paths, forgot-password regression on the same sender (recovery wording, one-time OTP, reset 200). Expiry leg via temporary TTL=10s edit (reverted before commit): 4/4 PASS — expired rejection + in-TTL success. TOTAL 41/41.
+- Fixed committed-suite bug: userPhoneByEmail selected account_type; the column is "accountType" (suite crashed before this fix — it had never completed a green run).
+- npx tsc --noEmit: 15 errors = pre-existing baseline, zero in any OTP file.
+- Amended the UUID commit into a descriptive message (+worklog +test fix), pushed 46a065d..HEAD with owner token, remote == local; Vercel auto-deploys.
+- REAL WhatsApp delivery cannot be proven from the sandbox (owner's gateway machine/session/env): owner checklist issued — gateway tunnel up, WhatsApp session STARTED after reboots (historical root cause), OPENWA_API_URL/KEY/SESSION_ID in Vercel, test with a real number, note rate limits while testing (3 sends/15min/phone, 10/15min/IP, 60s cooldown).
+
+Stage Summary:
+- Personal + Business registration now require a WhatsApp-OTP-verified number before account creation (server-enforced, DB-unique phone); Forgot Password shares the same OpenWA sender. 41/41 backend assertions green in sandbox. Production WhatsApp delivery check = owner checklist (env + real-number test on https://ezymail.vercel.app).

@@ -177,6 +177,18 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ user });
   } catch (error: unknown) {
+    // Phone now carries a database-level unique constraint (WhatsApp OTP
+    // verified numbers). Surface a friendly conflict instead of a 500 when
+    // a user tries to save a number another account already holds.
+    if (
+      error && typeof error === 'object' && 'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    ) {
+      return NextResponse.json(
+        { error: 'This phone number is already used by another account' },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Update profile error:', message);
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });

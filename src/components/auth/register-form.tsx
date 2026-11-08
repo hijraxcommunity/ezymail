@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
-import { CountryCodePicker } from './country-code-picker'
+import { WhatsAppOtpVerify } from './whatsapp-otp-verify'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -85,9 +85,12 @@ export function RegisterForm() {
   const [day, setDay] = useState(0)
   const [year, setYear] = useState(0)
 
-  // Step 2: WhatsApp number (country code defaults to 93 — Afghanistan)
+  // Step 2: WhatsApp number (country code defaults to 93 — Afghanistan).
+  // The number must be verified via WhatsApp OTP before the account can be
+  // created; the server-issued proof token is sent with the final request.
   const [phoneCode, setPhoneCode] = useState('93')
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneVerifyToken, setPhoneVerifyToken] = useState<string | null>(null)
 
   // Email: user-chosen username part (before @ezy.af)
   const [emailUsername, setEmailUsername] = useState('')
@@ -173,20 +176,12 @@ export function RegisterForm() {
       toast.error('You must be at least 13 years old')
       return
     }
-    // WhatsApp number is required — it is used to verify the account
-    // if the password is ever forgotten
-    const code = phoneCode.replace(/\D/g, '')
-    const digits = phoneNumber.replace(/\D/g, '')
-    if (code.length < 1 || code.length > 4) {
-      toast.error('Please enter a valid country code (e.g. 93)')
+    // WhatsApp number must be verified (WhatsApp OTP) before continuing —
+    // it is used to verify the account if the password is ever forgotten
+    if (!phoneVerifyToken) {
+      toast.error('Please verify your WhatsApp number first')
       return
     }
-    if (digits.length < 6 || digits.length > 14) {
-      toast.error('Please enter a valid WhatsApp number (at least 6 digits)')
-      return
-    }
-    setPhoneCode(code)
-    setPhoneNumber(digits)
     setStep(3)
   }
 
@@ -218,6 +213,7 @@ export function RegisterForm() {
           password: passwordForm.getValues('password'),
           phoneCountryCode: phoneCode.replace(/\D/g, ''),
           phone: phoneNumber.replace(/\D/g, ''),
+          phoneVerifyToken: phoneVerifyToken || '',
         }),
       })
       const result = await res.json()
@@ -444,21 +440,28 @@ export function RegisterForm() {
                   </div>
                 </div>
 
-                {/* WhatsApp number — verified during forgot password */}
+                {/* WhatsApp number — verified here via WhatsApp OTP so it can
+                    be used for password recovery later */}
                 <div className="space-y-2 mt-6">
                   <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
                     WhatsApp number <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex gap-2">
-                    <CountryCodePicker value={phoneCode} onChange={setPhoneCode} />
-                    <Input
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
-                      inputMode="tel"
-                      placeholder="7XX XXX XXX"
-                      className="h-11 rounded-xl flex-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
-                    />
-                  </div>
+                  <WhatsAppOtpVerify
+                    phoneCode={phoneCode}
+                    onPhoneCodeChange={(dial) => {
+                      setPhoneCode(dial)
+                      if (phoneVerifyToken) setPhoneVerifyToken(null)
+                    }}
+                    phoneNumber={phoneNumber}
+                    onPhoneNumberChange={(digits) => {
+                      setPhoneNumber(digits)
+                      if (phoneVerifyToken) setPhoneVerifyToken(null)
+                    }}
+                    accent="blue"
+                    verifiedToken={phoneVerifyToken}
+                    onVerified={(token) => setPhoneVerifyToken(token)}
+                    onCleared={() => setPhoneVerifyToken(null)}
+                  />
                   <p className="text-xs text-gray-400">
                     Used to verify your identity when you forget your password
                   </p>

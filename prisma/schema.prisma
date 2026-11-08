@@ -70,6 +70,10 @@ model User {
   @@index([accountType])
   @@index([subscriptionStatus])
   @@index([businessEmail])
+  // Phone numbers are verified via WhatsApp OTP before an account is created;
+  // the unique constraint is the database-level guarantee that two accounts
+  // can never claim the same number (NULLs are allowed — phone is optional).
+  @@unique([phone])
 }
 
 model Email {

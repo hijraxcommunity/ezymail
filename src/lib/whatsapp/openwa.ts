@@ -38,6 +38,19 @@ const DEFAULT_OPENWA_URL = 'http://localhost:2785';
 const DEFAULT_COUNTRY_CODE = '93';
 const OPENWA_TIMEOUT_MS = 15_000;
 
+/**
+ * Optional message customization. The default (no options) keeps the exact
+ * password-recovery wording this module has always sent, so existing callers
+ * are untouched. Registration verification passes a different intro and the
+ * 5-minute expiry so the message matches the registration OTP policy.
+ */
+export interface WhatsAppOtpMessageOptions {
+  /** 'password-recovery' (default) | 'registration' */
+  purpose?: 'password-recovery' | 'registration';
+  /** Expiry stated in the message text (default 10 for recovery, 5 for registration). */
+  expiryMinutes?: number;
+}
+
 /** Coarse failure classes safe to expose to the client. */
 export type OpenWAFailureReason =
   | 'NOT_CONFIGURED' // missing API key (or unusable phone)
@@ -159,7 +172,11 @@ export function normalizeToChatId(phone: string, countryCode = DEFAULT_COUNTRY_C
  * map that to a generic user-facing message. The OTP value is never logged
  * here.
  */
-export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise<void> {
+export async function sendWhatsAppOTP(
+  phoneNumber: string,
+  otp: string,
+  options: WhatsAppOtpMessageOptions = {}
+): Promise<void> {
   // .trim() so a pasted trailing space/newline in an env var cannot corrupt values
   const baseUrl = (process.env.OPENWA_API_URL || DEFAULT_OPENWA_URL).trim().replace(/\/+$/, '');
   const apiKey = process.env.OPENWA_API_KEY?.trim() || undefined;
@@ -172,13 +189,21 @@ export async function sendWhatsAppOTP(phoneNumber: string, otp: string): Promise
 
   const chatId = normalizeToChatId(phoneNumber, countryCode);
 
-  // Same user-facing meaning the recovery flow has always communicated.
-  const message = [
-    `Your EzyMail password recovery code is: ${otp}`,
-    '',
-    'This code expires in 10 minutes.',
-    'Do not share this code with anyone.',
-  ].join('\n');
+  const expiryMinutes = options.expiryMinutes ?? (options.purpose === 'registration' ? 5 : 10);
+  const message = options.purpose === 'registration'
+    ? [
+        `Your EzyMail verification code is: ${otp}`,
+        '',
+        `This code expires in ${expiryMinutes} minutes.`,
+        'Do not share this code with anyone.',
+      ].join('\n')
+    // Same user-facing meaning the recovery flow has always communicated.
+    : [
+        `Your EzyMail password recovery code is: ${otp}`,
+        '',
+        `This code expires in ${expiryMinutes} minutes.`,
+        'Do not share this code with anyone.',
+      ].join('\n');
 
   const send = async (sessionId: string): Promise<Response> =>
     fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`, {

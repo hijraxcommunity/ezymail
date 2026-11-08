@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAppStore } from '@/store/use-app-store'
-import { CountryCodePicker } from './country-code-picker'
+import { WhatsAppOtpVerify } from './whatsapp-otp-verify'
 
 const EMPLOYEE_OPTIONS = [
   { value: '1-10', label: '1–10 employees' },
@@ -82,9 +82,12 @@ export function BusinessRegisterForm() {
   // Step 2: Email
   const [emailPrefix, setEmailPrefix] = useState('')
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
-  // Phone (optional): dial code from the country picker + national digits
+  // Phone (optional): dial code from the country picker + national digits.
+  // When provided, the number must be verified via WhatsApp OTP before the
+  // account can be created; the proof token is sent with the final request.
   const [phoneDial, setPhoneDial] = useState('93')
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneVerifyToken, setPhoneVerifyToken] = useState<string | null>(null)
   const [employeeCount, setEmployeeCount] = useState('')
 
   // Step 3: Password
@@ -156,6 +159,11 @@ export function BusinessRegisterForm() {
       toast.error('This business email is already taken. Please pick another.')
       return
     }
+    // A number is optional — but once entered it must be WhatsApp-verified
+    if (phoneNumber.replace(/\D/g, '') && !phoneVerifyToken) {
+      toast.error('Please verify your WhatsApp number first')
+      return
+    }
     setStep(3)
   }
 
@@ -184,7 +192,9 @@ export function BusinessRegisterForm() {
           firstName,
           lastName,
           businessEmail: fullBusinessEmail,
-          phone: phoneNumber ? `+${phoneDial}${phoneNumber}` : undefined,
+          phoneCountryCode: phoneNumber ? phoneDial.replace(/\D/g, '') : undefined,
+          phone: phoneNumber ? phoneNumber.replace(/\D/g, '') : undefined,
+          phoneVerifyToken: phoneNumber ? phoneVerifyToken || '' : undefined,
           employeeCount: employeeCount || undefined,
           password: passwordForm.getValues('password'),
         }),
@@ -400,17 +410,25 @@ export function BusinessRegisterForm() {
                   <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
                     Phone Number <span className="text-xs text-gray-400 font-normal">(optional)</span>
                   </label>
-                  <div className="flex gap-2">
-                    <CountryCodePicker value={phoneDial} onChange={setPhoneDial} />
-                    <Input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
-                      inputMode="numeric"
-                      placeholder="7XX XXX XXX"
-                      className="h-11 flex-1 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#34A853] focus:ring-[#34A853]/20"
-                    />
-                  </div>
+                  <WhatsAppOtpVerify
+                    phoneCode={phoneDial}
+                    onPhoneCodeChange={(dial) => {
+                      setPhoneDial(dial)
+                      if (phoneVerifyToken) setPhoneVerifyToken(null)
+                    }}
+                    phoneNumber={phoneNumber}
+                    onPhoneNumberChange={(digits) => {
+                      setPhoneNumber(digits)
+                      if (phoneVerifyToken) setPhoneVerifyToken(null)
+                    }}
+                    accent="green"
+                    verifiedToken={phoneVerifyToken}
+                    onVerified={(token) => setPhoneVerifyToken(token)}
+                    onCleared={() => setPhoneVerifyToken(null)}
+                  />
+                  <p className="text-xs text-gray-400">
+                    Verified on WhatsApp so it can be used for password recovery
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">

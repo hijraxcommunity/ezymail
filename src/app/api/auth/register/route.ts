@@ -1,25 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, hashPassword } from '@/lib/auth';
+import {
+  normalizePhoneE164,
+  verifyPhoneVerificationToken,
+  consumePhoneVerificationToken,
+} from '@/lib/phone-verification';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { firstName, lastName, dateOfBirth, password, email } = body;
 
-    // WhatsApp number (optional for backward compatibility — required by the
-    // personal signup form). Stored on the user record for future recovery.
+    // WhatsApp number (required by the personal signup form and enforced
+    // here): it must have been verified through /api/auth/verify-phone via
+    // the existing OpenWA WhatsApp OTP sender BEFORE the account is created.
+    // The signed proof token must bind to exactly the number submitted — the
+    // frontend's verified state is never trusted.
     const phoneCountryCode = typeof body.phoneCountryCode === 'string' ? body.phoneCountryCode.replace(/\D/g, '') : '';
     const phoneNumber = typeof body.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
-    let normalizedPhone: string | null = null;
-    if (phoneCountryCode || phoneNumber) {
-      if (phoneCountryCode.length < 1 || phoneCountryCode.length > 4) {
-        return NextResponse.json({ error: 'Please enter a valid country code (e.g. 93)' }, { status: 400 });
-      }
-      if (phoneNumber.length < 6 || phoneNumber.length > 14) {
-        return NextResponse.json({ error: 'Please enter a valid phone number (at least 6 digits)' }, { status: 400 });
-      }
-      normalizedPhone = `+${phoneCountryCode}${phoneNumber}`;
+    const phoneVerifyToken = typeof body.phoneVerifyToken === 'string' ? body.phoneVerifyToken.trim() : '';
+    const normalizedPhone = normalizePhoneE164(phoneCountryCode, phoneNumber);
+    if (!normalizedPhone) {
+      return NextResponse.json(
+        { error: 'Please enter a valid WhatsApp number with its country code' },
+        { status: 400 }
+      );
+    }
+    if (!phoneVerifyToken) {
+      return NextResponse.json(
+        { error: 'Please verify your WhatsApp number before creating your account' },
+        { status: 400 }
+      );
+    }
+    if (!(await verifyPhoneVerificationToken(phoneVerifyToken, normalizedPhone))) {
+      return NextResponse.json(
+        { error: 'This number verification is invalid or expired. Please verify your WhatsApp number again' },
+        { status: 400 }
+      );
     }
 
     // Validate fields
@@ -128,6 +146,15 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await hashPassword(password);
 
+    // One-time proof consumption BEFORE create: a verification token can
+    // create exactly one account, even under concurrent replays.
+    if (!consumePhoneVerificationToken(phoneVerifyToken)) {
+      return NextResponse.json(
+        { error: 'This verification was already used. Please verify your WhatsApp number again' },
+        { status: 400 }
+      );
+    }
+
     // Create user (phone column is part of the schema; fall back gracefully
     // if the production database has not been migrated yet — signup must
     // never break because of the new field)
@@ -144,6 +171,18 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (err) {
+      if (
+        normalizedPhone &&
+        err && typeof err === 'object' && 'code' in err &&
+        (err as { code?: string }).code === 'P2002'
+      ) {
+        // Database-level uniqueness: another account already holds this
+        // WhatsApp number (e.g. two registrations racing to claim it).
+        return NextResponse.json(
+          { error: 'This WhatsApp number is already registered to an EzyMail account' },
+          { status: 409 }
+        );
+      }
       if (
         normalizedPhone &&
         err && typeof err === 'object' && 'code' in err &&
