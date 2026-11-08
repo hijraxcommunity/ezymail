@@ -37,6 +37,10 @@ function maskTokenLocal(t: string): string {
 // ---------------------------------------------------------------------------
 const FCM_MAX_MESSAGE_BYTES = 4096
 const FCM_SAFE_MESSAGE_BYTES = 3584 // 12.5% headroom under the hard limit
+// Production origin of the web app — used for the web push fallback
+// notification icon and the fcmOptions.link tap target (FCM requires an
+// absolute HTTPS URL; matches APP_BASE_URL in the email send routes).
+const FCM_WEB_APP_URL = 'https://ezymail.vercel.app'
 const MAX_SENDER_NAME_CHARS = 80
 const MAX_SUBJECT_CHARS = 160
 const MAX_PREVIEW_CHARS = 200
@@ -131,23 +135,25 @@ interface FcmTokenPayload {
 
 // Pure message builder (exported for regression tests).
 //
-// Web is DELIBERATELY data-only: with a top-level `notification` field the
-// browser auto-displays the message and onBackgroundMessage never fires,
-// so our sw.js click handler never sees data.url. Data-only guarantees
-// sw.js shows the notification itself with data.url attached (deep link).
-// Android is data-only too (androidDataOnly, since 2026-11-05): any
-// android.notification block makes FCM auto-post a PLAIN notification when
-// the app is backgrounded and suppresses onMessageReceived — the owner saw
-// exactly that (no expand, no avatar, no buttons). Data-only lets the
-// native renderer build the Gmail-style notification everywhere. The old
-// 2026-10-27 "no notifications at all" failure of data-only was the
-// previous APK lacking the renderer plus a channel that only existed after
-// app start — both fixed since (channel now ensured on EVERY process start,
-// EzyMailApp.onCreate; renderer ships a plain fallback if its rich build
-// throws). The display-block branch below is kept ONLY for tokens that are
-// neither 'android' nor web — a belt-and-braces default so an unknown
-// platform still gets something FCM can render. APNs keeps the classic
-// alert payload (no iOS app exists yet).
+// Web carries BOTH a notification block and data: the firebase-messaging
+// service worker still intercepts the push when it is healthy (visible page
+// → onMessage, hidden page → our sw.js onBackgroundMessage with the deep
+// link — unchanged behavior), but when the SW handler is broken or stale
+// (importScripts failure, an old cached SW in a tab that has not reloaded
+// for days) Chrome now falls back to AUTO-DISPLAYING webpush.notification
+// instead of showing nothing. Owner report 2026-11-08: Android (native
+// renderer, no service worker involved) rings fine while the desktop
+// browser stayed silent — the data-only design made the web delivery
+// 100% dependent on the SW handler. fcmOptions.link keeps the tap deep
+// link working on the auto-display path too. (The old 2026-10-27 failure
+// of data-only was the previous APK lacking the renderer plus a channel
+// that only existed after app start — both fixed since.) Android stays
+// DATA-ONLY (androidDataOnly, since 2026-11-05): any android.notification
+// block makes FCM auto-post a PLAIN notification when the app is
+// backgrounded and suppresses onMessageReceived — the owner saw exactly
+// that (no expand, no avatar, no buttons). The native renderer builds the
+// Gmail-style notification everywhere. APNs keeps the classic alert
+// payload (no iOS app exists yet).
 export function buildFcmMessage({
   fcmToken,
   senderName,
@@ -177,6 +183,21 @@ export function buildFcmMessage({
       data,
       webpush: {
         headers: { Urgency: 'high' },
+        // Browser-level fallback (WebNotificationConfig): the healthy SW
+        // handler renders its own notification and this is unused; a broken
+        // / stale SW makes Chrome auto-display THIS instead of silence.
+        // Only title/body/icon — fields verified against the FCM v1 docs.
+        notification: {
+          title: `New email from ${safeSender}`,
+          body: bodyText,
+          icon: `${FCM_WEB_APP_URL}/logo.png`,
+        },
+        // Opened on tap of the auto-displayed notification (HTTPS absolute
+        // URL required by FCM). The healthy SW path ignores this — it uses
+        // data.url through the notificationclick handler.
+        fcmOptions: {
+          link: emailId ? `${FCM_WEB_APP_URL}/?id=${emailId}` : FCM_WEB_APP_URL,
+        },
       },
       android: androidDataOnly
         ? {

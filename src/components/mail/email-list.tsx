@@ -210,6 +210,28 @@ export function EmailList() {
     prevOverlayRef.current = overlayOpen
   }, [settingsView, contactsView, adminView, fetchEmails])
 
+  // ─── Auto-refresh when the browser tab becomes visible again ─────────────
+  // Owner request 2026-11-08: switching from another tab back to EzyMail must
+  // refresh the app itself (Gmail-style). Runs the list's OWN fetch cycle —
+  // page-1 replace with the normal loader pill — so anything that arrived
+  // while the tab was hidden is on screen the moment the user returns.
+  // Throttled to one refresh per 15s and skipped on paginated views (page>1):
+  // there the silent page-1 merge from the notification poll adds the new
+  // mail without wiping the loaded history.
+  const lastVisibleRefreshRef = useRef(0)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastVisibleRefreshRef.current < 15000) return
+      lastVisibleRefreshRef.current = Date.now()
+      if (useAppStore.getState().currentPage === 1) {
+        void fetchEmailsRef.current?.()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   // ─── Explicit refresh (button / pull-to-refresh) ──────────────────────
   // Reloads from the newest page like Gmail: pagination resets to page 1 and
   // the stale deep-scroll memory is cleared so the viewport is not yanked

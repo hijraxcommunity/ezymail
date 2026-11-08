@@ -191,11 +191,13 @@ export function useNotifications() {
         let pushActive = false
         try { pushActive = sessionStorage.getItem('ezymail-push-active') === '1' } catch { /* ignore */ }
 
-        // Refresh the email list so new emails appear immediately
-        const { currentFolder: folder, currentPage } = useAppStore.getState()
+        // Refresh the email list so new emails appear immediately.
+        // Always page 1 — the newest page — so new mail merges in even when
+        // the user has paginated into older history.
+        const { currentFolder: folder } = useAppStore.getState()
         if (folder !== 'search') {
           const folderParam = folder === 'folder' ? 'custom' : folder
-          const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=${currentPage}&limit=20`)
+          const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=1&limit=20`)
           if (refreshRes.ok) {
             const refreshData = await refreshRes.json()
             // Merge instead of replace — keeps already-loaded older messages
@@ -274,11 +276,13 @@ export function useNotifications() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         pollForNewEmails()
-        // Also refresh the email list for the current view
-        const { currentFolder: folder, currentPage } = useAppStore.getState()
+        // Also refresh the email list for the current view — page 1 (the
+        // newest) so anything that arrived while hidden merges in even on a
+        // paginated view. Merge keeps loaded history + scroll intact.
+        const { currentFolder: folder } = useAppStore.getState()
         if (folder !== 'search') {
           const folderParam = folder === 'folder' ? 'custom' : folder
-          fetch(`/api/emails?folder=${folderParam}&page=${currentPage}&limit=20`)
+          fetch(`/api/emails?folder=${folderParam}&page=1&limit=20`)
             .then(res => res.ok ? res.json() : null)
             .then(data => {
               if (data) {
