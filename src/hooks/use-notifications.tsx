@@ -138,14 +138,33 @@ export function useNotifications() {
   }, [isAuthenticated])
 
   // ─── Mark as initialized after a short delay (so initial email load completes) ──
+  // The notification baseline is taken from the SERVER (newest inbox email's
+  // createdAt), NOT from the client clock. The old `Date.now()` baseline made
+  // every desktop whose clock is even a minute ahead of the server compare
+  // server timestamps against local time: incoming mail was always "in the
+  // past" → filtered out → no notification AND (because the list refresh was
+  // gated on the same filter) no auto-refresh either — the owner's "desktop
+  // notification and refreshing do not work" report 2026-11-08. Server time
+  // vs server time never drifts. Fallback on fetch failure: client clock
+  // (old behavior). Phones mask this bug via cold starts / visibilitychange;
+  // a desktop tab that stays open for hours does not.
   useEffect(() => {
     if (!isAuthenticated || isInitializedRef.current) return
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/emails?folder=inbox&page=1&limit=1')
+        if (res.ok) {
+          const data = await res.json()
+          const newest = data.emails?.[0]
+          if (newest?.createdAt) {
+            lastCheckTimeRef.current = new Date(newest.createdAt).getTime()
+          }
+        }
+      } catch { /* keep the client-clock fallback */ }
+      // Emails that existed before this moment never trigger a notification
+      // (they are already on screen from the initial load)
       isInitializedRef.current = true
-      // Update last check time to NOW — any emails that existed before this
-      // moment will never trigger a notification
-      lastCheckTimeRef.current = Date.now()
     }, 4000)
 
     return () => clearTimeout(timer)
@@ -162,7 +181,8 @@ export function useNotifications() {
       const data = await res.json()
       const latestEmails = data.emails || []
 
-      // Only consider emails that arrived AFTER our last check time
+      // Notification detection ONLY (never gates the list refresh below):
+      // emails that arrived AFTER our server-time baseline and are unread
       const checkTime = lastCheckTimeRef.current
       const trulyNewEmails = latestEmails.filter(
         (e: { id: string; isRead: boolean; createdAt: string }) => {
@@ -171,14 +191,33 @@ export function useNotifications() {
         }
       )
 
-      // Update check time to server's latest email time (or now if no emails)
+      // Advance the baseline to the server's latest email time. NO `Date.now()`
+      // bump when the inbox is empty — mixing the client clock back in would
+      // reintroduce the clock-skew blindness described at the init effect.
       if (latestEmails.length > 0) {
         const maxTime = Math.max(
           ...latestEmails.map((e: { createdAt: string }) => new Date(e.createdAt).getTime())
         )
         lastCheckTimeRef.current = Math.max(checkTime, maxTime)
-      } else {
-        lastCheckTimeRef.current = Date.now()
+      }
+
+      // ── Refresh the visible folder on EVERY poll cycle ───────────────────
+      // Was gated on trulyNewEmails.length > 0: one missed detection (clock
+      // skew, a read-state race) froze the inbox until a manual reload — the
+      // "refresh does not work on desktop" owner report 2026-11-08. A desktop
+      // tab stays VISIBLE for hours, so the visibilitychange refresh below
+      // never fires and this interval is the only live updater.
+      // Always page 1 — the newest page — merged in so already-loaded older
+      // messages (and the user's scroll position) stay intact.
+      const { currentFolder: folder } = useAppStore.getState()
+      if (folder !== 'search') {
+        const folderParam = folder === 'folder' ? 'custom' : folder
+        const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=1&limit=20`)
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json()
+          appendEmails(refreshData.emails || [])
+          setTotalEmails(refreshData.total || 0)
+        }
       }
 
       if (trulyNewEmails.length > 0) {
@@ -190,22 +229,6 @@ export function useNotifications() {
         // Polling then only refreshes the list + plays sound — no doubles.
         let pushActive = false
         try { pushActive = sessionStorage.getItem('ezymail-push-active') === '1' } catch { /* ignore */ }
-
-        // Refresh the email list so new emails appear immediately.
-        // Always page 1 — the newest page — so new mail merges in even when
-        // the user has paginated into older history.
-        const { currentFolder: folder } = useAppStore.getState()
-        if (folder !== 'search') {
-          const folderParam = folder === 'folder' ? 'custom' : folder
-          const refreshRes = await fetch(`/api/emails?folder=${folderParam}&page=1&limit=20`)
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json()
-            // Merge instead of replace — keeps already-loaded older messages
-            // (and the user's scroll position) intact
-            appendEmails(refreshData.emails || [])
-            setTotalEmails(refreshData.total || 0)
-          }
-        }
 
         for (const email of trulyNewEmails) {
           const e = email as {

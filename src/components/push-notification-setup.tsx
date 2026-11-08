@@ -380,18 +380,42 @@ export function PushNotificationSetup() {
         await requestPermissionAndSubscribe(true)
       } else {
         statusRef.current = 'prompt'
-        // Permission never decided — ASK NOW, right after login (owner
-        // request: "Chrome does not ask me to allow or not"). One ask per
-        // browser session; if the user dismisses it, the Settings switch
-        // still asks on demand (user-gesture prompt always goes through).
+        // Permission never decided — ASK, but from a REAL user gesture.
+        // (Owner request: "Chrome does not ask me to allow or not".)
+        // The previous version called Notification.requestPermission()
+        // directly here, inside this useEffect — two awaited fetches after
+        // the login click, so the transient user activation had long
+        // expired. Chrome silently DENIES gestureless notification
+        // permission requests, so on desktop the prompt never appeared AND
+        // the once-per-session flag below was burned on a call that could
+        // never succeed: no permission → no web-push token → the polling
+        // fallback's showBrowserNotification() also no-op'd on 'default'.
+        // Desktop stayed 100% silent while Android kept ringing (the native
+        // plugin dialog needs no browser gesture). Fix: defer the ask to the
+        // FIRST interaction of the session — any click/keypress is a valid
+        // gesture and the prompt appears right after login. One ask per
+        // browser session; if dismissed, the Settings switch still asks on
+        // demand.
         try {
           if (!sessionStorage.getItem('ezymail-push-asked')) {
             sessionStorage.setItem('ezymail-push-asked', '1')
-            const permission = await Notification.requestPermission()
-            if (permission === 'granted') {
-              pushDisabledRef.current = false
-              await requestPermissionAndSubscribe(true)
+            const askOnGesture = () => {
+              document.removeEventListener('pointerdown', askOnGesture, true)
+              document.removeEventListener('keydown', askOnGesture, true)
+              void (async () => {
+                try {
+                  if (pushDisabledRef.current) return
+                  if (typeof Notification === 'undefined') return
+                  const permission = await Notification.requestPermission()
+                  if (permission === 'granted') {
+                    pushDisabledRef.current = false
+                    await requestPermissionAndSubscribe(true)
+                  }
+                } catch { /* ignore */ }
+              })()
             }
+            document.addEventListener('pointerdown', askOnGesture, { capture: true })
+            document.addEventListener('keydown', askOnGesture, { capture: true })
           }
         } catch { /* ignore */ }
       }
