@@ -111,11 +111,11 @@ export function RegisterForm() {
   // Build the full email from username + @ezy.af
   const fullEmail = emailUsername.trim() ? `${emailUsername.trim().toLowerCase()}@ezy.af` : ''
 
-  // Validate username (letters, numbers, dots, underscores, hyphens).
-  // Minimum 8 characters (before @ezy.af) — 1-2 letter addresses look
-  // unprofessional (owner request 2026-11-08). The server register route
-  // enforces the same rule.
-  const isValidUsername = /^[a-zA-Z0-9._-]+$/.test(emailUsername.trim()) && emailUsername.trim().length >= 8
+  // Validate username (letters, numbers and dots only — underscores and
+  // hyphens are NOT allowed; owner request 2026-11-08).
+  // Minimum 8 characters (before @ezy.af). The server register route
+  // enforces the same rules.
+  const isValidUsername = /^[a-zA-Z0-9.]+$/.test(emailUsername.trim()) && emailUsername.trim().length >= 8
 
   // Check availability (debounced)
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -351,7 +351,7 @@ export function RegisterForm() {
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       <Input
                         value={emailUsername}
-                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '')); setEmailStatus('idle') }}
+                        onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9.]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
                         className="h-11 rounded-xl pl-10 pr-20 border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
                       />
@@ -379,7 +379,7 @@ export function RegisterForm() {
                         )}
                       </div>
                     )}
-                    <p className="text-[11px] text-gray-400">At least 8 characters. Letters, numbers, dots, underscores and hyphens only.</p>
+                    <p className="text-[11px] text-gray-400">At least 8 characters. Letters, numbers and dots only.</p>
                   </div>
                 </div>
               </motion.div>

@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Only letters, numbers and dots — underscores and hyphens are NOT
+    // allowed (owner request 2026-11-08). Existing accounts are not affected.
+    if (!/^[a-z0-9.]+$/.test(emailLocalPart)) {
+      return NextResponse.json(
+        { error: 'Email username can only contain letters, numbers and dots' },
+        { status: 400 }
+      );
+    }
+
     // Validate password strength
     if (password.length < 8) {
       return NextResponse.json(
