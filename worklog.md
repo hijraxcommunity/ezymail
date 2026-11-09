@@ -1923,3 +1923,19 @@ Work Log:
 
 Stage Summary:
 - Personal + Business registration now require a WhatsApp-OTP-verified number before account creation (server-enforced, DB-unique phone); Forgot Password shares the same OpenWA sender. 41/41 backend assertions green in sandbox. Production WhatsApp delivery check = owner checklist (env + real-number test on https://ezymail.vercel.app).
+
+---
+Task ID: 87
+Agent: Super Z
+Task: Gmail-style text copying in the Android app — copy ONLY the email content inside the reading page; the "EzyMail" text on login and all other app chrome must not be copyable ("do not touch anything else").
+
+Work Log:
+- AUDIT: the native-app selection gate already existed (commit 01acec5: page.tsx adds html.native-app when Capacitor.isNativePlatform(); globals.css locks all text selection except input/textarea/select/contenteditable). Deployed lineage confirmed (ancestor of pushed HEAD). Gap = NO email-body exception, so even the reading-page content could not be copied, unlike the Gmail app the owner asked for. The owner's still-copyable login text = stale WebView JS in the APK (deployed bundle carries the gate; fully restarting the app picks it up).
+- Change: src/app/globals.css ONLY (+14 lines) — html.native-app .email-body (+ *) exception re-enables selection ONLY for reading-page message bodies (incl. children and quoted/reply sections), with -webkit-touch-callout: default. .email-body is rendered exclusively by email-detail.tsx (grep-verified repo-wide; zero occurrences on the login page), so nothing else re-enables selection. No TS/TSX file touched; web browsers unaffected (class only added on native).
+- Browser-verified on the real login page (dev server + agent-browser): WITHOUT the class chrome/email-body/input all report userSelect=text (web untouched); WITH the class (as the Android shell sets it) chrome text = none, email-body + its children = text, input = text; html class coexists with the theme class ("light native-app").
+- tsc --noEmit: 15 = pre-existing baseline, zero in touched files. Lint: 8 problems, all pre-existing/environmental (.github/scripts, scratch scripts, prior components) — none in the changed file (CSS is not linted).
+- COMMITTED (globals.css + worklog only) and pushed with owner token; remote == local; Vercel auto-deploys.
+
+Stage Summary:
+- Android app now behaves like the Gmail app: text can be copied ONLY inside the email reading page content; login branding and all other chrome are locked; inputs stay editable; web browsers keep normal selection.
+- Owner device test after deploy: fully close + reopen the app, then long-press "EzyMail" on the login screen (nothing selectable) and long-press text inside an opened email (selectable + Copy).

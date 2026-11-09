@@ -431,3 +431,16 @@ html.native-app [contenteditable='true'] {
   -webkit-user-select: text !important;
   user-select: text !important;
 }
+
+/* Gmail-style exception: the email CONTENT inside the reading page stays
+   selectable/copyable in the native app — like the Gmail app, where only
+   the message body can be copied. Every other screen (login, branding,
+   lists, settings) stays locked. .email-body is rendered ONLY by the
+   reading page (email-detail.tsx message bodies, incl. quoted sections),
+   so nothing else re-enables selection. */
+html.native-app .email-body,
+html.native-app .email-body * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+}
