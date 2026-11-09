@@ -895,6 +895,8 @@ function UsersTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
+            id="admin-user-search"
+            name="admin-user-search"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="Search users..."
@@ -1164,6 +1166,8 @@ function UsersTab() {
             <div>
               <Label className="text-xs mb-1.5 block">Subject</Label>
               <Input
+                id="admin-announcement-subject"
+                name="announcement-subject"
                 value={annSubject}
                 onChange={(e) => setAnnSubject(e.target.value)}
                 placeholder="Announcement subject..."
@@ -1173,6 +1177,8 @@ function UsersTab() {
             <div>
               <Label className="text-xs mb-1.5 block">Message</Label>
               <Textarea
+                id="admin-announcement-body"
+                name="announcement-body"
                 value={annBody}
                 onChange={(e) => setAnnBody(e.target.value)}
                 placeholder="Write your announcement message..."
@@ -1454,6 +1460,8 @@ function LogsTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
+            id="admin-log-search"
+            name="admin-log-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleSearchKeyDown}
@@ -1736,6 +1744,8 @@ function SettingsTab() {
                         <div className="mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                           <Label className="text-xs text-amber-600 block mb-1.5">Maintenance Message</Label>
                           <Textarea
+                            id="admin-setting-maintenance-message"
+                            name="maintenance-message"
                             value={flat['maintenance_message'] || ''}
                             onChange={(e) => handleChange('maintenance_message', e.target.value)}
                             placeholder="Message shown to users during maintenance..."
@@ -1752,6 +1762,8 @@ function SettingsTab() {
                     <Label className="text-xs text-gray-500 block mb-1.5">{label}</Label>
                     {isLongField ? (
                       <Textarea
+                        id={`admin-setting-${setting.settingKey}`}
+                        name={setting.settingKey}
                         value={flat[setting.settingKey] || ''}
                         onChange={(e) => handleChange(setting.settingKey, e.target.value)}
                         className="rounded-xl resize-none text-sm"
@@ -1759,6 +1771,8 @@ function SettingsTab() {
                       />
                     ) : (
                       <Input
+                        id={`admin-setting-${setting.settingKey}`}
+                        name={setting.settingKey}
                         value={flat[setting.settingKey] || ''}
                         onChange={(e) => handleChange(setting.settingKey, e.target.value)}
                         className="h-10 rounded-xl"
@@ -2392,6 +2406,8 @@ function BusinessVerificationsTab() {
               <div>
                 <Label className="text-xs mb-1.5 block">Admin Notes (optional)</Label>
                 <Textarea
+                  id="admin-verification-notes"
+                  name="admin-verification-notes"
                   value={reviewNotes}
                   onChange={(e) => setReviewNotes(e.target.value)}
                   placeholder={reviewAction === 'reject' ? 'Reason for rejection...' : 'Any notes...'}

@@ -424,6 +424,8 @@ export function MailHeader() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
               ref={searchInputRef}
+              id="mail-search"
+              name="mail-search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => {

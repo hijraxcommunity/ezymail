@@ -1171,6 +1171,8 @@ export function ComposeModal() {
                         {/* Search */}
                         <div className="p-2 border-b border-gray-100 dark:border-gray-800">
                           <Input
+                            id="compose-contact-search"
+                            name="compose-contact-search"
                             placeholder="Search contacts..."
                             value={contactSearch}
                             onChange={(e) => setContactSearch(e.target.value)}
@@ -1279,6 +1281,8 @@ export function ComposeModal() {
                     )
                   })}
                   <Input
+                    id="compose-to"
+                    name="compose-to"
                     value={toInput}
                     onChange={e => handleChipChange(e.target.value, 'to')}
                     onKeyDown={e => handleChipKeyDown(e, 'to')}
@@ -1353,6 +1357,8 @@ export function ComposeModal() {
                         )
                       })}
                       <Input
+                        id="compose-cc"
+                        name="compose-cc"
                         value={ccInput}
                         onChange={e => {
                           handleChipChange(e.target.value, 'cc')
@@ -1406,6 +1412,8 @@ export function ComposeModal() {
                         )
                       })}
                       <Input
+                        id="compose-bcc"
+                        name="compose-bcc"
                         value={bccInput}
                         onChange={e => {
                           handleChipChange(e.target.value, 'bcc')
@@ -1428,6 +1436,8 @@ export function ComposeModal() {
                 <div className="flex items-center px-4 gap-2">
                   <span className="text-sm text-gray-500 shrink-0 w-8">Sub</span>
                   <Input
+                    id="compose-subject"
+                    name="compose-subject"
                     value={subject}
                     onChange={e => setSubject(e.target.value)}
                     placeholder="Email subject"
@@ -1596,6 +1606,8 @@ export function ComposeModal() {
             >
               <input
                 ref={fileInputRef}
+                id="compose-attachments"
+                name="compose-attachments"
                 type="file"
                 multiple
                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,.gz,.tar,.json,.xml,.html,.css,.js,.heic,.heif"
@@ -1760,6 +1772,8 @@ export function ComposeModal() {
                       <div className="flex items-center gap-1.5 mt-3">
                         <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
                         <input
+                          id="schedule-hour"
+                          name="schedule-hour"
                           type="text"
                           inputMode="numeric"
                           maxLength={2}
@@ -1770,6 +1784,8 @@ export function ComposeModal() {
                         />
                         <span className="text-sm text-gray-400">:</span>
                         <input
+                          id="schedule-minute"
+                          name="schedule-minute"
                           type="text"
                           inputMode="numeric"
                           maxLength={2}

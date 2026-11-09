@@ -338,6 +338,8 @@ export function BusinessTeam() {
                     Email Address
                   </label>
                   <Input
+                    id="biz-team-invite-email"
+                    name="invite-email"
                     type="email"
                     placeholder="colleague@company.com"
                     value={inviteEmail}

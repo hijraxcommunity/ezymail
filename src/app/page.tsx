@@ -244,7 +244,13 @@ export default function HomePage() {
   // single accidental press.
   useEffect(() => {
     if (!isAuthenticated) return
-    window.history.pushState({ ezView: true }, '')
+    // The guard entry is armed on the user's FIRST interaction, not on mount:
+    // Chrome marks history entries added without any interaction as
+    // "skippable" (DevTools issue: "Session History Item Has Been Marked
+    // Skippable"). Before any interaction no in-app view can be open, so an
+    // early back correctly leaves the app — the same outcome Chrome's skip
+    // behavior already produced with the old mount-time entry. All later
+    // re-pushes (below) run inside popstate, i.e. after a real back press.
     let lastBaseBackAt = 0
     const onPopState = () => {
       // Always read fresh state — avoids stale closures, no re-subscription needed
@@ -281,8 +287,25 @@ export default function HomePage() {
       // Always restore the guard so the next back press keeps navigating in-app
       window.history.pushState({ ezView: true }, '')
     }
+    // First pointer press / tap / key press = real user interaction: push the
+    // guard entry then (so Chrome never sees an interaction-less entry) and
+    // keep the popstate handler from that moment on.
+    const arm = () => {
+      window.history.pushState({ ezView: true }, '')
+      window.removeEventListener('pointerdown', arm)
+      window.removeEventListener('touchend', arm)
+      window.removeEventListener('keydown', arm)
+    }
+    window.addEventListener('pointerdown', arm)
+    window.addEventListener('touchend', arm)
+    window.addEventListener('keydown', arm)
     window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('pointerdown', arm)
+      window.removeEventListener('touchend', arm)
+      window.removeEventListener('keydown', arm)
+    }
   }, [isAuthenticated])
 
   // ─── Android hardware back button — native control (APK only) ────────────

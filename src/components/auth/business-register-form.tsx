@@ -296,6 +296,8 @@ export function BusinessRegisterForm() {
                     Business Name
                   </label>
                   <Input
+                    id="biz-register-name"
+                    name="business-name"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
                     placeholder="AFGOS"
@@ -309,6 +311,8 @@ export function BusinessRegisterForm() {
                       First Name
                     </label>
                     <Input
+                      id="biz-register-first-name"
+                      name="first-name"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="Ahmad"
@@ -320,6 +324,8 @@ export function BusinessRegisterForm() {
                       Last Name
                     </label>
                     <Input
+                      id="biz-register-last-name"
+                      name="last-name"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Amiri"
@@ -353,6 +359,8 @@ export function BusinessRegisterForm() {
                   </label>
                   <div className="relative">
                     <input
+                      id="biz-register-email-prefix"
+                      name="email-prefix"
                       type="text"
                       data-email-prefix
                       value={emailPrefix}
@@ -435,6 +443,8 @@ export function BusinessRegisterForm() {
                     Team Size <span className="text-xs text-gray-400 font-normal">(optional)</span>
                   </label>
                   <select
+                    id="biz-register-team-size"
+                    name="team-size"
                     value={employeeCount}
                     onChange={(e) => setEmployeeCount(e.target.value)}
                     className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#34A853] focus:ring-[#34A853]/20 focus:outline-none transition-colors"

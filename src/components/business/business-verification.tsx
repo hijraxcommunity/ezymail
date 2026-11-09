@@ -419,6 +419,8 @@ function UploadForm({
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <input
+              id="biz-verification-url-input"
+              name="verification-document-url"
               type="text"
               placeholder="https://example.com/document.pdf"
               value={urlInput}
@@ -439,6 +441,8 @@ function UploadForm({
 
       <input
         ref={fileInputRef}
+        id="biz-verification-files"
+        name="verification-files"
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,.gif"
         multiple

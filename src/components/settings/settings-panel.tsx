@@ -1017,7 +1017,7 @@ function ProfileTabContent({
               <Camera className="w-6 h-6 text-white" />
             )}
           </button>
-          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+          <input ref={avatarInputRef} id="avatar-upload" name="avatar" type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
         </div>
         <p className="text-xs text-gray-500">
           {avatarUploading ? 'Uploading...' : 'Click to change photo'}

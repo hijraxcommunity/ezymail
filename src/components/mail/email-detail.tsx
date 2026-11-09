@@ -1631,6 +1631,8 @@ export function EmailDetail() {
               <div className="flex items-center gap-1.5 mt-3">
                 <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Time:</label>
                 <input
+                  id="snooze-hour"
+                  name="snooze-hour"
                   type="text"
                   inputMode="numeric"
                   maxLength={2}
@@ -1641,6 +1643,8 @@ export function EmailDetail() {
                 />
                 <span className="text-sm text-gray-400">:</span>
                 <input
+                  id="snooze-minute"
+                  name="snooze-minute"
                   type="text"
                   inputMode="numeric"
                   maxLength={2}

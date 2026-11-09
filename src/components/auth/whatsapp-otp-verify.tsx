@@ -272,6 +272,8 @@ export function WhatsAppOtpVerify({
       <div className="flex gap-2">
         <CountryCodePicker value={phoneCode} onChange={onPhoneCodeChange} disabled={sending || disabled} />
         <input
+          id="otp-phone-number"
+          name="otp-phone-number"
           type="tel"
           value={phoneNumber}
           onChange={(e) => onPhoneNumberChange(e.target.value.replace(/\D/g, '').slice(0, 14))}

@@ -513,6 +513,8 @@ export function BusinessCampaigns() {
                 Subject Line
               </label>
               <Input
+                id="campaign-subject"
+                name="campaign-subject"
                 placeholder="Campaign subject line..."
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
@@ -526,6 +528,8 @@ export function BusinessCampaigns() {
                 Email Body
               </label>
               <Textarea
+                id="campaign-body"
+                name="campaign-body"
                 placeholder="Write your campaign message..."
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
@@ -561,6 +565,8 @@ export function BusinessCampaigns() {
                       } border-b border-gray-50 dark:border-gray-800 last:border-b-0`}
                     >
                       <input
+                        id={`campaign-recipient-${customer.id}`}
+                        name={`campaign-recipient-${customer.id}`}
                         type="checkbox"
                         checked={selectedRecipients.has(customer.id)}
                         onChange={() => toggleRecipient(customer.id)}

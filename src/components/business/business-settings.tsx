@@ -383,6 +383,8 @@ export function BusinessSettings() {
               Business Name
             </label>
             <Input
+              id="biz-settings-name"
+              name="business-name"
               value={editBusinessName}
               onChange={(e) => setEditBusinessName(e.target.value)}
               placeholder="Your Business Name"
@@ -394,6 +396,8 @@ export function BusinessSettings() {
               Business Email
             </label>
             <Input
+              id="biz-settings-email"
+              name="business-email"
               value={profile?.businessEmail || profile?.email || ''}
               readOnly
               disabled
@@ -408,6 +412,8 @@ export function BusinessSettings() {
             <div className="flex gap-2">
               <CountryCodePicker value={editPhoneDial} onChange={setEditPhoneDial} />
               <Input
+                id="biz-settings-phone"
+                name="business-phone"
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, '').slice(0, 14))}
                 inputMode="numeric"
@@ -421,6 +427,8 @@ export function BusinessSettings() {
               Employee Count
             </label>
             <Input
+              id="biz-settings-employee-count"
+              name="employee-count"
               type="number"
               value={editEmployeeCount}
               onChange={(e) => setEditEmployeeCount(e.target.value)}
@@ -528,6 +536,8 @@ export function BusinessSettings() {
               Enter document URLs (one per line). These will be reviewed by our team.
             </p>
             <textarea
+              id="biz-verification-doc-urls"
+              name="verification-doc-urls"
               value={docUrls}
               onChange={(e) => setDocUrls(e.target.value)}
               placeholder={"https://example.com/document1.pdf\nhttps://example.com/document2.jpg"}
@@ -675,6 +685,8 @@ export function BusinessSettings() {
               Type <span className="font-bold text-[#EA4335]">DELETE</span> to confirm
             </label>
             <Input
+              id="biz-delete-confirm"
+              name="delete-confirm"
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               placeholder="DELETE"

@@ -136,6 +136,8 @@ export function CountryCodePicker({ value, onChange, disabled = false }: Country
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 autoFocus
+                id="country-code-search"
+                name="country-code-search"
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value)

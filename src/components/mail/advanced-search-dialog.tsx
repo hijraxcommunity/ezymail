@@ -484,6 +484,8 @@ export function AdvancedSearchDialog({ open, onOpenChange }: AdvancedSearchDialo
           ) : (
             <div className="flex items-center gap-2">
               <Input
+                id="save-search-name"
+                name="save-search-name"
                 placeholder="Search name..."
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}

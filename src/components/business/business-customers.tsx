@@ -332,6 +332,8 @@ export function BusinessCustomers() {
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <Input
+          id="biz-customer-search"
+          name="biz-customer-search"
           placeholder="Search customers by name or email..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -342,6 +344,8 @@ export function BusinessCustomers() {
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
+        id="biz-customer-csv-import"
+        name="csv-import"
         type="file"
         accept=".csv"
         onChange={handleCSVImport}
@@ -403,6 +407,8 @@ export function BusinessCustomers() {
                     Name (optional)
                   </label>
                   <Input
+                    id="biz-add-customer-name"
+                    name="customer-name"
                     placeholder="John Doe"
                     value={addName}
                     onChange={(e) => setAddName(e.target.value)}
@@ -414,6 +420,8 @@ export function BusinessCustomers() {
                     Email
                   </label>
                   <Input
+                    id="biz-add-customer-email"
+                    name="customer-email"
                     type="email"
                     placeholder="customer@example.com"
                     value={addEmail}

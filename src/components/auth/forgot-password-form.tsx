@@ -170,6 +170,8 @@ export function ForgotPasswordForm() {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   <Input
+                    id="forgot-email"
+                    name="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -186,6 +188,8 @@ export function ForgotPasswordForm() {
                 <div className="flex gap-2">
                   <CountryCodePicker value={phoneDial} onChange={setPhoneDial} disabled={isLoading} />
                   <Input
+                    id="forgot-phone"
+                    name="forgot-phone"
                     type="tel"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 14))}
@@ -301,6 +305,8 @@ export function ForgotPasswordForm() {
                 </label>
                 <div className="relative">
                   <Input
+                    id="reset-password"
+                    name="new-password"
                     type={showPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -322,6 +328,8 @@ export function ForgotPasswordForm() {
                   Confirm new password
                 </label>
                 <Input
+                  id="reset-confirm-password"
+                  name="confirm-password"
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

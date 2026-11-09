@@ -797,6 +797,8 @@ export function FiltersTab() {
                         />
                       ) : (
                         <Input
+                          id={`filter-cond-value-${index}`}
+                          name={`filter-cond-value-${index}`}
                           value={cond.value}
                           onChange={(e) => updateCondition(index, 'value', e.target.value)}
                           placeholder="Value..."

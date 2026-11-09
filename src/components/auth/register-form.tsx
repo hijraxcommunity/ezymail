@@ -346,6 +346,8 @@ export function RegisterForm() {
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       <Input
+                        id="register-username"
+                        name="username"
                         value={emailUsername}
                         onChange={(e) => { setEmailUsername(e.target.value.replace(/[^a-zA-Z0-9.]/g, '')); setEmailStatus('idle') }}
                         placeholder="yourname"
@@ -400,6 +402,8 @@ export function RegisterForm() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Month</label>
                     <select
+                      id="register-birth-month"
+                      name="birth-month"
                       value={month}
                       onChange={(e) => { setMonth(Number(e.target.value)); setDay(0) }}
                       className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
@@ -414,6 +418,8 @@ export function RegisterForm() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Day</label>
                       <select
+                        id="register-birth-day"
+                        name="birth-day"
                         value={day}
                         onChange={(e) => setDay(Number(e.target.value))}
                         className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
@@ -427,6 +433,8 @@ export function RegisterForm() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">Year</label>
                       <select
+                        id="register-birth-year"
+                        name="birth-year"
                         value={year}
                         onChange={(e) => setYear(Number(e.target.value))}
                         className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-[#4285F4] focus:ring-[#4285F4]/20 focus:outline-none"
