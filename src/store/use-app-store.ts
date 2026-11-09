@@ -385,16 +385,40 @@ export const useAppStore = create<AppState>()(
         if (!incoming.length) return 0
         const state = get()
         const seenIds = new Set(state.emails.map((e) => e.id))
-        const seenThreads = new Set(state.emails.map((e) => e.threadId || e.id))
-        const fresh = incoming.filter((e) => {
-          if (seenIds.has(e.id)) return false
-          if (e.threadId && e.threadId !== e.id && seenThreads.has(e.threadId)) return false
-          return true
+        // Row index per thread (threadId, or the row's own id when it is the
+        // thread root) so a NEWER message of a loaded thread can take the
+        // thread's slot — matching what a manual refresh (full page-1
+        // replace) would display. Without this, a reply to an existing
+        // conversation was silently dropped and the inbox froze until the
+        // owner refreshed manually.
+        const threadIndex = new Map<string, number>()
+        state.emails.forEach((e, i) => {
+          const key = e.threadId || e.id
+          if (!threadIndex.has(key)) threadIndex.set(key, i)
         })
-        if (fresh.length > 0) {
-          set({ emails: [...state.emails, ...fresh] })
+        let appended = 0
+        const next = [...state.emails]
+        for (const e of incoming) {
+          if (seenIds.has(e.id)) continue
+          // Reply in a thread we already show: replace the current row only
+          // when the incoming one is NEWER (poll page-1 case). Older rows
+          // (scroll-loaded history) keep being skipped — no duplicates.
+          if (e.threadId && e.threadId !== e.id && threadIndex.has(e.threadId)) {
+            const i = threadIndex.get(e.threadId)!
+            const current = next[i]
+            if (current && new Date(e.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+              next[i] = e
+            }
+            continue
+          }
+          threadIndex.set(e.threadId || e.id, next.length)
+          next.push(e)
+          appended++
         }
-        return fresh.length
+        if (appended > 0 || next.length !== state.emails.length || next.some((e, i) => e !== state.emails[i])) {
+          set({ emails: next })
+        }
+        return appended
       },
       setSelectedEmailId: (id) => set({ selectedEmailId: id, emailDetailOpen: !!id }),
       setComposeOpen: (open) => set({ composeOpen: open, replyToEmail: null, replyMode: null, editDraftEmail: null, requestComposeClose: false }),

@@ -1946,3 +1946,13 @@ Stage Summary:
 - Change: src/components/mail/email-detail.tsx ONLY (+1 line changed) — added the existing "email-body" exception class to that <h1>. No new CSS, no other file touched. In the Android app the Subject text is now selectable/copyable like the message body; in normal browsers nothing changes (the exception only activates under html.native-app, and browsers already allow h1 selection).
 - tsc --noEmit: 14 = pre-existing baseline, zero in email-detail.tsx.
 - COMMITTED and pushed with owner token; remote == local; Vercel auto-deploys.
+
+## Task ID 89 — Inbox: new emails (incl. replies to existing threads) arrive without manual refresh
+- Request: "in the past I did not need to refresh the website for new email it was refreshing by itself, but now I need to refresh every time… the new emails should come without refreshing. Do not touch the android only browser got problem."
+- Audit: none of the recent commits touched the live-update chain (use-notifications.tsx unchanged since 74912fe 2026-11-08; store since 69a1eff 2026-10-10; emails API unchanged). Service worker bypasses /api/ (public/sw.js:93), providers.tsx only registers SW. Poll loop verified healthy.
+- REPRODUCED end-to-end in sandbox (embedded PG :5433 + next dev :3005 + real browser via agent-browser, one bash run): logged-in tab untouched for 50s with poll cycles 200 OK → brand-new-thread mail APPEARED; reply inside an EXISTING thread (threadId ≠ id) NEVER appeared — hidden by appendEmails' threadId dedupe (dropped as duplicate instead of taking the thread's slot). Manual refresh replaces the whole list so the reply only showed after F5 — exactly the owner's symptom.
+- Fix: src/store/use-app-store.ts appendEmails ONLY — a NEWER row of an already-loaded thread now REPLACES the thread's current row (same result as a manual page-1 replace); older rows from scroll-load history keep being skipped (no duplicates); appended-count semantics unchanged (replacements don't count as added, load-older noMore detection untouched). No CSS, no Android files, no API changes.
+- E2E re-run after fix, same scenario: REPLY + FRESH both visible after 50s with zero interaction; DOM matched manual-refresh result. Poll network log: 15s cycles, all 200.
+- tsc --noEmit: 14 = pre-existing baseline, zero in use-app-store.ts.
+- Sandbox sweep during task: junk UUID commit 86c1cc4 deleted src/app/api/upload/route.ts and node_modules was wiped — repaired (restore from c82005c, reset to c82005c, bun install, embedded-postgres reinstalled --no-save); GitHub/production unaffected (origin/main stayed c82005c).
+- COMMITTED (use-app-store.ts + worklog only) and pushed with owner token; remote == local; Vercel auto-deploys.
