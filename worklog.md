@@ -1939,3 +1939,10 @@ Work Log:
 Stage Summary:
 - Android app now behaves like the Gmail app: text can be copied ONLY inside the email reading page content; login branding and all other chrome are locked; inputs stay editable; web browsers keep normal selection.
 - Owner device test after deploy: fully close + reopen the app, then long-press "EzyMail" on the login screen (nothing selectable) and long-press text inside an opened email (selectable + Copy).
+
+## Task ID 88 — Reading page: make the Subject line copyable too (Android mode)
+- Request: "the 'Subject' text are locked too make it copyable too only subject text and do not touch anything else."
+- Audit: rg user-select → globals.css blocks unchanged since Task 87 (html.native-app lock + .email-body exception). rg "email.subject" in email-detail.tsx → subject rendered exactly once, the <h1> at the top of the reading page (line ~1139).
+- Change: src/components/mail/email-detail.tsx ONLY (+1 line changed) — added the existing "email-body" exception class to that <h1>. No new CSS, no other file touched. In the Android app the Subject text is now selectable/copyable like the message body; in normal browsers nothing changes (the exception only activates under html.native-app, and browsers already allow h1 selection).
+- tsc --noEmit: 14 = pre-existing baseline, zero in email-detail.tsx.
+- COMMITTED and pushed with owner token; remote == local; Vercel auto-deploys.
