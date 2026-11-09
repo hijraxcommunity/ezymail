@@ -22,10 +22,22 @@ firebase.messaging().onBackgroundMessage((payload) => {
   const notificationBody = data.body || payload.notification?.body || 'You received a new message'
   const emailId = data.emailId || ''
 
+  // Desktop diagnostic (owner report 2026-11-09): proves the push event
+  // reached the worker and whether showNotification succeeded — visible in
+  // the page DevTools console (service worker context). No email content.
+  console.log('[SWDiag] background push received', {
+    hasTitle: !!data.title,
+    hasNotificationBlock: !!payload.notification,
+    hasEmailId: !!emailId,
+  })
+
   // Build URL to open specific email in app (single-route app — no /inbox path)
   const urlToOpen = emailId ? `/?id=${emailId}` : '/'
 
-  self.registration.showNotification(notificationTitle, {
+  // Return the display promise so the SDK's push waitUntil covers it — an
+  // unawaited showNotification could be killed when the worker is suspended
+  // right after the handler returns.
+  return self.registration.showNotification(notificationTitle, {
     body: notificationBody,
     icon: '/logo.png',
     badge: '/logo.png',
@@ -34,6 +46,8 @@ firebase.messaging().onBackgroundMessage((payload) => {
     tag: data.tag || 'ezy-email',
     renotify: true,
   })
+    .then(() => { console.log('[SWDiag] notification shown') })
+    .catch((err) => { console.error('[SWDiag] showNotification failed', String(err)) })
 })
 
 // ─── Notification click — open/focus the app and navigate to email ─────────

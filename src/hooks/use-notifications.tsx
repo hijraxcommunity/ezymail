@@ -2,33 +2,9 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/use-app-store'
+import { attemptMailSound } from '@/lib/mail-sound'
 
 const POLL_INTERVAL = 15000 // 15 seconds
-
-// ─── Notification Sound ────────────────────────────────────────────────────
-
-function playNotificationSound() {
-  try {
-    const audioContext = new (window.AudioContext || (window as unknown as Record<string, typeof AudioContext>).webkitAudioContext)()
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    oscillator.frequency.setValueAtTime(880, audioContext.currentTime) // A5
-    oscillator.frequency.setValueAtTime(1100, audioContext.currentTime + 0.1) // C#6
-    oscillator.type = 'sine'
-
-    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4)
-
-    oscillator.start(audioContext.currentTime)
-    oscillator.stop(audioContext.currentTime + 0.4)
-  } catch {
-    // Audio not supported, silent fail
-  }
-}
 
 // ─── Browser Notification Helpers ──────────────────────────────────────────
 
@@ -53,7 +29,13 @@ export function isNotificationGranted(): boolean {
 }
 
 export function showBrowserNotification(title: string, options?: NotificationOptions) {
-  if (typeof window === 'undefined' || !isNotificationGranted()) return
+  if (typeof window === 'undefined') return
+  if (!isNotificationGranted()) {
+    // Desktop diagnostic (owner report 2026-11-09): a silent no-op here made
+    // "no popup at all" indistinguishable from "permission never granted".
+    console.warn('[PushDiag] browser notification skipped — permission not granted (state:', Notification.permission + ')')
+    return
+  }
 
   try {
     const notification = new Notification(title, {
@@ -67,9 +49,12 @@ export function showBrowserNotification(title: string, options?: NotificationOpt
       notification.close()
     }
 
+    console.log('[PushDiag] browser notification shown', { title })
+
     // Auto-close after 5 seconds
     setTimeout(() => notification.close(), 5000)
-  } catch {
+  } catch (err) {
+    console.warn('[PushDiag] browser notification constructor failed', err instanceof Error ? err.message : String(err))
     // Fallback: some browsers don't support Notification constructor
   }
 }
@@ -138,36 +123,43 @@ export function useNotifications() {
   }, [isAuthenticated])
 
   // ─── Mark as initialized after a short delay (so initial email load completes) ──
-  // The notification baseline is taken from the SERVER (newest inbox email's
-  // createdAt), NOT from the client clock. The old `Date.now()` baseline made
-  // every desktop whose clock is even a minute ahead of the server compare
-  // server timestamps against local time: incoming mail was always "in the
-  // past" → filtered out → no notification AND (because the list refresh was
-  // gated on the same filter) no auto-refresh either — the owner's "desktop
-  // notification and refreshing do not work" report 2026-11-08. Server time
-  // vs server time never drifts. Fallback on fetch failure: client clock
-  // (old behavior). Phones mask this bug via cold starts / visibilitychange;
-  // a desktop tab that stays open for hours does not.
+  // The notification baseline is the newest email ALREADY ON SCREEN (the store
+  // list produced by the initial page-1 load). The old baseline came from a
+  // fresh server fetch 4s after login: any email that arrived between the
+  // initial load and that fetch was treated as "already seen" and silently
+  // swallowed — mail sent within seconds of opening the app never rang and
+  // never sounded (reproduced in sandbox E2E 2026-11-09: baseline init
+  // absorbed the test mail). Reading the store removes the race entirely:
+  // no second fetch, no blind window. Server time vs server time still never
+  // drifts (the store rows carry server timestamps).
   useEffect(() => {
     if (!isAuthenticated || isInitializedRef.current) return
 
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/emails?folder=inbox&page=1&limit=1')
-        if (res.ok) {
-          const data = await res.json()
-          const newest = data.emails?.[0]
-          if (newest?.createdAt) {
-            lastCheckTimeRef.current = new Date(newest.createdAt).getTime()
-          }
+    let tries = 0
+    const timer = setInterval(() => {
+      tries++
+      const { emails } = useAppStore.getState()
+      if (emails.length > 0 || tries >= 10) {
+        clearInterval(timer)
+        const newestOnScreen = emails.reduce((max, e) => {
+          const t = new Date(e.createdAt).getTime()
+          return t > max ? t : max
+        }, 0)
+        if (newestOnScreen > 0) {
+          lastCheckTimeRef.current = newestOnScreen
+        } else {
+          // Empty inbox at login (nothing on screen): allow a 60s grace so a
+          // client clock slightly AHEAD of the server cannot swallow the next
+          // incoming mail (the 2026-11-08 clock-skew blindness).
+          lastCheckTimeRef.current = Math.min(lastCheckTimeRef.current, Date.now() - 60000)
         }
-      } catch { /* keep the client-clock fallback */ }
-      // Emails that existed before this moment never trigger a notification
-      // (they are already on screen from the initial load)
-      isInitializedRef.current = true
-    }, 4000)
+        // Emails that existed before this moment never trigger a notification
+        // (they are already on screen from the initial load)
+        isInitializedRef.current = true
+      }
+    }, 1000)
 
-    return () => clearTimeout(timer)
+    return () => clearInterval(timer)
   }, [isAuthenticated])
 
   // ─── Poll for new emails (works even when tab is in background) ─────────
@@ -221,6 +213,7 @@ export function useNotifications() {
       }
 
       if (trulyNewEmails.length > 0) {
+        console.log('[PushDiag] poll detected new mail', { count: trulyNewEmails.length })
         const prefs = prefsRef.current
         const isBackground = document.visibilityState === 'hidden'
         // When FCM push is subscribed (flag set by push-notification-setup),
@@ -249,11 +242,24 @@ export function useNotifications() {
               body: subject,
               tag: `email-${e.id}`,
             })
+          } else {
+            console.log('[PushDiag] poll notification suppressed', {
+              emailId: e.id,
+              desktopNotif: prefs.desktopNotif,
+              pushActive,
+            })
           }
 
-          // Play sound when app is in foreground
+          // Sound: shared autoplay-safe chime (deduped per email id against
+          // the FCM foreground handler — one ping per email, no doubles)
           if (prefs.soundNotif && !isBackground) {
-            playNotificationSound()
+            void attemptMailSound(e.id)
+          } else {
+            console.log('[PushDiag] sound skipped (background or pref off)', {
+              emailId: e.id,
+              soundNotif: prefs.soundNotif,
+              isBackground,
+            })
           }
 
           // Owner request 2026-11-08: NO in-app popup for new mail — the

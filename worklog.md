@@ -1956,3 +1956,22 @@ Stage Summary:
 - tsc --noEmit: 14 = pre-existing baseline, zero in use-app-store.ts.
 - Sandbox sweep during task: junk UUID commit 86c1cc4 deleted src/app/api/upload/route.ts and node_modules was wiped — repaired (restore from c82005c, reset to c82005c, bun install, embedded-postgres reinstalled --no-save); GitHub/production unaffected (origin/main stayed c82005c).
 - COMMITTED (use-app-store.ts + worklog only) and pushed with owner token; remote == local; Vercel auto-deploys.
+
+## Task ID 90 — Desktop browser notifications + new-email sound regression (Android untouched)
+- Request: restore desktop OS notification popups + new-email sound; keep UI, keep Android working; inspect first, no blind rewrite; add structured debug logs; confirm display, not just FCM HTTP 200.
+- Audit findings (exact regressions, all evidence-based):
+  1. Baseline-init race (use-notifications.tsx): the 4s-after-login server fetch (limit=1) set the notification baseline to the newest email AT THAT MOMENT — any mail arriving in the first seconds after opening the app was marked "already seen" and silently swallowed (no sound, no popup). REPRODUCED in sandbox: baseline absorbed the test mail (baseline set == insert time).
+  2. Stale 'ezymail-push-active' suppression: when the desktop web FCM token dies (OFF/ON cycle from the phone wipes all rows, UNREGISTERED purge, VAPID missing), every web re-subscribe failure was silent (void/catch) and the flag never cleared → the polling browser-notification fallback stayed suppressed forever → desktop fully silent.
+  3. FCM foreground onMessage showed the OS popup but never played the sound; in-app toasts were removed 2026-11-08, so FCM became the only instant surface and it needs a live web token.
+  4. playNotificationSound created a fresh AudioContext per call — Chrome autoplay policy can start it suspended → chime silently played into nothing.
+  5. sw.js showNotification promise was not returned/awaited through the push waitUntil.
+- Fixes (web/desktop paths only; Capacitor native path byte-untouched):
+  - NEW src/lib/mail-sound.ts: singleton AudioContext, resume-on-first-gesture + resume-at-play, same A5→C#6 chime, per-email-id dedupe (sessionStorage, 2-min TTL, cap 10) so poll and FCM foreground never double-ping; [MailSound] logs (played / blocked-by-autoplay / pref-off / duplicate).
+  - use-notifications.tsx: baseline init now reads the STORE (newest email already on screen — removes the race entirely; empty-inbox case gets a 60s client-skew grace); poll sound uses the shared chime; [PushDiag] logs for detection/suppression reasons; showBrowserNotification logs when permission not granted.
+  - push-notification-setup.tsx: releaseFallbackSuppression() on EVERY web failure path (vapid missing, unsupported, denied, getToken empty, subscribe HTTP/network error) re-arms the poll fallback; [PushDiag] logs through permission → SW ready → getToken (masked) → registered; onMessage plays the shared chime (deduped).
+  - public/sw.js: onBackgroundMessage returns the showNotification promise (covered by the push waitUntil) + [SWDiag] logs (push received / shown / failed). Android never uses this SW path.
+- Server dispatch already traces [PushDispatch] with per-token platform + payloadBytes + httpStatus (unchanged this task).
+- Sandbox E2E (embedded PG :5433 + next dev :3005 + real Chromium via playwright, permission-granted context): E2E_PASS — SW activated with firebase SDK; AudioContext running after gesture; poll detected BOTH inserted mails (fresh thread + reply-in-thread); sound played per email id; notification decision path logged. Headless limitations noted honestly: SW-context showNotification and page permission can be flipped by headless Chrome — visible popup + sound-on-real-device = owner device test.
+- Owner-device diagnosis aid: the log line '[PushDiag] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped' in the desktop DevTools console will immediately show whether the Vercel env NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing (prime suspect for a dead desktop web token while Android — which needs no VAPID — works).
+- tsc --noEmit: 14 = pre-existing baseline, zero in touched files. sw.js: node --check OK.
+- COMMITTED and pushed with owner token; remote == local; Vercel auto-deploys.

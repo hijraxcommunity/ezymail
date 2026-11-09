@@ -4,6 +4,26 @@ import { useEffect, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { useAppStore } from '@/store/use-app-store'
+import { attemptMailSound } from '@/lib/mail-sound'
+
+// Desktop diagnostic: when the web FCM subscription fails on THIS tab, the
+// 'ezymail-push-active' flag must NOT keep suppressing the polling fallback
+// (browser Notification constructor) — a stale flag was one of the reasons a
+// dead web token left the desktop 100% silent (owner report 2026-11-09).
+// WEB PATHS ONLY — the native/Android registration never touches this flag's
+// failure semantics (Android owns its surfaces through the native renderer).
+function releaseFallbackSuppression(reason: string) {
+  try {
+    if (sessionStorage.getItem('ezymail-push-active') === '1') {
+      sessionStorage.removeItem('ezymail-push-active')
+      console.warn('[PushDiag] FCM unavailable on this tab — polling notification fallback re-armed', { reason })
+    }
+  } catch { /* ignore */ }
+}
+
+function maskToken(t: string): string {
+  return t.length > 16 ? `${t.slice(0, 10)}…${t.slice(-4)}` : '***'
+}
 
 type PushStatus = 'unknown' | 'unsupported' | 'prompt' | 'granted' | 'denied' | 'subscribed' | 'loading' | 'error'
 
@@ -104,6 +124,7 @@ export function PushNotificationSetup() {
       if (res.ok) {
         statusRef.current = 'subscribed'
         tokenRef.current = token
+        console.log('[PushDiag] token registered', { platform, token: maskToken(token) })
         // Persist for logout (getDevicePushToken above) — survives reloads,
         // so signing out always carries the device token with it.
         try { localStorage.setItem('ezymail-fcm-token', token) } catch { /* ignore */ }
@@ -118,9 +139,13 @@ export function PushNotificationSetup() {
         if (showSuccess) toast.success('Notifications enabled on this device')
       } else {
         statusRef.current = 'error'
+        console.error('[PushDiag] token registration rejected by server', { platform, httpStatus: res.status })
+        if (platform !== 'android' && platform !== 'ios') releaseFallbackSuppression('subscribe-http-' + res.status)
       }
     } catch {
       statusRef.current = 'error'
+      console.error('[PushDiag] token registration request failed (network)')
+      releaseFallbackSuppression('subscribe-network')
     }
   }, [])
 
@@ -236,36 +261,36 @@ export function PushNotificationSetup() {
       const messaging = await getFirebaseMessaging()
       if (!messaging) {
         statusRef.current = 'unsupported'
+        console.warn('[PushDiag] firebase messaging unsupported in this browser')
+        releaseFallbackSuppression('messaging-unsupported')
         if (!silent) toast.error('Push notifications are not supported in this browser')
         return
       }
 
       // Request permission
       const permission = await Notification.requestPermission()
+      console.log('[PushDiag] notification permission', { permission })
       if (permission !== 'granted') {
         statusRef.current = 'denied'
+        releaseFallbackSuppression('permission-' + permission)
         return
       }
 
       // The app's main sw.js (registered by Providers) already includes
       // Firebase Messaging — just use its existing registration.
       const swRegistration = await navigator.serviceWorker.ready;
+      console.log('[PushDiag] service worker ready')
 
       const token = await getToken(messaging, {
         vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
         serviceWorkerRegistration: swRegistration,
       })
+      console.log('[PushDiag] fcm getToken', { ok: !!token, token: token ? maskToken(token) : undefined })
 
       if (token) {
         await subscribeToken(token, undefined, !silent)
 
         // Foreground message handler — fires ONLY while the page is visible
-        // (when focused, the Firebase SDK routes the message here and the
-        // service worker does NOT show the OS notification). Owner request:
-        // the popup must appear OUTSIDE the app even while it is open, so
-        // this handler shows the system notification. Owner request
-        // 2026-11-08: the in-app toast is GONE — the OS notification IS
-        // the popup; no duplicate inside the app.
         if (!onMessageBoundRef.current) {
           onMessageBoundRef.current = true
           onMessage(messaging, (payload) => {
@@ -273,6 +298,7 @@ export function PushNotificationSetup() {
             const emailId = data.emailId || ''
             const title = payload.notification?.title || data.title || 'New Email'
             const body = payload.notification?.body || data.body || 'You received a new message'
+            console.log('[PushDiag] foreground push received', { emailId: emailId || '(none)', hasTitle: !!title })
 
             // OS-level popup while the app is open (page context)
             try {
@@ -288,19 +314,31 @@ export function PushNotificationSetup() {
                   if (emailId) setSelectedEmailId(emailId)
                   n.close()
                 }
+                console.log('[PushDiag] foreground OS notification shown')
+              } else {
+                console.warn('[PushDiag] foreground notification skipped — permission not granted')
               }
-            } catch { /* OS popup is best-effort */ }
+            } catch (err) {
+              console.warn('[PushDiag] foreground OS notification failed', err instanceof Error ? err.message : String(err))
+              /* OS popup is best-effort */
+            }
+
+            // New-email sound for the FCM foreground path — the polling chime
+            // is deduped against this one by email id (one ping per email).
+            void attemptMailSound(emailId)
           })
         }
 
         if (!silent) toast.success('Push notifications enabled')
       } else {
         statusRef.current = 'error'
+        releaseFallbackSuppression('getToken-empty')
         if (!silent) toast.error('Failed to get notification token')
       }
     } catch (err) {
-      console.error('Push setup error:', err)
+      console.error('[PushDiag] web push setup error', err instanceof Error ? err.message : String(err))
       statusRef.current = 'error'
+      releaseFallbackSuppression('setup-error')
       // Only show error toast when user explicitly requested (not on auto-subscribe)
       if (!silent) toast.error('Failed to enable push notifications')
     }
@@ -358,19 +396,22 @@ export function PushNotificationSetup() {
       if (!vapidKey || vapidKey.length < 20) {
         // Surfaced for diagnosability (was a fully silent no-op — made the
         // "desktop works, mobile doesn't" investigation much harder)
-        console.warn('[Push] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped')
+        console.warn('[PushDiag] NEXT_PUBLIC_FIREBASE_VAPID_KEY missing/short — push subscription skipped')
         statusRef.current = 'unsupported'
+        releaseFallbackSuppression('vapid-missing')
         return
       }
 
       // Check basic support
       if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
         statusRef.current = 'unsupported'
+        releaseFallbackSuppression('browser-unsupported')
         return
       }
 
       if (Notification.permission === 'denied') {
         statusRef.current = 'denied'
+        releaseFallbackSuppression('permission-denied')
         return
       }
 
