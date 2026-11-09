@@ -43,6 +43,16 @@ export async function GET(request: NextRequest) {
       where.recipientEmail = session.email;
     }
 
+    // Archiving must actually hide mail from the inbox (the Archive view
+    // lists isArchived rows). Without this exclusion the archived row kept
+    // matching the inbox query and the 15s poll brought it straight back
+    // after every archive — same class as the owner's "delete comes back"
+    // report 2026-11-09. Scoped to the inbox exactly; starred/archive/
+    // scheduled/snoozed branches above already replaced the where clause.
+    if (folder === 'inbox') {
+      where.isArchived = false;
+    }
+
     if (folder === 'scheduled') {
       delete where.folder;
       where.senderId = session.userId;
@@ -126,9 +136,16 @@ export async function GET(request: NextRequest) {
     const threadCounts: Record<string, number> = {}
 
     for (const email of emails) {
-      // Skip emails that are part of a thread already shown
-      // (replies have threadId pointing to the root)
-      if (email.threadId && email.threadId !== email.id && seenThreads.has(email.threadId)) {
+      // One row per conversation: once a thread's newest message has been
+      // emitted (rows arrive newest-first), every other member of the same
+      // thread is hidden — INCLUDING the root email, whose threadId equals
+      // its own id. The old `email.threadId !== email.id` exemption shielded
+      // the root from this skip, so a conversation always rendered as TWO
+      // rows (reply row + original row) on every fresh load — the owner's
+      // "reply comes as a new email … all the email should come in one
+      // email" report 2026-11-09. Legacy rows (threadId=null) keep rendering
+      // as individual rows, exactly as before.
+      if (email.threadId && seenThreads.has(email.threadId)) {
         threadCounts[email.threadId] = (threadCounts[email.threadId] || 0) + 1
         continue
       }

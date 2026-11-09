@@ -56,6 +56,27 @@ export async function POST(
       },
     });
 
+    // Snooze follows the conversation (the list renders one row per
+    // conversation): snoozing only the clicked row let the older messages
+    // reappear on the next poll — same class as the owner's "delete comes
+    // back" report 2026-11-09. Scope: this user's own received copies in
+    // live folders only — trash/spam/drafts rows keep their placement (the
+    // folder views hide snoozed rows, so snoozing a trashed sibling would
+    // make it vanish from the trash view), and other people's mailboxes are
+    // never touched.
+    if (email.recipientEmail === session.email) {
+      const threadKey = email.threadId || email.id;
+      await db.email.updateMany({
+        where: {
+          recipientEmail: session.email,
+          id: { not: id },
+          folder: { notIn: ['trash', 'spam', 'drafts'] },
+          OR: [{ threadId: threadKey }, { id: threadKey }],
+        },
+        data: { snoozedUntil: snoozeDate },
+      });
+    }
+
     return NextResponse.json({ success: true, email: updatedEmail });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
@@ -100,6 +121,23 @@ export async function DELETE(
         },
       },
     });
+
+    // Un-snooze wakes the whole conversation (symmetric with the snooze
+    // scoping above): the snoozed view shows one row per conversation, so
+    // waking only the clicked row left its siblings asleep forever. Only
+    // this user's currently-snoozed received copies are woken.
+    if (email.recipientEmail === session.email) {
+      const threadKey = email.threadId || email.id;
+      await db.email.updateMany({
+        where: {
+          recipientEmail: session.email,
+          id: { not: id },
+          snoozedUntil: { not: null },
+          OR: [{ threadId: threadKey }, { id: threadKey }],
+        },
+        data: { snoozedUntil: null },
+      });
+    }
 
     return NextResponse.json({ success: true, email: updatedEmail });
   } catch (error: unknown) {

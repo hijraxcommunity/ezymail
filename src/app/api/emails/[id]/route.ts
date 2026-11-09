@@ -184,6 +184,26 @@ export async function PUT(
       },
     });
 
+    // Archive follows the conversation: the list renders ONE row per
+    // conversation (the newest message), so archiving only the clicked row
+    // left the older messages unarchived in the inbox and the 15s poll
+    // brought the conversation straight back (same class as the owner's
+    // "delete comes back" report 2026-11-09). Scope: this user's own
+    // received copies only — rows in other people's mailboxes and the
+    // sender's sent copies (threadId=null, recipientEmail=other) are never
+    // touched. isRead / isStarred stay per-message.
+    if (typeof isArchived === 'boolean' && email.recipientEmail === session.email) {
+      const threadKey = email.threadId || email.id;
+      await db.email.updateMany({
+        where: {
+          recipientEmail: session.email,
+          id: { not: id },
+          OR: [{ threadId: threadKey }, { id: threadKey }],
+        },
+        data: { isArchived },
+      });
+    }
+
     return NextResponse.json({ email: updatedEmail });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
@@ -218,13 +238,38 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not authorized to delete this email' }, { status: 403 });
     }
 
-    // If already in trash, permanently delete
+    // The list renders ONE row per conversation (the newest message), so
+    // "delete this email" means the conversation the user sees. Trashing
+    // only the clicked row left the older messages in the inbox and the
+    // 15s poll brought them straight back — the owner's "when I delete the
+    // email it comes back like nothing happened" report 2026-11-09, and the
+    // same reason bulk select-all + delete kept leaving stragglers behind.
+    // Scope guards: recipientEmail = session.email → only this user's own
+    // received copies move; other people's mailboxes (senderId rows) and the
+    // sender's sent copies (threadId=null, recipientEmail=other) are never
+    // touched — a sent copy always collapses to the single row itself.
+    const threadKey = email.threadId || email.id;
+
+    // If already in trash, permanently delete — this user's conversation
+    // copies that are ALREADY in trash. The folder='trash' scope guarantees
+    // live mail is never destroyed from here.
     if (email.folder === 'trash') {
-      await db.email.delete({ where: { id } });
+      await db.email.deleteMany({
+        where: {
+          folder: 'trash',
+          OR: [
+            { id },
+            { recipientEmail: session.email, OR: [{ threadId: threadKey }, { id: threadKey }] },
+          ],
+        },
+      });
       return NextResponse.json({ success: true, permanentlyDeleted: true });
     }
 
-    // Otherwise, move to trash
+    // Otherwise, move to trash — the clicked row plus the rest of its
+    // conversation (live folders only: trash/spam/drafts rows keep their
+    // placement, so trashing one message can never empty the spam view or
+    // destroy drafts)
     const updatedEmail = await db.email.update({
       where: { id },
       data: { folder: 'trash' },
@@ -237,6 +282,18 @@ export async function DELETE(
         },
       },
     });
+
+    if (email.recipientEmail === session.email) {
+      await db.email.updateMany({
+        where: {
+          recipientEmail: session.email,
+          id: { not: id },
+          folder: { notIn: ['trash', 'spam', 'drafts'] },
+          OR: [{ threadId: threadKey }, { id: threadKey }],
+        },
+        data: { folder: 'trash' },
+      });
+    }
 
     return NextResponse.json({ success: true, email: updatedEmail });
   } catch (error: unknown) {

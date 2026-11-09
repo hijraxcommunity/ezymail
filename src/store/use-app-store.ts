@@ -73,6 +73,32 @@ export interface AttachmentFile {
   data?: string;
 }
 
+// ─── Recently-removed guard (delete-resurrection fix, 2026-11-09) ──────────
+// The 15s poll and the visibilitychange refresh MERGE page 1 into the list.
+// A response that was already in flight when the user deleted rows still
+// contains them; without this guard those rows were merged straight back
+// into the list — the owner's "when I delete the email it comes back like
+// nothing happened", and select-all + delete kept leaving stragglers.
+// Explicit restores (undo snackbar → addEmail) bypass the guard on purpose.
+const RECENT_REMOVE_TTL_MS = 60_000;
+const recentlyRemovedIds = new Map<string, number>();
+function recordRemovedId(id: string): void {
+  const now = Date.now();
+  recentlyRemovedIds.set(id, now);
+  for (const [k, t] of recentlyRemovedIds) {
+    if (now - t > RECENT_REMOVE_TTL_MS) recentlyRemovedIds.delete(k);
+  }
+}
+function wasRecentlyRemoved(id: string): boolean {
+  const t = recentlyRemovedIds.get(id);
+  if (t === undefined) return false;
+  if (Date.now() - t > RECENT_REMOVE_TTL_MS) {
+    recentlyRemovedIds.delete(id);
+    return false;
+  }
+  return true;
+}
+
 export interface SavedSearch {
   id: string;
   name: string;
@@ -400,6 +426,10 @@ export const useAppStore = create<AppState>()(
         const next = [...state.emails]
         for (const e of incoming) {
           if (seenIds.has(e.id)) continue
+          // Rows removed on this device within the TTL window (delete /
+          // archive / spam …): skip — an in-flight poll response must not
+          // resurrect them before the server's removal converges.
+          if (wasRecentlyRemoved(e.id)) continue
           // Reply in a thread we already show: replace the current row only
           // when the incoming one is NEWER (poll page-1 case). Older rows
           // (scroll-loaded history) keep being skipped — no duplicates.
@@ -433,10 +463,13 @@ export const useAppStore = create<AppState>()(
       updateEmail: (id, data) => set((state) => ({
         emails: state.emails.map((e) => (e.id === id ? { ...e, ...data } : e)),
       })),
-      removeEmail: (id) => set((state) => ({
-        emails: state.emails.filter((e) => e.id !== id),
-        selectedEmailId: state.selectedEmailId === id ? null : state.selectedEmailId,
-      })),
+      removeEmail: (id) => {
+        recordRemovedId(id);
+        set((state) => ({
+          emails: state.emails.filter((e) => e.id !== id),
+          selectedEmailId: state.selectedEmailId === id ? null : state.selectedEmailId,
+        }));
+      },
 
       // Actions - Multi-select
       toggleSelectEmail: (id) => set((state) => {
@@ -453,6 +486,7 @@ export const useAppStore = create<AppState>()(
       deleteSelected: () => {
         const state = get();
         const selected = state.emails.filter((e) => state.selectedEmailIds.has(e.id));
+        selected.forEach((e) => recordRemovedId(e.id));
         set({
           emails: state.emails.filter((e) => !state.selectedEmailIds.has(e.id)),
           selectedEmailIds: new Set(),
@@ -463,6 +497,7 @@ export const useAppStore = create<AppState>()(
       archiveSelected: () => {
         const state = get();
         const selected = state.emails.filter((e) => state.selectedEmailIds.has(e.id));
+        selected.forEach((e) => recordRemovedId(e.id));
         set({
           emails: state.emails.filter((e) => !state.selectedEmailIds.has(e.id)),
           selectedEmailIds: new Set(),
@@ -559,7 +594,9 @@ export const useAppStore = create<AppState>()(
       })),
 
       // Actions - General
-      logout: () => set({
+      logout: () => {
+        recentlyRemovedIds.clear();
+        set({
         user: null,
         isAuthenticated: false,
         authView: 'login',
@@ -589,7 +626,8 @@ export const useAppStore = create<AppState>()(
         rules: [],
         searchTotal: 0,
         searchOperators: null,
-      }),
+        });
+      },
     }),
     {
       name: 'ezymail-storage',
