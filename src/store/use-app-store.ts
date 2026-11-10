@@ -82,12 +82,24 @@ export interface AttachmentFile {
 // Explicit restores (undo snackbar → addEmail) bypass the guard on purpose.
 const RECENT_REMOVE_TTL_MS = 60_000;
 const recentlyRemovedIds = new Map<string, number>();
-function recordRemovedId(id: string): void {
+function recordRemovedId(id: string, threadKey?: string | null): void {
   const now = Date.now();
   recentlyRemovedIds.set(id, now);
+  // The conversation's OTHER rows (hidden on the list by the server's
+  // thread grouping) must be guarded too: an in-flight poll / page-1
+  // response generated before the server finished trashing the conversation
+  // still carries those siblings, and re-inserting one of them is exactly
+  // the "deleted email flashes back like a ghost, then disappears" owner
+  // report 2026-11-10. The key matches how the server scopes its
+  // conversation delete: threadId, or the row's own id when it IS the root.
+  if (threadKey && threadKey !== id) recentlyRemovedIds.set(threadKey, now);
   for (const [k, t] of recentlyRemovedIds) {
     if (now - t > RECENT_REMOVE_TTL_MS) recentlyRemovedIds.delete(k);
   }
+}
+function clearRemovedId(id: string, threadKey?: string | null): void {
+  recentlyRemovedIds.delete(id);
+  if (threadKey) recentlyRemovedIds.delete(threadKey);
 }
 function wasRecentlyRemoved(id: string): boolean {
   const t = recentlyRemovedIds.get(id);
@@ -97,6 +109,14 @@ function wasRecentlyRemoved(id: string): boolean {
     return false;
   }
   return true;
+}
+/** Row-level guard check: the row itself (by id) AND any sibling of a
+ *  just-deleted conversation (by threadId — the root's own id is already
+ *  covered by the id check). Used by BOTH merge paths so a response that
+ *  was in flight during a delete can never resurrect the conversation. */
+function wasRecentlyRemovedRow(email: { id: string; threadId: string | null }): boolean {
+  if (wasRecentlyRemoved(email.id)) return true;
+  return !!email.threadId && wasRecentlyRemoved(email.threadId);
 }
 
 export interface SavedSearch {
@@ -406,7 +426,14 @@ export const useAppStore = create<AppState>()(
         multiSelectMode: false,
         selectedEmailIds: new Set(),
       }),
-      setEmails: (emails) => set({ emails }),
+      setEmails: (emails) => set(() => ({
+        // Page-1 replace is the one merge path with NO seenIds protection,
+        // so a response generated before the server finished the delete
+        // re-inserted the deleted row verbatim (it reappeared as a ghost
+        // until the next replace removed it — owner report 2026-11-10).
+        // Same recently-removed filter as appendEmails applies here.
+        emails: emails.filter((e) => !wasRecentlyRemovedRow(e)),
+      })),
       appendEmails: (incoming) => {
         if (!incoming.length) return 0
         const state = get()
@@ -428,8 +455,10 @@ export const useAppStore = create<AppState>()(
           if (seenIds.has(e.id)) continue
           // Rows removed on this device within the TTL window (delete /
           // archive / spam …): skip — an in-flight poll response must not
-          // resurrect them before the server's removal converges.
-          if (wasRecentlyRemoved(e.id)) continue
+          // resurrect them before the server's removal converges. The
+          // check covers the row itself AND its deleted conversation's
+          // siblings (the ghost-flash-back path).
+          if (wasRecentlyRemovedRow(e)) continue
           // Reply in a thread we already show: replace the current row only
           // when the incoming one is NEWER (poll page-1 case). Older rows
           // (scroll-loaded history) keep being skipped — no duplicates.
@@ -459,14 +488,33 @@ export const useAppStore = create<AppState>()(
       setTotalEmails: (total) => set({ totalEmails: total }),
       setCurrentPage: (page) => set({ currentPage: page }),
       setIsLoading: (loading) => set({ isLoading: loading }),
-      addEmail: (email) => set((state) => ({ emails: [email, ...state.emails] })),
+      addEmail: (email) => {
+        // Explicit restore (undo snackbar) lifts the guard for this row AND
+        // its conversation — otherwise a page-1 replace within the TTL
+        // window would silently drop the mail the user just brought back.
+        clearRemovedId(email.id, email.threadId || email.id);
+        set((state) => ({ emails: [email, ...state.emails] }));
+      },
       updateEmail: (id, data) => set((state) => ({
         emails: state.emails.map((e) => (e.id === id ? { ...e, ...data } : e)),
       })),
       removeEmail: (id) => {
-        recordRemovedId(id);
+        // Look up the row BEFORE filtering so the whole conversation's key
+        // gets guarded too (server delete/archive follow the conversation).
+        const removedRow = get().emails.find((e) => e.id === id);
+        const threadKey = removedRow ? (removedRow.threadId || removedRow.id) : null;
+        recordRemovedId(id, threadKey);
         set((state) => ({
-          emails: state.emails.filter((e) => e.id !== id),
+          // The server delete is conversation-scoped, so the client list must
+          // be too: a scroll-loaded SIBLING (an older member of the same
+          // thread that arrived via page 2+) would otherwise linger on screen
+          // after the visible row is deleted — the same ghost class as the
+          // owner's 2026-11-10 report. Root rows carry threadId === id, so
+          // both the id and threadId checks find them.
+          emails: state.emails.filter((e) =>
+            e.id !== id &&
+            !(threadKey && (e.id === threadKey || (!!e.threadId && e.threadId === threadKey)))
+          ),
           selectedEmailId: state.selectedEmailId === id ? null : state.selectedEmailId,
         }));
       },
@@ -486,9 +534,18 @@ export const useAppStore = create<AppState>()(
       deleteSelected: () => {
         const state = get();
         const selected = state.emails.filter((e) => state.selectedEmailIds.has(e.id));
-        selected.forEach((e) => recordRemovedId(e.id));
+        const removedKeys = new Set<string>();
+        selected.forEach((e) => {
+          recordRemovedId(e.id, e.threadId);
+          removedKeys.add(e.threadId || e.id);
+        });
         set({
-          emails: state.emails.filter((e) => !state.selectedEmailIds.has(e.id)),
+          // Conversation-scoped removal — mirrors the server delete; see
+          // removeEmail above for why siblings must go with the row.
+          emails: state.emails.filter((e) =>
+            !state.selectedEmailIds.has(e.id) &&
+            !(removedKeys.has(e.id) || (!!e.threadId && removedKeys.has(e.threadId)))
+          ),
           selectedEmailIds: new Set(),
           multiSelectMode: false,
         });
@@ -497,9 +554,18 @@ export const useAppStore = create<AppState>()(
       archiveSelected: () => {
         const state = get();
         const selected = state.emails.filter((e) => state.selectedEmailIds.has(e.id));
-        selected.forEach((e) => recordRemovedId(e.id));
+        const removedKeys = new Set<string>();
+        selected.forEach((e) => {
+          recordRemovedId(e.id, e.threadId);
+          removedKeys.add(e.threadId || e.id);
+        });
         set({
-          emails: state.emails.filter((e) => !state.selectedEmailIds.has(e.id)),
+          // Conversation-scoped removal — mirrors the server archive scoping
+          // (PUT follows the conversation for this user's received copies).
+          emails: state.emails.filter((e) =>
+            !state.selectedEmailIds.has(e.id) &&
+            !(removedKeys.has(e.id) || (!!e.threadId && removedKeys.has(e.threadId)))
+          ),
           selectedEmailIds: new Set(),
           multiSelectMode: false,
         });

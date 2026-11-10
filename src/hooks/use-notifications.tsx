@@ -3,8 +3,13 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/use-app-store'
 import { attemptMailSound } from '@/lib/mail-sound'
+import { wasNotifSurfaced, swTrayHasEmail } from '@/lib/notif-surface'
 
 const POLL_INTERVAL = 15000 // 15 seconds
+// FCM dead-man grace: a healthy FCM delivery lands within ~1-3s of the send,
+// so 8s is safely beyond it — any email still unsurfaced after this window
+// means the FCM message is NOT coming and the poll must break the silence.
+const FCM_SURFACE_GRACE_MS = 8000
 
 // ─── Browser Notification Helpers ──────────────────────────────────────────
 
@@ -162,6 +167,46 @@ export function useNotifications() {
     return () => clearInterval(timer)
   }, [isAuthenticated])
 
+  // ─── FCM dead-man switch (see src/lib/notif-surface.ts) ────────────────
+  // While FCM is active the poll suppresses its own browser notification.
+  // If the FCM message never actually lands (dead token, server-side skip,
+  // SW breakage) that suppression was a PERMANENT silent drop — the owner's
+  // "still I do not receive notification" report 2026-11-10. After a grace
+  // window, any email FCM did not surface (foreground registry or SW tray)
+  // is popped by the poll itself. Mail detected while the tab is hidden is
+  // parked and checked on return-to-visible.
+  const pendingSurfaceRef = useRef<Map<string, { senderName: string; subject: string }>>(new Map())
+
+  const runSurfaceCheck = useCallback((emailId: string, senderName: string, subject: string) => {
+    void (async () => {
+      try {
+        // FCM foreground already popped it (registry written by onMessage)
+        if (wasNotifSurfaced(emailId)) return
+        // SW background already popped it while the tab was hidden
+        if (await swTrayHasEmail(emailId)) return
+        // Opened inside the grace window — no popup needed anymore
+        const row = useAppStore.getState().emails.find((x) => x.id === emailId)
+        if (row && row.isRead) return
+        console.warn('[PushDiag] FCM dead-man fallback — push never surfaced this email, showing browser notification', { emailId })
+        showBrowserNotification(`New email from ${senderName}`, {
+          body: subject,
+          tag: `email-${emailId}`,
+        })
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  const parkOrScheduleSurfaceCheck = useCallback((emailId: string, senderName: string, subject: string) => {
+    if (!emailId) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      // Background tab: timers are throttled and the SW owns the surface
+      // while hidden — park the check and run it when the user returns.
+      pendingSurfaceRef.current.set(emailId, { senderName, subject })
+      return
+    }
+    setTimeout(() => runSurfaceCheck(emailId, senderName, subject), FCM_SURFACE_GRACE_MS)
+  }, [runSurfaceCheck])
+
   // ─── Poll for new emails (works even when tab is in background) ─────────
   const pollForNewEmails = useCallback(async () => {
     if (!isAuthenticated || !isInitializedRef.current) return
@@ -242,8 +287,12 @@ export function useNotifications() {
               body: subject,
               tag: `email-${e.id}`,
             })
+          } else if (prefs.desktopNotif && pushActive) {
+            // FCM owns the popup surface — but its message must actually
+            // LAND. The dead-man check below pops anything it never did.
+            parkOrScheduleSurfaceCheck(e.id, senderName, subject)
           } else {
-            console.log('[PushDiag] poll notification suppressed', {
+            console.log('[PushDiag] poll notification suppressed — desktop notifications pref is off', {
               emailId: e.id,
               desktopNotif: prefs.desktopNotif,
               pushActive,
@@ -271,7 +320,7 @@ export function useNotifications() {
     } catch {
       // Silent fail
     }
-  }, [isAuthenticated, appendEmails, setTotalEmails])
+  }, [isAuthenticated, appendEmails, setTotalEmails, parkOrScheduleSurfaceCheck])
 
   // ─── Start/stop polling ────────────────────────────────────────────────
   useEffect(() => {
@@ -305,6 +354,15 @@ export function useNotifications() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         pollForNewEmails()
+        // Dead-man flush: any mail the background poll parked while hidden
+        // gets its surface check now — after the same grace window, in case
+        // a late FCM message is still in flight (no doubles on a healthy
+        // subscription, no silence on a dead one).
+        const parked = Array.from(pendingSurfaceRef.current.entries())
+        pendingSurfaceRef.current.clear()
+        for (const [parkedId, meta] of parked) {
+          setTimeout(() => runSurfaceCheck(parkedId, meta.senderName, meta.subject), FCM_SURFACE_GRACE_MS)
+        }
         // Also refresh the email list for the current view — page 1 (the
         // newest) so anything that arrived while hidden merges in even on a
         // paginated view. Merge keeps loaded history + scroll intact.
@@ -327,5 +385,5 @@ export function useNotifications() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [isAuthenticated, pollForNewEmails, appendEmails, setTotalEmails])
+  }, [isAuthenticated, pollForNewEmails, appendEmails, setTotalEmails, runSurfaceCheck])
 }

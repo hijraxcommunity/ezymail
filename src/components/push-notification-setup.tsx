@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { useAppStore } from '@/store/use-app-store'
 import { attemptMailSound } from '@/lib/mail-sound'
+import { rememberNotifSurface } from '@/lib/notif-surface'
 
 // Desktop diagnostic: when the web FCM subscription fails on THIS tab, the
 // 'ezymail-push-active' flag must NOT keep suppressing the polling fallback
@@ -314,6 +315,10 @@ export function PushNotificationSetup() {
                   if (emailId) setSelectedEmailId(emailId)
                   n.close()
                 }
+                // Dead-man bookkeeping (notif-surface.ts): tells the polling
+                // hook's delayed fallback that FCM REALLY surfaced this
+                // email, so a healthy subscription never double-pops.
+                if (emailId) rememberNotifSurface(emailId)
                 console.log('[PushDiag] foreground OS notification shown')
               } else {
                 console.warn('[PushDiag] foreground notification skipped — permission not granted')
