@@ -110,6 +110,23 @@ function wasRecentlyRemoved(id: string): boolean {
   }
   return true;
 }
+/** Folder navigation: the guard's one job is to stop an in-flight poll
+ *  response — one already on the wire BEFORE the server committed the
+ *  delete — from re-inserting deleted rows into the view the user is
+ *  LOOKING AT. It was never meant to follow the user across folders:
+ *  "id X was deleted in the inbox" then filtering the same id out of the
+ *  TRASH fetch made every just-deleted email invisible in Trash for the
+ *  whole 60s TTL ("deleted emails do not go to Trash", owner report
+ *  2026-11-10), and the trash Restore path (removeEmail on the trash row)
+ *  re-armed the same guard against the Inbox, so a restored email never
+ *  reappeared there ("Restore button does not work"). Every fetch after a
+ *  navigation is fresh and initiated AFTER the delete API already
+ *  returned — the server state is converged, there is nothing left to
+ *  protect, so navigation clears the guard. Same-view in-flight-poll
+ *  protection is untouched (no navigation happened). */
+function clearAllRemovedIds(): void {
+  recentlyRemovedIds.clear();
+}
 /** Row-level guard check: the row itself (by id) AND any sibling of a
  *  just-deleted conversation (by threadId — the root's own id is already
  *  covered by the id check). Used by BOTH merge paths so a response that
@@ -410,22 +427,32 @@ export const useAppStore = create<AppState>()(
       setAuthView: (view) => set({ authView: view }),
 
       // Actions - Mail
-      setCurrentFolder: (folder) => set({
-        currentFolder: folder,
-        currentPage: 1,
-        selectedEmailId: null,
-        emailDetailOpen: false,
-        multiSelectMode: false,
-        selectedEmailIds: new Set(),
-      }),
-      setCurrentFolderId: (id) => set({
-        currentFolder: 'folder',
-        currentFolderId: id,
-        currentPage: 1,
-        selectedEmailId: null,
-        multiSelectMode: false,
-        selectedEmailIds: new Set(),
-      }),
+      setCurrentFolder: (folder) => {
+        // Navigation = fresh post-delete server state; see
+        // clearAllRemovedIds for why the removal guard must not leak
+        // across folders (it blanked Trash and ate restored mail).
+        clearAllRemovedIds();
+        set({
+          currentFolder: folder,
+          currentPage: 1,
+          selectedEmailId: null,
+          emailDetailOpen: false,
+          multiSelectMode: false,
+          selectedEmailIds: new Set(),
+        });
+      },
+      setCurrentFolderId: (id) => {
+        // Same navigation semantics as setCurrentFolder — clear the guard.
+        clearAllRemovedIds();
+        set({
+          currentFolder: 'folder',
+          currentFolderId: id,
+          currentPage: 1,
+          selectedEmailId: null,
+          multiSelectMode: false,
+          selectedEmailIds: new Set(),
+        });
+      },
       setEmails: (emails) => set(() => ({
         // Page-1 replace is the one merge path with NO seenIds protection,
         // so a response generated before the server finished the delete
