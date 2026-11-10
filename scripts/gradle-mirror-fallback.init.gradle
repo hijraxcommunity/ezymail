@@ -1,0 +1,25 @@
+// Redirect Maven Central to the Huawei mirror to dodge per-IP 429 rate limits.
+// Init-script only — no changes to the project's own gradle files.
+def swapper = { repo ->
+    try {
+        if (repo instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository) {
+            def u = repo.url?.toString() ?: ''
+            if (u.startsWith('https://repo.maven.apache.org/maven2')) {
+                repo.url = 'https://repo.huaweicloud.com/repository/maven/'
+            }
+        }
+    } catch (Throwable t) { /* ignore */ }
+}
+
+allprojects {
+    buildscript {
+        repositories.all(swapper)
+    }
+    repositories.all(swapper)
+}
+
+try {
+    settingsEvaluated { s ->
+        s.pluginManagement.repositories.all(swapper)
+    }
+} catch (Throwable t) { /* ignore */ }
