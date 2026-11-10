@@ -135,6 +135,14 @@ export async function GET(request: NextRequest) {
     const filteredEmails: typeof emails = []
     const threadCounts: Record<string, number> = {}
 
+    // Pre-pass: every thread key claimed on this page. Needed for legacy
+    // roots below — their own threadId is null, so the fold can only spot
+    // them through the replies that claim the root's id as their threadId.
+    const threadKeysOnPage = new Set<string>()
+    for (const email of emails) {
+      if (email.threadId) threadKeysOnPage.add(email.threadId)
+    }
+
     for (const email of emails) {
       // One row per conversation: once a thread's newest message has been
       // emitted (rows arrive newest-first), every other member of the same
@@ -143,10 +151,25 @@ export async function GET(request: NextRequest) {
       // the root from this skip, so a conversation always rendered as TWO
       // rows (reply row + original row) on every fresh load — the owner's
       // "reply comes as a new email … all the email should come in one
-      // email" report 2026-11-09. Legacy rows (threadId=null) keep rendering
-      // as individual rows, exactly as before.
+      // email" report 2026-11-09.
       if (email.threadId && seenThreads.has(email.threadId)) {
         threadCounts[email.threadId] = (threadCounts[email.threadId] || 0) + 1
+        continue
+      }
+      // Legacy root (threadId=null — the welcome mail and every email created
+      // before thread stamping existed): its replies DO carry
+      // threadId = this root's id, but the null on the root itself made the
+      // fold above skip it, so the same conversation rendered TWICE — once as
+      // the reply row, once as the orphaned root. After the
+      // conversation-scoped delete moved the whole thread to Trash, the Trash
+      // list showed the deleted email "as duplicate" (owner report
+      // 2026-11-11). When another row on this page claims this row's id as
+      // its thread key, the conversation is already represented → fold the
+      // root under it, exactly like every other member. A root whose replies
+      // are NOT on this page still renders as its own row (it is then the
+      // conversation's only visible member).
+      if (!email.threadId && threadKeysOnPage.has(email.id)) {
+        threadCounts[email.id] = (threadCounts[email.id] || 0) + 1
         continue
       }
       seenThreads.add(email.threadId || email.id)

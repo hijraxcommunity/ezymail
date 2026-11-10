@@ -497,6 +497,21 @@ export const useAppStore = create<AppState>()(
             }
             continue
           }
+          // Legacy root (threadId=null) whose conversation is ALREADY on
+          // screen: a visible row claims e.id as its threadId, so this row
+          // is a hidden member of a rendered conversation, not a new one.
+          // Appending it produced the exact second row that made Trash show
+          // a just-deleted conversation "as duplicate" (owner report
+          // 2026-11-11; same fold rule as the server's thread grouping,
+          // which hides the root whenever a newer thread member is shown).
+          if (!e.threadId && threadIndex.has(e.id)) {
+            const i = threadIndex.get(e.id)!
+            const current = next[i]
+            if (current && new Date(e.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+              next[i] = e
+            }
+            continue
+          }
           threadIndex.set(e.threadId || e.id, next.length)
           next.push(e)
           appended++
