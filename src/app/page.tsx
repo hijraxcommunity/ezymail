@@ -134,14 +134,46 @@ export default function HomePage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   // ─── Check session on mount ─────────────────────────────────────────────
+  // A single failed /api/auth/me used to drop the user straight onto the
+  // login screen: any network hiccup, cold start or transient 5xx looked
+  // EXACTLY like the session had expired ("the 30 days session login
+  // disappeared … it logout in 24 hours", owner report 2026-11-11 — sessions
+  // are provably 30-day in code; what died was one unlucky auth check).
+  // A clean 401 remains the definitive "not logged in" answer; anything else
+  // is retried with a short backoff before the login screen is shown.
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) setUser(data.user)
-      })
-      .catch(() => { /* silent */ })
-      .finally(() => setIsCheckingAuth(false))
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    const attempt = (tryNo: number) => {
+      fetch('/api/auth/me')
+        .then(async (res) => {
+          if (cancelled) return
+          if (res.ok) {
+            const data = await res.json()
+            if (!cancelled && data.user) setUser(data.user)
+            if (!cancelled) setIsCheckingAuth(false)
+            return
+          }
+          if (res.status !== 401 && tryNo < 2) {
+            retryTimer = setTimeout(() => attempt(tryNo + 1), 1500)
+            return
+          }
+          setIsCheckingAuth(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          if (tryNo < 2) {
+            retryTimer = setTimeout(() => attempt(tryNo + 1), 1500)
+            return
+          }
+          setIsCheckingAuth(false)
+        })
+    }
+    attempt(0)
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+    }
   }, [setUser])
 
   // ─── Native splash dismissal — launch handover at first paint ───────────

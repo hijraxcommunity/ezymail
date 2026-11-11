@@ -476,6 +476,17 @@ export const useAppStore = create<AppState>()(
           const key = e.threadId || e.id
           if (!threadIndex.has(key)) threadIndex.set(key, i)
         })
+        // Parent index: visible rows that REPLY to another row. Legacy
+        // conversations can carry threadId=null on EVERY row, so the
+        // parentEmailId link is the only grouping edge the client has — the
+        // server fold now groups by both, and these guards keep a
+        // scroll-loaded / polled parent or child of an already-visible
+        // legacy conversation from rendering as a second row (the same
+        // "goes to trash separately" owner report 2026-11-11, merge side).
+        const parentIndex = new Map<string, number>()
+        state.emails.forEach((e, i) => {
+          if (e.parentEmailId && !parentIndex.has(e.parentEmailId)) parentIndex.set(e.parentEmailId, i)
+        })
         let appended = 0
         const next = [...state.emails]
         for (const e of incoming) {
@@ -506,6 +517,28 @@ export const useAppStore = create<AppState>()(
           // which hides the root whenever a newer thread member is shown).
           if (!e.threadId && threadIndex.has(e.id)) {
             const i = threadIndex.get(e.id)!
+            const current = next[i]
+            if (current && new Date(e.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+              next[i] = e
+            }
+            continue
+          }
+          // Legacy child whose PARENT row is already visible (parentEmailId
+          // link — threadId is unreliable on legacy conversations): same
+          // one-row rule, replace when newer.
+          if (!e.threadId && e.parentEmailId && threadIndex.has(e.parentEmailId)) {
+            const i = threadIndex.get(e.parentEmailId)!
+            const current = next[i]
+            if (current && new Date(e.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+              next[i] = e
+            }
+            continue
+          }
+          // Legacy PARENT of a row we already show (the visible row replies
+          // to it): the conversation is represented, the older parent must
+          // not add a second row.
+          if (!e.threadId && parentIndex.has(e.id)) {
+            const i = parentIndex.get(e.id)!
             const current = next[i]
             if (current && new Date(e.createdAt).getTime() > new Date(current.createdAt).getTime()) {
               next[i] = e
