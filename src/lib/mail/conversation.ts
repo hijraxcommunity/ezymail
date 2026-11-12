@@ -51,6 +51,7 @@ export interface MemberRow {
   parentEmailId: string | null;
   isRead: boolean;
   isArchived: boolean;
+  body: string;
   createdAt: Date;
 }
 
@@ -63,6 +64,7 @@ const MEMBER_SELECT = {
   parentEmailId: true,
   isRead: true,
   isArchived: true,
+  body: true,
   createdAt: true,
 } as const;
 
@@ -347,10 +349,15 @@ export function groupRowsForList<T extends GroupableRow>(
     if (first === undefined) keyIndex.set(e.threadId, i);
     else union(first, i);
   });
+  // id -> row index for the parent-chain lookups (O(1) instead of the old
+  // O(n) findIndex inside an O(n) pass — the folder-wide fold now runs over
+  // thousands of rows per request).
+  const indexById = new Map<string, number>();
+  rows.forEach((e, i) => indexById.set(e.id, i));
   rows.forEach((e, i) => {
     if (e.parentEmailId) {
-      const p = rows.findIndex((r) => r.id === e.parentEmailId);
-      if (p >= 0) union(p, i);
+      const p = indexById.get(e.parentEmailId);
+      if (p !== undefined) union(p, i);
     }
     // Legacy null-key root claimed by a reply's threadId.
     if (!e.threadId) {
@@ -434,4 +441,191 @@ export async function resolveReplyThreadId(
   }
 
   return rootId;
+}
+
+// ─── Conversation-level pagination ──────────────────────────────────────────
+
+export interface SlimRow extends GroupableRow {
+  createdAt: Date | string;
+}
+
+/**
+ * Conversation-level page builder (owner task 2026-11-11, follow-up audit).
+ *
+ * The list used to page MESSAGES: a conversation whose members straddled a
+ * page boundary was split — each page folded only the members it happened
+ * to carry, so the same conversation could render as two rows on two pages
+ * with two different message counts. This builder folds the folder's WHOLE
+ * slim row set (id + threadId + parentEmailId + createdAt — a few bytes per
+ * row) FIRST, then slices the resulting conversation list. Every page holds
+ * whole conversations only, hidden counts are exact and stable across
+ * pages, and `totalConversations` drives the client's has-more gate in
+ * conversation terms.
+ */
+export function buildConversationPage<T extends SlimRow>(
+  rows: T[],
+  page: number,
+  limit: number
+): {
+  pageRepresentatives: T[];
+  hiddenCount: Record<string, number>;
+  totalConversations: number;
+} {
+  const { representatives, hiddenCount } = groupRowsForList(rows);
+  const start = (Math.max(1, page) - 1) * limit;
+  return {
+    pageRepresentatives: representatives.slice(start, start + limit),
+    hiddenCount,
+    totalConversations: representatives.length,
+  };
+}
+
+// ─── Legacy thread-key backfill (maintenance procedure) ─────────────────────
+
+export interface BackfillDiff {
+  id: string;
+  mailbox: string;
+  folder: string;
+  from: string | null;
+  to: string;
+  groupSize: number;
+}
+
+/**
+ * Pick the canonical thread key for one resolved conversation group.
+ * Preference order keeps every future runtime resolution in agreement:
+ *   (a) a key already shared by two or more members — the established key,
+ *       zero-diff for modern conversations;
+ *   (b) a key that IS one of the member rows' own ids — a legacy root the
+ *       replies were keyed against;
+ *   (c) the newest member's own key — what a reply from the visible row
+ *       would inherit;
+ *   (d) the parentEmailId chain root (oldest ancestor) — pure legacy chain.
+ * Returns null only when nothing distinguishable exists (single member).
+ */
+export function pickCanonicalKey(members: MemberRow[]): string | null {
+  const received = members.filter((m) => m.folder !== 'sent');
+  const keyCounts = new Map<string, number>();
+  for (const m of received) {
+    if (!m.threadId) continue;
+    keyCounts.set(m.threadId, (keyCounts.get(m.threadId) || 0) + 1);
+  }
+  let best: string | null = null;
+  let bestCount = 1;
+  for (const [key, count] of keyCounts) {
+    if (count >= 2 && count > bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  if (best) return best;
+
+  // (b) a key that IS one of the member rows' own id — the legacy root the
+  // replies were keyed against (the root itself may still carry null).
+  const memberIds = new Set(received.map((m) => m.id));
+  for (const key of keyCounts.keys()) {
+    if (memberIds.has(key)) return key;
+  }
+  const newest = [...received].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  for (const m of newest) {
+    if (m.threadId) return m.threadId;
+  }
+
+  // (d) chain root: walk parentEmailId links inside the group.
+  const byId = new Map(members.map((m) => [m.id, m]));
+  const oldest = [...members].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  for (const m of oldest) {
+    let cur: MemberRow | undefined = m;
+    const seen = new Set<string>([m.id]);
+    while (cur?.parentEmailId && byId.has(cur.parentEmailId) && !seen.has(cur.parentEmailId)) {
+      seen.add(cur.parentEmailId);
+      cur = byId.get(cur.parentEmailId);
+    }
+    return cur ? cur.id : null;
+  }
+  return received[0]?.id ?? null;
+}
+
+/**
+ * Compute the re-keying plan for ONE user's mailbox. Walks every
+ * conversation in the mailbox through the SAME runtime resolution the
+ * delete/undo paths use (relation-based only — unrelated conversations can
+ * never be pulled into one group), and emits a diff for each received copy
+ * whose threadId differs from the group's canonical key. Sent copies are
+ * never stamped (they carry no key by design) and rows are never created,
+ * deleted, moved, or otherwise modified.
+ *
+ * Idempotent by construction: once every member carries the canonical key,
+ * (a) selects it and the diff list comes back empty.
+ */
+export async function planMailboxBackfill(
+  tx: MailTx,
+  userEmail: string,
+  userId: string
+): Promise<BackfillDiff[]> {
+  const rows = asRows(
+    await tx.email.findMany({
+      where: {
+        recipientEmail: userEmail,
+        OR: [{ folder: { not: 'sent' } }, { senderId: userId }],
+        folder: { not: 'drafts' },
+      },
+      select: MEMBER_SELECT,
+      orderBy: { createdAt: 'desc' },
+    })
+  );
+  if (rows.length === 0) return [];
+
+  const diffs: BackfillDiff[] = [];
+  const pool = new Map(rows.map((r) => [r.id, r]));
+  while (pool.size > 0) {
+    // Anchor on the newest unresolved row (what the user would click).
+    const anchor = [...pool.values()].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];
+    const members = await resolveConversationMembers(tx, anchor.id, userEmail, userId);
+    const stampable = members.filter((m) => m.folder !== 'sent' && pool.has(m.id));
+    const canonical = pickCanonicalKey(members);
+    if (canonical) {
+      for (const m of stampable) {
+        if (m.threadId !== canonical) {
+          diffs.push({
+            id: m.id,
+            mailbox: userEmail,
+            folder: m.folder,
+            from: m.threadId,
+            to: canonical,
+            groupSize: members.length,
+          });
+        }
+      }
+    }
+    for (const m of members) pool.delete(m.id);
+    // Defense against pathological cycles: the anchor MUST leave the pool.
+    pool.delete(anchor.id);
+  }
+  return diffs;
+}
+
+/**
+ * Apply a backfill plan with compare-and-swap guards: each update matches
+ * the row ONLY while its threadId still equals the planned `from` value, so
+ * a concurrent runtime change (a new reply inheriting a key) can never be
+ * clobbered. Returns the number of rows actually re-keyed. Re-running an
+ * applied plan is a no-op (the CAS misses).
+ */
+export async function applyBackfill(tx: MailTx, diffs: BackfillDiff[]): Promise<number> {
+  let changed = 0;
+  for (const d of diffs) {
+    const res = await tx.email.updateMany({
+      where: { id: d.id, threadId: d.from },
+      data: { threadId: d.to },
+    });
+    changed += res.count;
+  }
+  return changed;
 }

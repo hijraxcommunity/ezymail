@@ -420,10 +420,207 @@ test('reply resolution: identical duplicate null copies terminate (cycle guard)'
 test('inferRestoreFolder: sent copies return to Sent, received copies to Inbox', () => {
   const mk = (o: Partial<MemberRow>): MemberRow => ({
     id: 't', senderId: bob.id, recipientEmail: alice.email, folder: 'trash',
-    threadId: null, parentEmailId: null, isRead: false, isArchived: false, createdAt: at(0), ...o,
+    threadId: null, parentEmailId: null, isRead: false, isArchived: false, body: 'body', createdAt: at(0), ...o,
   })
   assert.equal(inferRestoreFolder(mk({}), alice.id), 'inbox')
   assert.equal(inferRestoreFolder(mk({ senderId: alice.id, recipientEmail: alice.email, threadId: 'self', parentEmailId: 'p' }), alice.id), 'inbox', 'self-addressed inbox copy')
   assert.equal(inferRestoreFolder(mk({ senderId: alice.id, recipientEmail: alice.email }), alice.id), 'sent', 'self-addressed sent copy (no thread relations by design)')
   assert.equal(inferRestoreFolder(mk({ senderId: alice.id, recipientEmail: bob.email }), alice.id), 'sent', 'normal sent copy')
+})
+
+// ─── Pagination audit: conversation-level pages ─────────────────────────────
+
+import { buildConversationPage, pickCanonicalKey } from '../src/lib/mail/conversation'
+
+test('P1 a conversation straddling the old message-boundary is never split across pages', async () => {
+  await reset()
+  // 25 single-message conversations (c01..c25) + one 4-member conversation
+  // whose members sit at message positions 19..22 — exactly where the old
+  // message-level page cut used to slice it in half.
+  const rows: SeedRow[] = []
+  let min = 0
+  for (let i = 1; i <= 25; i++) {
+    const id = `c${String(i).padStart(2, '0')}`
+    rows.push({ id, threadId: id, subject: `Solo ${i}`, at: at(min++) })
+    if (i === 19) {
+      // the straddler: 4 members occupying positions 19..22
+      rows.push({ id: 'sx', threadId: 'sx', subject: 'Straddler root', at: at(min++) })
+      rows.push({ id: 's1', threadId: 'sx', parentEmailId: 'sx', subject: 'Straddler', at: at(min++) })
+      rows.push({ id: 's2', threadId: 'sx', parentEmailId: 's1', subject: 'Straddler', at: at(min++) })
+      rows.push({ id: 's3', threadId: 'sx', parentEmailId: 's2', subject: 'Straddler', at: at(min++) })
+    }
+  }
+  await seed(rows)
+  const slim = await db.email.findMany({
+    where: { recipientEmail: alice.email, folder: 'inbox' },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, threadId: true, parentEmailId: true, createdAt: true },
+  })
+  assert.equal(slim.length, 29)
+
+  const page1 = buildConversationPage(slim, 1, 20)
+  const page2 = buildConversationPage(slim, 2, 20)
+  const page3 = buildConversationPage(slim, 3, 20)
+
+  assert.equal(page1.pageRepresentatives.length, 20, 'page 1 holds 20 whole conversations')
+  assert.equal(page2.pageRepresentatives.length, 6, 'page 2 holds the remaining conversations')
+  assert.equal(page3.pageRepresentatives.length, 0, 'no phantom third page')
+  assert.equal(page1.totalConversations, 26, 'total counts CONVERSATIONS, not messages')
+
+  // The straddler must appear exactly once across all pages, as ONE row.
+  const repsAcrossPages = [...page1.pageRepresentatives, ...page2.pageRepresentatives].map((r) => r.id)
+  const straddlerRows = repsAcrossPages.filter((id) => ['sx', 's1', 's2', 's3'].includes(id))
+  assert.equal(straddlerRows.length, 1, 'straddling conversation renders exactly once')
+  const key = straddlerRows[0] === 'sx' ? 'sx' : 'sx'
+  const whichPage = page1.pageRepresentatives.some((r) => r.id === straddlerRows[0]) ? page1 : page2
+  assert.equal(whichPage.hiddenCount['sx'], 3, 'exact hidden count on whichever page it lands')
+  assert.equal(whichPage.hiddenCount['sx'] + 1, 4, 'conversation badge = 4 messages')
+
+  // No duplicates anywhere: every row id is a representative at most once.
+  assert.equal(new Set(repsAcrossPages).size, repsAcrossPages.length)
+  // Newest-first ordering preserved across the page cut.
+  const ordered = [...page1.pageRepresentatives, ...page2.pageRepresentatives]
+  for (let i = 1; i < ordered.length; i++) {
+    const prev = new Date(slim.find((r) => r.id === ordered[i - 1].id)!.createdAt).getTime()
+    const cur = new Date(slim.find((r) => r.id === ordered[i].id)!.createdAt).getTime()
+    assert.ok(prev >= cur, 'conversation order is newest-first across the page boundary')
+  }
+})
+
+test('P2 legacy forked chain spanning pages folds with an exact count (no backfill needed)', async () => {
+  await reset()
+  // The legacy chain's members are spread so the OLD page cut (every 20
+  // messages) would have separated f1/f2/f3 from L. The folder-wide fold
+  // links them regardless of position.
+  const rows: SeedRow[] = []
+  for (let i = 1; i <= 22; i++) {
+    rows.push({ id: `pad${String(i).padStart(2, '0')}`, threadId: `pad${String(i).padStart(2, '0')}`, subject: `Pad ${i}`, at: at(i) })
+  }
+  rows.push({ id: 'L', threadId: null, parentEmailId: null, subject: 'Legacy', at: at(0) })
+  rows.push({ id: 'f1', threadId: 'L', parentEmailId: 'L', subject: 'Legacy', at: at(0, 30) })
+  rows.push({ id: 'f2', threadId: 'f1', parentEmailId: 'f1', subject: 'Legacy', at: at(0, 60) })
+  rows.push({ id: 'f3', threadId: 'f2', parentEmailId: 'f2', subject: 'Legacy', at: at(0, 90) })
+  await seed(rows)
+  const slim = await db.email.findMany({
+    where: { recipientEmail: alice.email, folder: 'inbox' },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, threadId: true, parentEmailId: true, createdAt: true },
+  })
+  const page1 = buildConversationPage(slim, 1, 20)
+  const page2 = buildConversationPage(slim, 2, 20)
+  const allReps = [...page1.pageRepresentatives, ...page2.pageRepresentatives]
+  const legacyReps = allReps.filter((r) => ['L', 'f1', 'f2', 'f3'].includes(r.id))
+  assert.equal(legacyReps.length, 1, 'legacy conversation = ONE row across pagination')
+  const key = legacyReps[0].threadId || legacyReps[0].id
+  const page = page1.pageRepresentatives.some((r) => r.id === legacyReps[0].id) ? page1 : page2
+  assert.equal(page.hiddenCount[key] + 1, 4, 'exact count on the page that carries it')
+})
+
+test('P3 empty folder and out-of-range pages are clean no-ops', () => {
+  const p = buildConversationPage([], 1, 20)
+  assert.deepEqual(p.pageRepresentatives, [])
+  assert.equal(p.totalConversations, 0)
+  const seeded = [1, 2, 3].map((i) => ({ id: `x${i}`, threadId: `x${i}`, parentEmailId: null, createdAt: at(i) }))
+  assert.deepEqual(buildConversationPage(seeded, 9, 20).pageRepresentatives, [])
+})
+
+// ─── Legacy thread-key backfill ─────────────────────────────────────────────
+
+import { planMailboxBackfill, applyBackfill } from '../src/lib/mail/conversation'
+
+test('BF1 legacy forked chain: plan produces the re-key diff, apply consolidates, re-plan is empty', async () => {
+  await reset()
+  await seed([
+    { id: 'L', threadId: null, parentEmailId: null, isRead: true, at: at(0) },
+    { id: 'f1', threadId: 'L', parentEmailId: 'L', isRead: false, at: at(1) },
+    { id: 'f2', threadId: 'f1', parentEmailId: 'f1', at: at(2) },
+    { id: 'f3', threadId: 'f2', parentEmailId: 'f2', at: at(3) },
+  ])
+  const plan = await planMailboxBackfill(db as never, alice.email, alice.id)
+  assert.equal(plan.length, 3, 'three rows need re-keying (L, f1, f2 -> canonical)')
+  const to = new Set(plan.map((d) => d.to))
+  assert.equal(to.size, 1, 'one canonical key for the whole group')
+  const canonical = plan[0].to
+  const applied = await db.$transaction((tx) => applyBackfill(tx as never, plan))
+  assert.equal(applied, 3)
+  const after = await db.email.findMany({ where: { recipientEmail: alice.email }, select: { id: true, threadId: true } })
+  assert.ok(after.every((r) => r.threadId === canonical), 'all four members share the canonical key')
+  const slim = await db.email.findMany({ where: { recipientEmail: alice.email }, select: { id: true, threadId: true, parentEmailId: true, createdAt: true } })
+  assert.equal(groupRowsForList(slim).representatives.length, 1, 'one row after backfill')
+  // Idempotency: a second plan finds nothing to do.
+  const rePlan = await planMailboxBackfill(db as never, alice.email, alice.id)
+  assert.deepEqual(rePlan, [])
+  // Preservation: bodies/folders/read state untouched.
+  const f = await folders(['L', 'f1', 'f2', 'f3'])
+  assert.equal(f['L'].folder, 'inbox'); assert.equal(f['L'].isRead, true); assert.equal(f['f1'].isRead, false)
+})
+
+test('BF2 sent-copy-forked orphans: canonical is the self-keyed root; sent copies never stamped', async () => {
+  await reset()
+  await seed([
+    { id: 'X', threadId: 'X', body: 'root-body', at: at(0) },
+    { id: 'SC0', senderId: bob.id, recipientEmail: alice.email, folder: 'sent', body: 'root-body', at: at(0, 1) },
+    { id: 'O1', threadId: 'SC0', parentEmailId: 'SC0', body: 'reply1-body', at: at(1) },
+    { id: 'SC1', senderId: bob.id, recipientEmail: alice.email, folder: 'sent', body: 'reply1-body', at: at(1, 1) },
+    { id: 'O2', threadId: 'SC1', parentEmailId: 'SC1', body: 'reply2-body', at: at(2) },
+  ])
+  const plan = await planMailboxBackfill(db as never, alice.email, alice.id)
+  assert.deepEqual(plan.map((d) => d.id).sort(), ['O1', 'O2'])
+  assert.ok(plan.every((d) => d.to === 'X'), 'canonical = the self-keyed root X')
+  await db.$transaction((tx) => applyBackfill(tx as never, plan))
+  const slim = await db.email.findMany({
+    where: { recipientEmail: alice.email, folder: { not: 'sent' } },
+    select: { id: true, threadId: true, parentEmailId: true, createdAt: true },
+  })
+  const g = groupRowsForList(slim)
+  assert.equal(g.representatives.length, 1, 'the whole conversation folds to one row after backfill')
+  const sc = await db.email.findUnique({ where: { id: 'SC0' } })
+  assert.equal(sc?.threadId, null, 'bob\'s sent copy keeps threadId=null by design')
+  assert.deepEqual(await planMailboxBackfill(db as never, alice.email, alice.id), [])
+})
+
+test('BF3 unrelated conversations are never merged; modern conversations produce zero diffs', async () => {
+  await reset()
+  await seed([
+    // modern conversation: already consistent
+    { id: 'm0', threadId: 'm0', subject: 'Modern', at: at(0) },
+    { id: 'm1', threadId: 'm0', parentEmailId: 'm0', subject: 'Modern', at: at(1) },
+    // two UNRELATED legacy conversations with the same subject (no merge)
+    { id: 'u1a', threadId: null, parentEmailId: null, subject: 'Same subject', at: at(2) },
+    { id: 'u1b', threadId: 'u1a', parentEmailId: 'u1a', subject: 'Same subject', at: at(3) },
+    { id: 'u2a', threadId: null, parentEmailId: null, subject: 'Same subject', at: at(4) },
+    { id: 'u2b', threadId: 'u2a', parentEmailId: 'u2a', subject: 'Same subject', at: at(5) },
+  ])
+  const plan = await planMailboxBackfill(db as never, alice.email, alice.id)
+  const ids = new Set(plan.map((d) => d.id))
+  assert.ok(!ids.has('m0') && !ids.has('m1'), 'modern rows need no re-keying')
+  // u1a/u2a get stamped with their own children's keys (self-keyed rule:
+  // u1b carries key u1a, so each group canonicalises onto its own root id)
+  assert.ok(ids.has('u1a') && ids.has('u2a'), 'legacy null roots get their group key')
+  const to = new Set(plan.map((d) => d.to))
+  assert.equal(to.size, 2, 'each unrelated group keeps its OWN canonical key')
+  assert.ok(to.has('u1a') && to.has('u2a'))
+  await db.$transaction((tx) => applyBackfill(tx as never, plan))
+  const slim = await db.email.findMany({ where: { recipientEmail: alice.email }, select: { id: true, threadId: true, parentEmailId: true, createdAt: true } })
+  const g = groupRowsForList(slim)
+  assert.equal(g.representatives.length, 3, 'three conversations stay three rows')
+  const keys = new Set(g.representatives.map((r) => r.threadId || r.id))
+  assert.equal(keys.size, 3)
+  assert.deepEqual(await planMailboxBackfill(db as never, alice.email, alice.id), [])
+})
+
+test('BF4 pickCanonicalKey preference order', () => {
+  const mk = (id: string, threadId: string | null, min = 0): MemberRow => ({
+    id, senderId: bob.id, recipientEmail: alice.email, folder: 'inbox',
+    threadId, parentEmailId: null, isRead: false, isArchived: false, body: 'b', createdAt: at(min),
+  })
+  // (a) shared key wins even when a self-keyed root exists.
+  assert.equal(pickCanonicalKey([mk('x', 'k', 0), mk('r1', 'k', 1), mk('r2', 'r2', 2)]), 'k')
+  // (b) self-keyed root when nothing is shared.
+  assert.equal(pickCanonicalKey([mk('root', null, 0), mk('r1', 'root', 1), mk('r2', 'r1', 2)]), 'root')
+  // (c) newest member's key when no self-keyed root exists.
+  assert.equal(pickCanonicalKey([mk('a', 'k1', 0), mk('b', 'k2', 1)]), 'k2')
+  // single member with no key -> its own id (the (d) chain-root fallback,
+  // same key resolveReplyThreadId would hand a future reply)
+  assert.equal(pickCanonicalKey([mk('solo', null, 0)]), 'solo')
 })

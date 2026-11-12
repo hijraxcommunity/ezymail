@@ -2,7 +2,13 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
-import { groupRowsForList, resolveReplyThreadId } from '@/lib/mail/conversation';
+import { buildConversationPage, resolveReplyThreadId } from '@/lib/mail/conversation';
+
+// The conversation fold runs over the folder's WHOLE slim row set. Personal
+// mailboxes sit far below this defensive cap; beyond it the oldest rows
+// simply stop paginating (documented limitation, never a correctness risk —
+// the cap only bounds how deep history pages can go).
+const FOLD_SLIM_CAP = 5000;
 
 // GET /api/emails - List emails
 export async function GET(request: NextRequest) {
@@ -17,7 +23,6 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
     const search = searchParams.get('search') || '';
-    const skip = (page - 1) * limit;
 
     // Build where clause
     const where: Record<string, unknown> = {
@@ -88,59 +93,84 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const [emails, total] = await Promise.all([
-      db.email.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        // Explicit select: the list must NOT fetch the heavy `attachments` column
-        // (base64 data URLs, up to several MB per email). Pulling it on every
-        // folder switch made navigation slow once real attachment emails exist.
-        // The list response never included it; the detail endpoint still does.
-        select: {
-          id: true,
-          senderId: true,
-          recipientEmail: true,
-          subject: true,
-          body: true,
-          bodyHtml: true,
-          isRead: true,
-          isStarred: true,
-          isArchived: true,
-          folder: true,
-          parentEmailId: true,
-          threadId: true,
-          readAt: true,
-          snoozedUntil: true,
-          scheduledAt: true,
-          sentAt: true,
-          priority: true,
-          createdAt: true,
-          sender: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+    // ─── Conversation-level pagination ───
+    // The old flow paged MESSAGES (skip/take on rows), then folded each
+    // page separately: a conversation whose members straddled a page
+    // boundary was split across two pages — two rows, two different counts,
+    // and a message could appear as a hidden member on one page and as its
+    // own row on the next. The fold now runs over the folder's WHOLE slim
+    // row set (id + threadId + parentEmailId + createdAt only), and pages
+    // are cut in CONVERSATION units: every page holds whole conversations,
+    // counts are exact and stable across pages, and `total` drives the
+    // client's has-more gate in conversation terms. Unchanged architecture:
+    // same where-clause per folder, same full-row fetch for the page's
+    // representatives, same response shape.
+    const slimRows = await db.email.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: FOLD_SLIM_CAP,
+      select: { id: true, threadId: true, parentEmailId: true, createdAt: true },
+    });
+
+    const { pageRepresentatives, hiddenCount, totalConversations } =
+      buildConversationPage(slimRows, page, limit);
+
+    const total = totalConversations;
+
+    const repIds = pageRepresentatives.map((r) => r.id);
+    const fullRows = repIds.length
+      ? await db.email.findMany({
+          where: { ...where, id: { in: repIds } },
+          // Explicit select: the list must NOT fetch the heavy `attachments` column
+          // (base64 data URLs, up to several MB per email). Pulling it on every
+          // folder switch made navigation slow once real attachment emails exist.
+          // The list response never included it; the detail endpoint still does.
+          select: {
+            id: true,
+            senderId: true,
+            recipientEmail: true,
+            subject: true,
+            body: true,
+            bodyHtml: true,
+            isRead: true,
+            isStarred: true,
+            isArchived: true,
+            folder: true,
+            parentEmailId: true,
+            threadId: true,
+            readAt: true,
+            snoozedUntil: true,
+            scheduledAt: true,
+            sentAt: true,
+            priority: true,
+            createdAt: true,
+            sender: {
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+            },
+            recipient: {
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+            },
+            replies: {
+              select: { id: true },
+            },
           },
-          recipient: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-          },
-          replies: {
-            select: { id: true },
-          },
-        },
-      }),
-      db.email.count({ where }),
-    ]);
+        })
+      : [];
+
+    // Restore the exact conversation order the fold produced (the full-row
+    // fetch returns raw createdAt order).
+    const fullById = new Map(fullRows.map((e) => [e.id, e]));
+    const representatives = pageRepresentatives
+      .map((r) => fullById.get(r.id))
+      .filter((e): e is (typeof fullRows)[number] => e !== undefined);
 
     // One row per conversation — the fold lives in
     // src/lib/mail/conversation.ts (shared with the lifecycle primitives so
     // the list, delete, undo and restore all reason over the SAME grouping
-    // rules). Rows group by equal threadId, parentEmailId chains, and the
-    // legacy key-claim (a threadId=null root whose id another page row
-    // carries as its threadId). Rows only group when their counterpart is
-    // on the same page, so a conversation whose members live in different
-    // folders still renders exactly as before in each folder.
-    const { representatives, hiddenCount } = groupRowsForList(emails);
-
+    // rules): equal threadId, parentEmailId chains, and the legacy
+    // key-claim. `hiddenCount` now covers the WHOLE folder (the fold ran
+    // over the folder's entire slim row set), so counts stay exact no
+    // matter which page a conversation lands on.
     const threadCounts = hiddenCount;
 
     const formattedEmails = representatives.map((email) => ({
@@ -165,12 +195,12 @@ export async function GET(request: NextRequest) {
       sender: email.sender,
       recipient: email.recipient,
       // The conversation badge = every message of this conversation the
-       // user can see (the visible row + the members folded under it).
-       // The old value (the row's direct children) was almost always 0
-       // for the newest-row representative, so grouped conversations
-       // showed no count at all.
+       // user can see in this folder (the visible row + the members folded
+       // under it). The old value (the row's direct children) was almost
+       // always 0 for the newest-row representative, so grouped
+       // conversations showed no count at all.
       replyCount: (threadCounts[email.threadId || email.id] || 0) + 1,
-      threadCount: (threadCounts[email.threadId || email.id] || 0) + email.replies.length,
+      threadCount: (threadCounts[email.threadId || email.id] || 0) + 1,
     }));
 
     return NextResponse.json({
