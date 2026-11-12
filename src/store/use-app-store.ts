@@ -274,6 +274,15 @@ interface AppState {
   addEmail: (email: EmailWithSender) => void;
   updateEmail: (id: string, data: Partial<EmailWithSender>) => void;
   removeEmail: (id: string) => void;
+  /** Remove exactly the rows the server reported as moved/deleted (the
+   *  whole conversation, including forked-key members the old id+threadKey
+   *  filter missed) and arm the resurrection guard for each — used by the
+   *  delete paths with the DELETE response's movedIds. */
+  removeEmailsByIds: (ids: string[]) => void;
+  /** Lift the resurrection guard for exactly these ids — used by undo/
+   *  restore with the restore response's restoredIds so a page-1 refetch
+   *  cannot silently drop rows the user just brought back. */
+  clearRemovedGuards: (ids: string[]) => void;
 
   // Actions - Multi-select
   toggleSelectEmail: (id: string) => void;
@@ -569,6 +578,19 @@ export const useAppStore = create<AppState>()(
         // window would silently drop the mail the user just brought back.
         clearRemovedId(email.id, email.threadId || email.id);
         set((state) => ({ emails: [email, ...state.emails] }));
+      },
+      removeEmailsByIds: (ids) => {
+        const idSet = new Set(ids);
+        ids.forEach((id) => recentlyRemovedIds.set(id, Date.now()));
+        set((state) => ({
+          emails: state.emails.filter((e) => !idSet.has(e.id)),
+          selectedEmailId: state.selectedEmailId && idSet.has(state.selectedEmailId)
+            ? null
+            : state.selectedEmailId,
+        }));
+      },
+      clearRemovedGuards: (ids) => {
+        ids.forEach((id) => recentlyRemovedIds.delete(id));
       },
       updateEmail: (id, data) => set((state) => ({
         emails: state.emails.map((e) => (e.id === id ? { ...e, ...data } : e)),

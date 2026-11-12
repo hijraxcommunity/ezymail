@@ -367,17 +367,37 @@ export function EmailList() {
   const handleBulkDelete = async () => {
     setShowBulkDeleteConfirm(false)
     const deleted = deleteSelected()
+    const movedIds = new Set<string>()
+    let failures = 0
     try {
       await Promise.all(
-        deleted.map((e) =>
-          fetch(`/api/emails/${e.id}`, { method: 'DELETE' })
-        )
+        deleted.map(async (e) => {
+          const res = await fetch(`/api/emails/${e.id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error('delete failed')
+          // Each server delete returns the exact rows it moved (its whole
+          // resolved conversation). Collect them all: forked-key members
+          // that were still on screen (each orphan row renders as its own
+          // conversation) must leave the list too, and the resurrection
+          // guard must cover every id so an in-flight poll cannot
+          // re-insert them.
+          const data = await res.json().catch(() => null)
+          if (data?.movedIds?.length) {
+            data.movedIds.forEach((id: string) => movedIds.add(id))
+          } else {
+            movedIds.add(e.id)
+          }
+        })
       )
+      useAppStore.getState().removeEmailsByIds([...movedIds])
       toast.success(`${deleted.length} email${deleted.length > 1 ? 's' : ''} deleted`)
     } catch {
+      failures = 1
+      // Do not leave the optimistic state half-applied against a half-done
+      // server write: the next fetch converges to the real backend state.
+      fetchEmails()
       toast.error('Failed to delete some emails')
     }
-    setTotalEmails(totalEmails - deleted.length)
+    if (!failures) setTotalEmails(totalEmails - deleted.length)
   }
 
   const handleBulkArchive = async () => {

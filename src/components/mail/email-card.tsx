@@ -120,7 +120,24 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     setUndoAction({ id: email.id, type: 'delete', email, timestamp: Date.now() })
     removeEmail(email.id)
     animateOffScreen('right')
-    fetch(`/api/emails/${email.id}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/emails/${email.id}`, { method: 'DELETE' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('delete failed')
+        // The server returns the exact rows it moved (the whole resolved
+        // conversation — including forked-key members the id+threadKey
+        // filter used to miss). Remove any that are still on screen and
+        // arm the resurrection guard for each, so a response that was in
+        // flight during the delete cannot re-insert them either.
+        const data = await res.json().catch(() => null)
+        const movedIds: string[] = data?.movedIds?.length ? data.movedIds : [email.id]
+        useAppStore.getState().removeEmailsByIds(movedIds)
+      })
+      .catch(() => {
+        // Failed delete must NOT silently swallow the row: put it back so
+        // the list matches the server until the next poll.
+        useAppStore.getState().addEmail(email)
+        toast.error('Failed to delete email')
+      })
   }, [email, removeEmail, animateOffScreen, setUndoAction])
 
   const doEditDraft = useCallback(() => {

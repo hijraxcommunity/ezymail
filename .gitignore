@@ -98,3 +98,8 @@ GoogleService-Info.plist
 key.properties
 /android/app/*.keystore
 /android/app/*.jks
+
+# Lifecycle test harness (generated client + scratch db)
+generated/
+prisma/.env.test
+*.db-journal

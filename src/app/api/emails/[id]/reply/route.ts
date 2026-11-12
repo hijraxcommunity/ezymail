@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
+import { resolveReplyThreadId } from '@/lib/mail/conversation';
 
 // POST /api/emails/[id]/reply - Reply to an email
 export async function POST(
@@ -50,22 +51,23 @@ export async function POST(
     // Determine reply recipient (reply goes to the other party)
     const replyRecipientEmail = isSender ? parentEmail.recipientEmail : parentEmail.sender.email;
 
-    // Determine threadId: walk up to root email
-    let rootId = parentEmail.id
-    let currentParentId = parentEmail.parentEmailId
-    while (currentParentId) {
-      const ancestor = await db.email.findUnique({
-        where: { id: currentParentId },
-        select: { id: true, parentEmailId: true, threadId: true },
-      })
-      if (!ancestor) break
-      rootId = ancestor.id
-      if (ancestor.threadId) {
-        rootId = ancestor.threadId
-        break
-      }
-      currentParentId = ancestor.parentEmailId
-    }
+    // Determine threadId: inherit the parent's key via the shared
+    // resolution (parent's threadId → parentEmailId chain → sent-copy
+    // inbox-twin bridge). Replying from a SENT copy used to fork a fresh
+    // key (threadId = sent-copy id) that nothing could ever link back into
+    // the recipient's conversation — the same fork shape that later made
+    // Trash show one conversation as several rows. Same rule as
+    // POST /api/emails, so both reply paths can never fork again.
+    const threadId = await resolveReplyThreadId(db, {
+      id: parentEmail.id,
+      threadId: parentEmail.threadId,
+      parentEmailId: parentEmail.parentEmailId,
+      senderId: parentEmail.senderId,
+      recipientEmail: parentEmail.recipientEmail,
+      body: parentEmail.body,
+      createdAt: parentEmail.createdAt,
+      folder: parentEmail.folder,
+    });
 
     // Create reply email in the recipient's inbox
     const reply = await db.email.create({
@@ -79,7 +81,7 @@ export async function POST(
         bodyHtml: bodyHtml || '',
         folder: 'inbox',
         parentEmailId: parentEmail.id,
-        threadId: parentEmail.threadId || rootId,
+        threadId,
       },
       include: {
         sender: {

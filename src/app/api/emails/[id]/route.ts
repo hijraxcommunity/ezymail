@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import {
+  moveConversationToTrash,
+  permanentlyDeleteConversation,
+  restoreConversationFromTrash,
+} from '@/lib/mail/conversation';
 
 // GET /api/emails/[id] - Get single email
 export async function GET(
@@ -139,7 +144,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { isRead, isStarred, isArchived, folder } = body;
+    const { isRead, isStarred, isArchived, folder, restoreConversation } = body;
 
     // Find the email
     const email = await db.email.findUnique({ where: { id } });
@@ -152,6 +157,39 @@ export async function PUT(
     const isRecipient = email.recipientEmail === session.email;
     if (!isSender && !isRecipient) {
       return NextResponse.json({ error: 'Not authorized to update this email' }, { status: 403 });
+    }
+
+    // ─── Conversation-scoped restore (undo delete / Restore from Trash) ───
+    // Undo used to be a single-row `PUT { folder }`: the clicked row went
+    // back to the Inbox while its siblings stayed in Trash, so the
+    // conversation existed in BOTH folders at once (owner report
+    // 2026-11-11). The restore now resolves the same conversation member
+    // set the delete moved and brings every trashed member back in ONE
+    // transaction, each row to its own original folder (Inbox, or Sent for
+    // the user's own sent copies). isArchived is cleared for inbox
+    // visibility; isRead/isStarred are never touched here. Rows the user
+    // has separately placed in spam/drafts (or already restored) are not
+    // part of the trash-scoped restore set.
+    if (restoreConversation === true) {
+      const restoredIds = await db.$transaction((tx) =>
+        restoreConversationFromTrash(tx, id, session.email, session.userId)
+      );
+      const updatedRow = await db.email.findUnique({
+        where: { id },
+        include: {
+          sender: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
+          recipient: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
+        },
+      });
+      return NextResponse.json({
+        email: updatedRow,
+        restoredIds,
+        restoredCount: restoredIds.length,
+      });
     }
 
     // Build update data
@@ -244,35 +282,45 @@ export async function DELETE(
     // 15s poll brought them straight back — the owner's "when I delete the
     // email it comes back like nothing happened" report 2026-11-09, and the
     // same reason bulk select-all + delete kept leaving stragglers behind.
-    // Scope guards: recipientEmail = session.email → only this user's own
-    // received copies move; other people's mailboxes (senderId rows) and the
-    // sender's sent copies (threadId=null, recipientEmail=other) are never
-    // touched — a sent copy always collapses to the single row itself.
-    const threadKey = email.threadId || email.id;
+    //
+    // The conversation is resolved over EVERY relation the data model
+    // carries (threadId equality, threadId↔id claims, parentEmailId chains,
+    // cross-mailbox copy twins) — not just threadId equality. Legacy
+    // conversations hold FORKED keys (replies once sent to a threadId=null
+    // message stamped their own key), and the old threadKey-only match
+    // left those members in the Inbox while the rest moved to Trash — the
+    // conversation lived in BOTH folders and re-deleting the remnant
+    // landed it in Trash as a second row (owner report 2026-11-11:
+    // "trash shows the conversation separately"). Scope guards unchanged:
+    // only this user's mailbox copies (recipientEmail = session.email) are
+    // resolved; other people's mailboxes and sent copies addressed to
+    // others are never touched — a sent copy collapses to the single row.
 
-    // If already in trash, permanently delete — this user's conversation
-    // copies that are ALREADY in trash. The folder='trash' scope guarantees
-    // live mail is never destroyed from here.
+    // If already in trash, permanently delete — ONLY the copies that are
+    // actually in trash right now. The folder='trash' scope inside the
+    // helper guarantees live mail is never destroyed from here.
     if (email.folder === 'trash') {
-      await db.email.deleteMany({
-        where: {
-          folder: 'trash',
-          OR: [
-            { id },
-            { recipientEmail: session.email, OR: [{ threadId: threadKey }, { id: threadKey }] },
-          ],
-        },
+      const deletedIds = await db.$transaction((tx) =>
+        permanentlyDeleteConversation(tx, id, session.email, session.userId)
+      );
+      return NextResponse.json({
+        success: true,
+        permanentlyDeleted: true,
+        deletedIds,
+        deletedCount: deletedIds.length,
       });
-      return NextResponse.json({ success: true, permanentlyDeleted: true });
     }
 
-    // Otherwise, move to trash — the clicked row plus the rest of its
-    // conversation (live folders only: trash/spam/drafts rows keep their
-    // placement, so trashing one message can never empty the spam view or
-    // destroy drafts)
-    const updatedEmail = await db.email.update({
+    // Otherwise, move to trash — the resolved conversation in ONE
+    // transaction (live-folder members move; trash/spam/drafts rows keep
+    // their placement, so trashing one message can never empty the spam
+    // view or destroy drafts).
+    const movedIds = await db.$transaction((tx) =>
+      moveConversationToTrash(tx, id, session.email, session.userId)
+    );
+
+    const updatedEmail = await db.email.findUnique({
       where: { id },
-      data: { folder: 'trash' },
       include: {
         sender: {
           select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
@@ -283,19 +331,12 @@ export async function DELETE(
       },
     });
 
-    if (email.recipientEmail === session.email) {
-      await db.email.updateMany({
-        where: {
-          recipientEmail: session.email,
-          id: { not: id },
-          folder: { notIn: ['trash', 'spam', 'drafts'] },
-          OR: [{ threadId: threadKey }, { id: threadKey }],
-        },
-        data: { folder: 'trash' },
-      });
-    }
-
-    return NextResponse.json({ success: true, email: updatedEmail });
+    return NextResponse.json({
+      success: true,
+      email: updatedEmail,
+      movedIds,
+      movedCount: movedIds.length,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Delete email error:', message);

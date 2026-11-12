@@ -1,0 +1,426 @@
+// TEST-ONLY datasource: same models as schema.prisma, backed by a local
+// SQLite file and generated into a SEPARATE client so the production
+// schema/client are never touched. Used by scripts/lifecycle.test.ts.
+// Regenerate with: npx prisma generate --schema prisma/schema.test.sqlite.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/test-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("TEST_DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  displayName   String?
+  bio           String   @default("")
+  dateOfBirth   String
+  phone         String?
+  avatar        String?
+  recoveryEmail String?
+  role          String   @default("user")
+  status        String   @default("active")
+  signature     String   @default("")
+  preferences   String   @default("{}")
+  onboardingDone Boolean @default(false)
+  lastLogin     DateTime?
+  lastIp        String?
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Business fields (nullable — personal users unaffected)
+  accountType         String   @default("personal")  // "personal" | "business"
+  businessName        String?
+  businessEmail       String?  @unique
+  employeeCount       String?
+  subscriptionStatus  String?  // "pending_verification" | "trial" | "active" | "expired"
+  trialStart          DateTime?
+  trialEnd            DateTime?
+  softDeletedAt       DateTime?
+  emailReservedUntil  DateTime?
+
+  sentEmails    Email[]  @relation("SentEmails")
+  receivedEmails Email[] @relation("ReceivedEmails")
+  folders       Folder[]
+  labels        Label[]
+  contacts      Contact[] @relation("ContactOwner")
+  templates     Template[]
+  rules         Rule[]
+  sessions      Session[]
+  passwordResets PasswordReset[]
+  twoFactor     TwoFactor[]
+  adminLogs     AdminLog[] @relation("AdminLogs")
+  reports       Report[]
+  loginLogs     LoginLog[]
+  pushSubscriptions PushSubscription[]
+
+  // Business relations
+  businessVerification BusinessVerification?
+  verificationReviews BusinessVerification[] @relation("VerificationReviewer")
+  teamMembersOwned    TeamMember[]
+  teamMemberships     TeamMember[]  @relation("TeamBusiness")
+  customers           Customer[]
+  campaigns           Campaign[]
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+  @@index([accountType])
+  @@index([subscriptionStatus])
+  @@index([businessEmail])
+  // Phone numbers are verified via WhatsApp OTP before an account is created;
+  // the unique constraint is the database-level guarantee that two accounts
+  // can never claim the same number (NULLs are allowed — phone is optional).
+  @@unique([phone])
+}
+
+model Email {
+  id              String   @id @default(cuid())
+  senderId        String
+  recipientEmail  String
+  cc              String?
+  bcc             String?
+  subject         String
+  body            String   @default("")
+  bodyHtml        String   @default("")
+  attachments     String?
+  isRead          Boolean  @default(false)
+  isStarred       Boolean  @default(false)
+  isArchived      Boolean  @default(false)
+  folder          String   @default("inbox")
+  threadId        String?
+  parentEmailId   String?
+  readAt          DateTime?
+  snoozedUntil    DateTime?
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  isDraft         Boolean  @default(false)
+  priority        String   @default("normal")
+  createdAt       DateTime @default(now())
+
+  sender          User     @relation("SentEmails", fields: [senderId], references: [id])
+  recipient       User     @relation("ReceivedEmails", fields: [recipientEmail], references: [email])
+  replies         Email[]  @relation("EmailReplies")
+  parentEmail     Email?   @relation("EmailReplies", fields: [parentEmailId], references: [id])
+  reports         Report[]
+  emailLabels     EmailLabel[]
+
+  @@index([senderId])
+  @@index([recipientEmail])
+  @@index([folder])
+  @@index([isRead])
+  @@index([isStarred])
+  @@index([createdAt])
+  @@index([scheduledAt])
+  @@index([parentEmailId])
+  @@index([threadId])
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#4285F4")
+  icon      String   @default("folder")
+  parentId  String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children  Folder[] @relation("FolderHierarchy")
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Label {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#4285F4")
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailLabels EmailLabel[]
+
+  @@index([userId])
+}
+
+model EmailLabel {
+  id        String   @id @default(cuid())
+  emailId   String
+  labelId   String
+  createdAt DateTime @default(now())
+
+  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([emailId, labelId])
+  @@index([emailId])
+  @@index([labelId])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  phone     String?
+  notes     String   @default("")
+  isFavorite Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation("ContactOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+  @@index([userId])
+  @@index([email])
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  subject   String   @default("")
+  body      String   @default("")
+  bodyHtml  String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Rule {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  conditions  String
+  actions     String
+  isEnabled   Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isEnabled])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  deviceName String?
+  deviceType String?
+  ipAddress  String
+  userAgent  String?
+  location   String?
+  lastActive DateTime @default(now())
+  expiresAt  DateTime
+  isActive   Boolean @default(true)
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId, isActive])
+}
+
+model TwoFactor {
+  id            String   @id @default(cuid())
+  userId        String
+  secret        String
+  isEnabled     Boolean  @default(false)
+  backupCodes   String   @default("[]")
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  ipAddress String
+  userAgent String?
+  deviceType String?
+  location  String?
+  success   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [email], references: [email])
+
+  @@index([email])
+  @@index([token])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  emailId     String
+  reason      String
+  description String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  reporter    User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model AdminLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  targetType  String?
+  targetId    String?
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  admin       User     @relation("AdminLogs", fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  fcmToken   String   @unique
+  deviceInfo String?
+  platform   String?   // "web", "android", "ios"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([fcmToken])
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  settingKey  String   @unique
+  settingValue String?
+  category    String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+// ─── Business Models (Add-Only) ──────────────────────────────────────────────
+
+model BusinessVerification {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  documentUrls String    // JSON array of URLs
+  status       String    @default("pending")  // "pending" | "approved" | "rejected"
+  adminNotes   String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedBy   String?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedByUser User?   @relation("VerificationReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model TeamMember {
+  id          String    @id @default(cuid())
+  businessId  String
+  memberEmail String
+  role        String    @default("member")  // "admin" | "member"
+  invitedAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+
+  business    User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  teamBusiness User?    @relation("TeamBusiness", fields: [memberEmail], references: [email])
+
+  @@unique([businessId, memberEmail])
+  @@index([businessId])
+  @@index([memberEmail])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  businessId   String
+  email        String
+  name         String?
+  customFields String?  // JSON
+  createdAt    DateTime @default(now())
+
+  business     User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  campaignRecipients CampaignRecipient[]
+
+  @@unique([businessId, email])
+  @@index([businessId])
+}
+
+model Campaign {
+  id           String   @id @default(cuid())
+  businessId   String
+  subject      String
+  body         String   @default("")
+  bodyHtml     String   @default("")
+  sentAt       DateTime?
+  opens        Int       @default(0)
+  clicks       Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  business     User      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  recipients   CampaignRecipient[]
+
+  @@index([businessId])
+  @@index([createdAt])
+}
+
+model CampaignRecipient {
+  id          String    @id @default(cuid())
+  campaignId  String
+  customerId  String
+  openedAt    DateTime?
+  clickedAt   DateTime?
+
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId])
+  @@index([customerId])
+}

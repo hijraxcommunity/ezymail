@@ -23,7 +23,7 @@ import { PushNotificationSetup } from '@/components/push-notification-setup'
 // ─── Undo Snackbar ──────────────────────────────────────────────────────────
 
 function UndoSnackbar() {
-  const { undoAction, setUndoAction, addEmail, totalEmails, setTotalEmails } = useAppStore()
+  const { undoAction, setUndoAction, addEmail, removeEmail, clearRemovedGuards, currentFolder, totalEmails, setTotalEmails } = useAppStore()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -44,35 +44,68 @@ function UndoSnackbar() {
     // Capture values before clearing
     const action = undoAction
 
-    // Restore the email locally
-    addEmail(action.email)
-    setTotalEmails(totalEmails + 1)
-
     // Clear undo immediately to prevent double-clicks
     if (timerRef.current) clearTimeout(timerRef.current)
     setUndoAction(null)
 
-    // Restore on the server
+    // Restore on the server FIRST, then mirror locally. The old order
+    // (addEmail before the request) reported success before the backend
+    // agreed, and the request itself was a single-row PUT — the clicked
+    // row went back to the Inbox while its whole conversation stayed in
+    // Trash, so the same conversation sat in BOTH folders (owner report
+    // 2026-11-11). The server now restores the entire resolved
+    // conversation (restoreConversation) and returns the exact ids it
+    // brought back.
     try {
       if (action.type === 'archive') {
-        await fetch(`/api/emails/${action.id}`, {
+        const res = await fetch(`/api/emails/${action.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ isArchived: false }),
         })
+        if (!res.ok) throw new Error('undo failed')
+        clearRemovedGuards([action.id])
+        if (currentFolder === 'archive') removeEmail(action.id)
+        else addEmail(action.email)
       } else if (action.type === 'delete') {
-        // Move back to original folder from trash
-        const folder = action.email.folder === 'trash' ? 'inbox' : (action.email.folder || 'inbox')
-        await fetch(`/api/emails/${action.id}`, {
+        const res = await fetch(`/api/emails/${action.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder, isArchived: false }),
+          body: JSON.stringify({
+            folder: action.email.folder === 'trash' ? 'inbox' : (action.email.folder || 'inbox'),
+            isArchived: false,
+            restoreConversation: true,
+          }),
         })
+        if (!res.ok) throw new Error('undo failed')
+        const data = await res.json().catch(() => null)
+        // Lift the resurrection guard for every row the server restored —
+        // otherwise a page-1 replace inside the 60s TTL window would drop
+        // the conversation the user just brought back.
+        const restoredIds: string[] = data?.restoredIds?.length
+          ? data.restoredIds
+          : [action.id]
+        clearRemovedGuards([...restoredIds, action.email.threadId || action.id].filter(Boolean))
+
+        if (currentFolder === 'trash') {
+          // Undoing while looking at Trash: the conversation is gone from
+          // Trash now — remove the visible row(s), never re-add them here.
+          removeEmail(action.id)
+        } else if (currentFolder === action.email.folder) {
+          // The conversation is back in the folder it was deleted from.
+          addEmail(action.email)
+        }
+        // Any other folder: local state untouched — the next fetch/poll
+        // converges to the server truth.
+        setTotalEmails(totalEmails + 1)
       }
     } catch {
+      // The frontend must not claim a restore that never happened: the
+      // local state was not touched above, so the lists still match the
+      // backend; surface the failure honestly.
       toast.error('Failed to undo')
     }
-  }, [undoAction, addEmail, setUndoAction, totalEmails, setTotalEmails])
+  }, [undoAction, addEmail, removeEmail, clearRemovedGuards, currentFolder, setUndoAction, totalEmails, setTotalEmails])
 
   if (!undoAction) return null
 

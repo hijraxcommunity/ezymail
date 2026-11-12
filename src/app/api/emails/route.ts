@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
+import { groupRowsForList, resolveReplyThreadId } from '@/lib/mail/conversation';
 
 // GET /api/emails - List emails
 export async function GET(request: NextRequest) {
@@ -130,72 +131,19 @@ export async function GET(request: NextRequest) {
       db.email.count({ where }),
     ]);
 
-    // One row per conversation — resilient grouping (union-find).
-    // Rows are grouped by threadId equality AND by parentEmailId chains.
-    // threadId alone cannot describe a legacy conversation: roots created
-    // before thread stamping keep threadId=null for life, and every reply
-    // sent to a null-threadId message FORKED a fresh key (threadId =
-    // replyToId), so one visually-single conversation could be scattered
-    // across several server-side threads. Plain seenThreads folding then
-    // rendered that conversation as SEVERAL separate rows — in the inbox and,
-    // after the conversation-scoped delete moved the whole thread to Trash,
-    // in the Trash too ("when I delete one multiple replied email it goes to
-    // trash separately", owner report 2026-11-11). The union-find re-links
-    // every shape: shared threadId, parent→child links, legacy null keys.
-    // Rows only group when their counterpart is on the same page, so a
-    // conversation whose members live in different folders still renders
-    // exactly as before in each folder.
-    const parentOf = new Array<number>(emails.length)
-    for (let i = 0; i < emails.length; i++) parentOf[i] = i
-    const find = (x: number): number => {
-      let root = x
-      while (parentOf[root] !== root) root = parentOf[root]
-      while (parentOf[x] !== root) { const next = parentOf[x]; parentOf[x] = root; x = next }
-      return root
-    }
-    const union = (a: number, b: number) => {
-      const ra = find(a)
-      const rb = find(b)
-      // The NEWEST row must represent the group: rows arrive newest-first,
-      // so the smaller index is newer — root the group there.
-      if (ra < rb) parentOf[rb] = ra
-      else parentOf[ra] = rb
-    }
-    const indexById = new Map<string, number>()
-    emails.forEach((e, i) => indexById.set(e.id, i))
-    const keyIndex = new Map<string, number>()
-    emails.forEach((e, i) => {
-      if (!e.threadId) return
-      const first = keyIndex.get(e.threadId)
-      if (first === undefined) keyIndex.set(e.threadId, i)
-      else union(first, i)
-    })
-    emails.forEach((e, i) => {
-      if (!e.parentEmailId) return
-      const p = indexById.get(e.parentEmailId)
-      if (p !== undefined) union(p, i)
-    })
+    // One row per conversation — the fold lives in
+    // src/lib/mail/conversation.ts (shared with the lifecycle primitives so
+    // the list, delete, undo and restore all reason over the SAME grouping
+    // rules). Rows group by equal threadId, parentEmailId chains, and the
+    // legacy key-claim (a threadId=null root whose id another page row
+    // carries as its threadId). Rows only group when their counterpart is
+    // on the same page, so a conversation whose members live in different
+    // folders still renders exactly as before in each folder.
+    const { representatives, hiddenCount } = groupRowsForList(emails);
 
-    const seenGroups = new Set<number>()
-    const filteredEmails: typeof emails = []
-    const threadCounts: Record<string, number> = {}
+    const threadCounts = hiddenCount;
 
-    for (let i = 0; i < emails.length; i++) {
-      const root = find(i)
-      if (seenGroups.has(root)) {
-        // Hidden member of an already-rendered conversation. Count it under
-        // the representative's own key — that is the key the visible row
-        // reads its threadCount from.
-        const rep = emails[root]
-        const key = rep.threadId || rep.id
-        threadCounts[key] = (threadCounts[key] || 0) + 1
-        continue
-      }
-      seenGroups.add(root)
-      filteredEmails.push(emails[i])
-    }
-
-    const formattedEmails = filteredEmails.map((email) => ({
+    const formattedEmails = representatives.map((email) => ({
       id: email.id,
       senderId: email.senderId,
       recipientEmail: email.recipientEmail,
@@ -216,7 +164,12 @@ export async function GET(request: NextRequest) {
       createdAt: email.createdAt,
       sender: email.sender,
       recipient: email.recipient,
-      replyCount: email.replies.length,
+      // The conversation badge = every message of this conversation the
+       // user can see (the visible row + the members folded under it).
+       // The old value (the row's direct children) was almost always 0
+       // for the newest-row representative, so grouped conversations
+       // showed no count at all.
+      replyCount: (threadCounts[email.threadId || email.id] || 0) + 1,
       threadCount: (threadCounts[email.threadId || email.id] || 0) + email.replies.length,
     }));
 
@@ -318,37 +271,33 @@ export async function POST(request: NextRequest) {
     // Determine threadId
     let threadId: string | null = null
     if (replyToId) {
-      // Reply: inherit threadId from parent email. A parent with threadId=null
-      // (legacy root, legacy reply, or a sent copy) used to fork a FRESH key
-      // (threadId = replyToId) — replying to different messages of one legacy
-      // conversation scattered it across several server-side threads, and
-      // after deleting it the Trash showed the messages separately. Walk up
-      // the parentEmailId chain instead: the first ancestor that carries a
-      // real threadId wins; with none found, the chain's root id is the best
-      // available key (same resolution the /api/emails/[id]/reply endpoint
-      // has always used). Sent copies carry no parentEmailId, so a reply to
-      // one keeps the sent copy id as its key — unchanged behavior there.
+      // Reply: inherit the parent's thread key via the shared resolution
+      // (src/lib/mail/conversation.ts) — parent's threadId, else the
+      // parentEmailId chain, else — when the parent is a SENT COPY (no
+      // threadId, no parent chain by design) — the parent's inbox twin.
+      // Replying from the Sent folder used to fork a FRESH key
+      // (threadId = sent-copy id), which no later relation could ever link
+      // back into the recipient's conversation: the forked rows then
+      // rendered — and after the conversation-scoped delete, TRASHED — as
+      // separate rows (owner report 2026-11-11). Future replies can never
+      // fork again. Sent copies keep carrying no key themselves, unchanged.
       const parentEmail = await db.email.findUnique({
         where: { id: replyToId },
-        select: { threadId: true, parentEmailId: true },
+        select: {
+          id: true,
+          threadId: true,
+          parentEmailId: true,
+          senderId: true,
+          recipientEmail: true,
+          body: true,
+          createdAt: true,
+          folder: true,
+        },
       })
-      if (parentEmail?.threadId) {
-        threadId = parentEmail.threadId
+      if (parentEmail) {
+        threadId = await resolveReplyThreadId(db, parentEmail)
       } else {
         threadId = replyToId
-        let walkId = parentEmail?.parentEmailId || null
-        let hops = 0
-        while (walkId && hops < 50) {
-          const ancestor = await db.email.findUnique({
-            where: { id: walkId },
-            select: { id: true, threadId: true, parentEmailId: true },
-          })
-          if (!ancestor) break
-          if (ancestor.threadId) { threadId = ancestor.threadId; break }
-          threadId = ancestor.id
-          walkId = ancestor.parentEmailId
-          hops++
-        }
       }
     } else {
       // New email: generate threadId

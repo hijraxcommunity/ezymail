@@ -782,18 +782,28 @@ export function EmailDetail() {
     }
   }
 
-  /* ─── Restore (trash → inbox) ─── */
+  /* ─── Restore (trash → original folders) ─── */
   const handleRestore = async () => {
     if (!email) return
-    removeEmail(email.id)
-    handleBack()
     try {
-      await fetch(`/api/emails/${email.id}`, {
+      // Server first: the restore now brings back the ENTIRE resolved
+      // conversation (restoreConversation flag) — the old single-row PUT
+      // returned only the clicked row and left its siblings in Trash, so
+      // the conversation existed in Inbox and Trash at the same time
+      // (owner report 2026-11-11). Local state moves only after the
+      // backend confirmed; on failure the trash view stays truthful.
+      const res = await fetch(`/api/emails/${email.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: 'inbox', isArchived: false }),
+        body: JSON.stringify({ folder: 'inbox', isArchived: false, restoreConversation: true }),
       })
-      toast.success('Email restored to inbox')
+      if (!res.ok) throw new Error('restore failed')
+      const data = await res.json().catch(() => null)
+      const restoredIds: string[] = data?.restoredIds?.length ? data.restoredIds : [email.id]
+      useAppStore.getState().clearRemovedGuards([...restoredIds, email.threadId || email.id].filter(Boolean))
+      removeEmail(email.id)
+      handleBack()
+      toast.success('Conversation restored to inbox')
     } catch {
       toast.error('Failed to restore')
     }
