@@ -47,6 +47,14 @@ export async function GET(request: NextRequest) {
       delete where.folder;
       where.isArchived = true;
       where.recipientEmail = session.email;
+      // Rows already in Trash never belong in the Archive view: a trashed
+      // row that kept isArchived=true (trash moves used not to clear it)
+      // showed up here, and deleting it hit the DELETE route's trash
+      // branch — a PERMANENT delete instead of "moves to Trash" (owner
+      // report: "delete from Archive permanently deletes, does not go to
+      // Trash"). Trash moves now also clear isArchived; the folder
+      // exclusion covers existing rows without a migration.
+      where.folder = { not: 'trash' };
     }
 
     // Archiving must actually hide mail from the inbox (the Archive view

@@ -5,6 +5,8 @@ import {
   moveConversationToTrash,
   permanentlyDeleteConversation,
   restoreConversationFromTrash,
+  findOwnedSentTwin,
+  dedupeThreadForViewer,
 } from '@/lib/mail/conversation';
 
 // GET /api/emails/[id] - Get single email
@@ -89,18 +91,43 @@ export async function GET(
       },
     });
 
-    // Deduplicate thread: if the same sender sent two emails with the same body
-    // within 5 seconds (inbox + sent copy), keep only the inbox copy
-    const dedupedThread = thread.filter((msg, idx, arr) => {
-      // Keep if no earlier message has the same sender+body+time
-      const timeBucket = Math.floor(new Date(msg.createdAt).getTime() / 5000);
-      const key = `${msg.senderId}:${msg.body?.slice(0, 200)}:${timeBucket}`;
-      const firstIdx = arr.findIndex(m => {
-        const tb = Math.floor(new Date(m.createdAt).getTime() / 5000);
-        return `${m.senderId}:${m.body?.slice(0, 200)}:${tb}` === key;
+    // Assemble the conversation from the VIEWER'S OWN copies. The thread
+    // query returns every threadId-carrying copy of the conversation —
+    // the viewer's received rows AND the other user's inbox copies of the
+    // viewer's outgoing messages (matched via senderId). The old dedup
+    // kept the FIRST copy per message, which is the recipient's inbox copy
+    // (POST creates it before the sent copy) — so each side's conversation
+    // view was built on the OTHER user's rows: deleting or permanently
+    // deleting the conversation on one phone made messages vanish from the
+    // thread on the other phone (owner report). For every foreign row, the
+    // viewer's own sent twin (same POST wrote both copies) is pulled in,
+    // and the dedup now prefers the viewer's copy per message — the thread
+    // is built entirely from the viewer's mailbox, so the other user's
+    // delete/undo can no longer change what it renders, and read-state no
+    // longer leaks from another user's copy.
+    const foreignRows = thread.filter((msg) => msg.recipientEmail !== session.email);
+    const ownTwinRows: typeof thread = [];
+    for (const msg of foreignRows.slice(0, 40)) {
+      const twin = await findOwnedSentTwin(db as never, msg, session.email, session.userId);
+      if (!twin) continue;
+      const full = await db.email.findUnique({
+        where: { id: twin.id },
+        include: {
+          sender: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
+          recipient: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
+        },
       });
-      return firstIdx === idx;
-    });
+      if (full) ownTwinRows.push(full);
+    }
+    const dedupedThread = dedupeThreadForViewer(
+      [...thread, ...ownTwinRows],
+      session.email,
+      session.userId
+    );
 
     // Strip inline base64 `data` from attachments in the response - keep
     // {name, url, size, type}. Every client consumer falls back to `url`

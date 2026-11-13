@@ -24,6 +24,8 @@ import {
   inferRestoreFolder,
   groupRowsForList,
   resolveReplyThreadId,
+  findOwnedSentTwin,
+  dedupeThreadForViewer,
   type MemberRow,
 } from '../src/lib/mail/conversation'
 
@@ -323,11 +325,12 @@ test('G unknown anchor and foreign conversation are no-ops; move/restore/delete 
   assert.deepEqual(await db.$transaction((tx) => moveConversationToTrash(tx as never, 'nope', alice.email, alice.id)), [])
   assert.deepEqual(await db.$transaction((tx) => restoreConversationFromTrash(tx as never, 'nope', alice.email, alice.id)), [])
   assert.deepEqual(await db.$transaction((tx) => permanentlyDeleteConversation(tx as never, 'nope', alice.email, alice.id)), [])
-  // The route's ownership gate (403 before these helpers run) is the
-  // boundary for other users; the helpers themselves never touch rows
-  // outside recipientEmail=userEmail plus the anchor itself.
+  // The caller's mailbox is the hard boundary (owner report: deleting on
+  // one phone must never touch another user's rows): carol anchoring on
+  // alice's row resolves NOTHING of her own — the foreign anchor seeds no
+  // members and is itself excluded from the set.
   const members = await db.$transaction((tx) => resolveConversationMembers(tx as never, 'x', carol.email, carol.id))
-  assert.deepEqual(members.map((m: MemberRow) => m.id), ['x'], 'carol resolves only the anchor, never alice rows')
+  assert.deepEqual(members.map((m: MemberRow) => m.id), [], 'a foreign anchor resolves nothing outside the caller\'s mailbox')
   // Repeating the move is a no-op (already trashed rows are not re-touched).
   const first = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'x', alice.email, alice.id))
   const second = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'x', alice.email, alice.id))
@@ -623,4 +626,115 @@ test('BF4 pickCanonicalKey preference order', () => {
   // single member with no key -> its own id (the (d) chain-root fallback,
   // same key resolveReplyThreadId would hand a future reply)
   assert.equal(pickCanonicalKey([mk('solo', null, 0)]), 'solo')
+})
+
+// ─── Per-mailbox isolation: foreign anchors + thread-view copies ────────────
+// Owner report: deleting a conversation on one phone made messages vanish
+// from the other user's mobile ("only on their the message be deleted, not
+// from others' mobile").
+
+test('X1 foreign anchor (other user\'s inbox copy of my message): my members move, their row never moves', async () => {
+  await reset()
+  await seed([
+    // bob's mailbox: his inbox copy of alice's outgoing message (the row
+    // the thread view hands back as the representative of alice's message)
+    { id: 'b_m1', senderId: alice.id, recipientEmail: bob.email, threadId: 'b_m1', at: at(0) },
+    // alice's mailbox: her copies of bob's replies (same conversation key)
+    { id: 'a_r1', senderId: bob.id, recipientEmail: alice.email, threadId: 'b_m1', parentEmailId: 'b_m1', at: at(1) },
+    { id: 'b_r2', senderId: alice.id, recipientEmail: bob.email, threadId: 'b_m1', parentEmailId: 'a_r1', at: at(2) },
+    { id: 'a_r3', senderId: bob.id, recipientEmail: alice.email, threadId: 'b_m1', parentEmailId: 'b_r2', at: at(3) },
+  ])
+  // alice anchors the delete on BOB's row (senderId=alice passes ownership)
+  const moved = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'b_m1', alice.email, alice.id))
+  assert.deepEqual(moved.sort(), ['a_r1', 'a_r3'], 'only alice\'s own members move')
+  const f = await folders(['b_m1', 'a_r1', 'b_r2', 'a_r3'])
+  assert.equal(f['b_m1'].folder, 'inbox', 'bob\'s copy of alice\'s message untouched')
+  assert.equal(f['b_r2'].folder, 'inbox', 'bob\'s copy of alice\'s reply untouched')
+  assert.equal(f['a_r1'].folder, 'trash')
+  assert.equal(f['a_r3'].folder, 'trash')
+})
+
+test('X2 foreign anchor already in trash: the other user\'s trashed copy is never destroyed', async () => {
+  await reset()
+  await seed([
+    { id: 'b_m1', senderId: alice.id, recipientEmail: bob.email, folder: 'trash', threadId: 'b_m1', at: at(0) },
+    { id: 'a_r1', senderId: bob.id, recipientEmail: alice.email, folder: 'trash', threadId: 'b_m1', parentEmailId: 'b_m1', at: at(1) },
+  ])
+  const deleted = await db.$transaction((tx) => permanentlyDeleteConversation(tx as never, 'b_m1', alice.email, alice.id))
+  assert.deepEqual(deleted, ['a_r1'], 'only alice\'s own trashed copy is destroyed')
+  const b = await db.email.findUnique({ where: { id: 'b_m1' } })
+  assert.ok(b, 'bob\'s trashed copy must survive alice\'s permanent delete')
+})
+
+test('X3 foreign anchor restore: only the caller\'s own trashed members come back', async () => {
+  await reset()
+  await seed([
+    { id: 'b_m1', senderId: alice.id, recipientEmail: bob.email, folder: 'trash', threadId: 'b_m1', at: at(0) },
+    { id: 'a_r1', senderId: bob.id, recipientEmail: alice.email, folder: 'trash', threadId: 'b_m1', parentEmailId: 'b_m1', at: at(1) },
+  ])
+  const restored = await db.$transaction((tx) => restoreConversationFromTrash(tx as never, 'b_m1', alice.email, alice.id))
+  assert.deepEqual(restored, ['a_r1'])
+  const f = await folders(['b_m1', 'a_r1'])
+  assert.equal(f['b_m1'].folder, 'trash', 'bob\'s trash placement untouched')
+  assert.equal(f['a_r1'].folder, 'inbox')
+})
+
+test('X4 trash move clears isArchived: trashed mail leaves the Archive view set', async () => {
+  await reset()
+  await seed([
+    { id: 'arc', threadId: 'arc', isArchived: true, at: at(0) },
+    { id: 'arc2', threadId: 'arc', parentEmailId: 'arc', isArchived: true, at: at(1) },
+    { id: 'live', threadId: 'live', isArchived: true, at: at(2) },
+  ])
+  await db.$transaction((tx) => moveConversationToTrash(tx as never, 'arc2', alice.email, alice.id))
+  const f = await folders(['arc', 'arc2', 'live'])
+  assert.equal(f['arc'].folder, 'trash')
+  assert.equal(f['arc'].isArchived, false, 'trashed member no longer lists in Archive')
+  assert.equal(f['arc2'].isArchived, false)
+  assert.equal(f['live'].isArchived, true, 'unrelated archived mail keeps its flag')
+})
+
+test('T1 thread dedup prefers the viewer\'s own copy of every message', () => {
+  const mk = (id: string, senderId: string, recipientEmail: string, folder: string, min: number, sec = 0) => ({
+    id, senderId, recipientEmail, folder, body: 'b', createdAt: at(min, sec),
+  })
+  // bob's message to alice: alice's inbox copy (created first) + bob's sent copy
+  const ainbox = mk('ainbox', bob.id, alice.email, 'inbox', 0)
+  const bsent = mk('bsent', bob.id, alice.email, 'sent', 0, 1)
+  // alice's reply: bob's inbox copy (created first) + alice's sent copy
+  const binbox = mk('binbox', alice.id, bob.email, 'inbox', 1)
+  const asent = mk('asent', alice.id, bob.email, 'sent', 1, 1)
+
+  // viewer alice: her inbox copy for bob's message, HER SENT copy for her own reply
+  assert.deepEqual(
+    dedupeThreadForViewer([ainbox, bsent, binbox, asent], alice.email, alice.id).map((r) => r.id).sort(),
+    ['ainbox', 'asent']
+  )
+  // viewer bob: his sent copy for his own message, his inbox copy for alice's reply
+  assert.deepEqual(
+    dedupeThreadForViewer([ainbox, bsent, binbox, asent], bob.email, bob.id).map((r) => r.id).sort(),
+    ['binbox', 'bsent']
+  )
+  // legacy fallback: when only the foreign copy exists it still renders
+  assert.deepEqual(dedupeThreadForViewer([binbox], alice.email, alice.id).map((r) => r.id), ['binbox'])
+  // self-addressed mail: both copies are the viewer's — keep the first (inbox)
+  const self = mk('self_i', alice.id, alice.email, 'inbox', 2)
+  const selfS = mk('self_s', alice.id, alice.email, 'sent', 2, 1)
+  assert.deepEqual(dedupeThreadForViewer([self, selfS], alice.email, alice.id).map((r) => r.id), ['self_i'])
+})
+
+test('T2 findOwnedSentTwin bridges a foreign thread row to the viewer\'s own sent copy', async () => {
+  await reset()
+  await seed([
+    { id: 'binbox', senderId: alice.id, recipientEmail: bob.email, threadId: 'binbox', body: 'hello', at: at(0) },
+    { id: 'asent', senderId: alice.id, recipientEmail: bob.email, folder: 'sent', body: 'hello', at: at(0, 1) },
+  ])
+  const binbox = await db.email.findUnique({ where: { id: 'binbox' } })
+  assert.ok(binbox)
+  const twin = await findOwnedSentTwin(db as never, binbox, alice.email, alice.id)
+  assert.equal(twin?.id, 'asent', 'alice\'s sent copy of her own message is found')
+  // a row the viewer already owns (their sent copy) never self-matches
+  const asent = await db.email.findUnique({ where: { id: 'asent' } })
+  assert.ok(asent)
+  assert.equal(await findOwnedSentTwin(db as never, asent, alice.email, alice.id), null)
 })

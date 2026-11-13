@@ -212,7 +212,25 @@ export async function resolveConversationMembers(
     if (progressed === 0) break;
   }
 
-  return [...members.values()];
+  // MAILBOX SCOPE — the hard boundary for every lifecycle operation built
+  // on this member set. Resolution always includes the ANCHOR row, and the
+  // endpoints' ownership check admits rows where the caller is the SENDER
+  // — which is the recipient's inbox copy of their own outgoing message
+  // (senderId=caller, recipientEmail=other), the very row the thread view
+  // hands back as that message's representative. Without this filter,
+  // deleting/undoing anchored on such an id moved or destroyed ANOTHER
+  // USER'S row (owner report: deleting a conversation on one phone made
+  // the messages vanish from the other user's mobile). The caller's
+  // mailbox is exactly: their received copies (recipientEmail=userEmail,
+  // any folder except sent) plus their OWN sent copies (senderId=userId,
+  // folder='sent') — a sent copy still collapses to the single row, and a
+  // foreign anchor only seeds the resolution without ever entering the
+  // returned set.
+  return [...members.values()].filter(
+    (m) =>
+      (m.recipientEmail === userEmail && m.folder !== 'sent') ||
+      (m.senderId === userId && m.folder === 'sent')
+  );
 }
 
 /** Folders a conversation move must never touch. */
@@ -238,7 +256,13 @@ export async function moveConversationToTrash(
   if (moveIds.length === 0) return [];
   await tx.email.updateMany({
     where: { id: { in: moveIds } },
-    data: { folder: 'trash' },
+    // isArchived cleared with the move: the Archive view lists isArchived
+    // rows regardless of folder, so a trashed row that kept the flag kept
+    // showing in Archive — and deleting it there hit the trash branch and
+    // permanently deleted instead of going to Trash (owner report:
+    // "delete from Archive permanently deletes, does not go to Trash").
+    // Symmetric with restore, which also clears the flag.
+    data: { folder: 'trash', isArchived: false },
   });
   return moveIds;
 }
@@ -478,6 +502,92 @@ export function buildConversationPage<T extends SlimRow>(
     hiddenCount,
     totalConversations: representatives.length,
   };
+}
+
+/**
+ * The viewer's OWN copy of a message whose fetched thread row lives in
+ * another mailbox. Every send creates TWO rows — the recipient's inbox copy
+ * (created first, carries the threadId) and the sender's sent copy (created
+ * second, carries no key by design) — so a thread row with
+ * recipientEmail != viewer is the other user's inbox copy of the viewer's
+ * outgoing message, and the viewer's own copy is the sent twin: same
+ * sender (the viewer), same addressee, same exact body, written by the
+ * same POST within ±10s. Returns null when the row is already the
+ * viewer's or no twin exists (legacy rows predating the twin creation
+ * order, permanently-deleted copies).
+ */
+export async function findOwnedSentTwin(
+  tx: MailTx,
+  row: { id: string; senderId: string; recipientEmail: string; body: string | null; createdAt: Date },
+  userEmail: string,
+  userId: string
+): Promise<MemberRow | null> {
+  if (row.recipientEmail === userEmail) return null;
+  const created = new Date(row.createdAt);
+  const found = await tx.email.findMany({
+    where: {
+      id: { not: row.id },
+      senderId: userId,
+      recipientEmail: row.recipientEmail,
+      folder: 'sent',
+      body: row.body ?? '',
+      createdAt: {
+        gte: new Date(created.getTime() - 10_000),
+        lte: new Date(created.getTime() + 10_000),
+      },
+    },
+    select: MEMBER_SELECT,
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+  });
+  return asRows(found)[0] ?? null;
+}
+
+export interface ThreadCopyRow {
+  id: string;
+  senderId: string;
+  recipientEmail: string;
+  folder: string;
+  body: string | null;
+  createdAt: Date | string;
+}
+
+/**
+ * Conversation-view dedup with VIEWER-COPY PREFERENCE. The thread endpoint
+ * fetches every threadId-carrying copy of the conversation — which spans
+ * BOTH mailboxes: the viewer's own received copies AND the other user's
+ * inbox copies of the viewer's outgoing messages. The old dedup kept the
+ * first copy per message (the recipient's inbox copy — POST creates it
+ * before the sent copy), so each side's conversation view was built on the
+ * OTHER user's rows: when the other user deleted or permanently deleted
+ * their copies, messages vanished from the viewer's thread (owner report:
+ * deleting a conversation on one phone changed what the other phone
+ * shows). Grouping is unchanged — same sender + same body prefix + same
+ * 5s bucket, the identity rule this dedup has always used — but the kept
+ * copy is now the VIEWER'S OWN (their inbox copy, or their sent copy via
+ * findOwnedSentTwin) whenever one exists, so the conversation view is
+ * assembled entirely from the viewer's mailbox and the other user's
+ * delete/undo can no longer change it.
+ */
+export function dedupeThreadForViewer<T extends ThreadCopyRow>(
+  rows: T[],
+  userEmail: string,
+  userId: string
+): T[] {
+  const isMine = (m: T) =>
+    (m.recipientEmail === userEmail && m.folder === 'inbox') ||
+    (m.senderId === userId && m.folder === 'sent');
+  const bucketKey = (m: T) => {
+    const tb = Math.floor(new Date(m.createdAt).getTime() / 5000);
+    return `${m.senderId}:${m.body?.slice(0, 200) ?? ''}:${tb}`;
+  };
+  const picked = new Map<string, T>();
+  for (const m of rows) {
+    const key = bucketKey(m);
+    const cur = picked.get(key);
+    if (cur === undefined || (isMine(m) && !isMine(cur))) picked.set(key, m);
+  }
+  return rows.filter((m) => picked.get(bucketKey(m)) === m);
 }
 
 // ─── Legacy thread-key backfill (maintenance procedure) ─────────────────────
