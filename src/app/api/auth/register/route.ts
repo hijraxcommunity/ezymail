@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { createSession, hashPassword } from '@/lib/auth';
+import { createSession, hashPassword, checkRateLimitKey } from '@/lib/auth';
 import {
   normalizePhoneE164,
   verifyPhoneVerificationToken,
@@ -9,6 +9,28 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
+    // F-32: registration is the most expensive unauthenticated path in the
+    // app (bcrypt cost 12 per attempt + WhatsApp OTP work upstream). Throttle
+    // per IP before doing any work. Default 5 registrations / 15 min;
+    // env-overridable for tests/ops. Residual: in-memory per-instance — see
+    // auth.ts note; the IP derives from client-controllable headers (F-43).
+    const ipHeader =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'unknown';
+    const REGISTER_RATE_LIMIT_MAX = Number(process.env.REGISTER_RATE_LIMIT_MAX) || 5;
+    const registerAllowed = await checkRateLimitKey(
+      `register:${ipHeader}`,
+      REGISTER_RATE_LIMIT_MAX,
+      15 * 60 * 1000
+    );
+    if (!registerAllowed) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { firstName, lastName, dateOfBirth, password, email } = body;
 

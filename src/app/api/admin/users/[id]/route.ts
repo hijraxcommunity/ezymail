@@ -102,18 +102,25 @@ export async function PUT(
       return NextResponse.json({ error: 'Cannot suspend your own account' }, { status: 400 });
     }
 
-    // Update user status
-    const updatedUser = await db.user.update({
-      where: { id },
-      data: { status },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        status: true,
-      },
-    });
+    // Update user status. F-11: suspension must terminate the victim's
+    // existing sessions in the same transaction — previously only the DB row
+    // changed and the victim's live cookie kept working until its 30-day exp
+    // (and the daily rotation kept sliding it). Reactivation later is safe:
+    // the user simply logs in again, creating fresh rows.
+    const [updatedUser] = await db.$transaction([
+      db.user.update({
+        where: { id },
+        data: { status },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          status: true,
+        },
+      }),
+      db.session.deleteMany({ where: { userId: id } }),
+    ]);
 
     // Log admin action
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';

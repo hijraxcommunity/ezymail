@@ -6,22 +6,39 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Seeding database...')
 
-  // ─── Admin User ───
-  const adminPassword = await hash('Admin@123', 12)
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@ezy.af' },
-    update: {},
-    create: {
-      email: 'admin@ezy.af',
-      passwordHash: adminPassword,
-      firstName: 'EzyMail',
-      lastName: 'Admin',
-      dateOfBirth: '1990-01-01',
-      role: 'admin',
-      status: 'active',
-    },
-  })
-  console.log(`✅ Admin: ${admin.email}`)
+  // ─── Admin User (F-18) ───
+  // No default admin password exists anymore: the admin account is created
+  // ONLY when ADMIN_PASSWORD is set in the environment (min 8 chars), and
+  // the value is never printed. Re-runs never reset an existing admin's
+  // password (update: {} is intentionally empty). Without ADMIN_PASSWORD an
+  // existing admin is left untouched; on a fresh database no admin is
+  // created and seed says so loudly instead of planting a known credential.
+  const adminPasswordEnv = process.env.ADMIN_PASSWORD || ''
+  let admin: Awaited<ReturnType<typeof prisma.user.upsert>> | null = null
+  if (adminPasswordEnv.length >= 8) {
+    const adminPassword = await hash(adminPasswordEnv, 12)
+    admin = await prisma.user.upsert({
+      where: { email: 'admin@ezy.af' },
+      update: {},
+      create: {
+        email: 'admin@ezy.af',
+        passwordHash: adminPassword,
+        firstName: 'EzyMail',
+        lastName: 'Admin',
+        dateOfBirth: '1990-01-01',
+        role: 'admin',
+        status: 'active',
+      },
+    })
+    console.log(`✅ Admin: ${admin.email}`)
+  } else {
+    admin = await prisma.user.findUnique({ where: { email: 'admin@ezy.af' } })
+    if (admin) {
+      console.log(`ℹ️  Admin exists: ${admin.email} (ADMIN_PASSWORD not set — password left untouched)`)
+    } else {
+      console.warn('⚠️  Skipping admin creation: set ADMIN_PASSWORD (min 8 chars) in the environment to create the admin account. No default admin password is used.')
+    }
+  }
 
   // ─── Test Users ───
   const testPassword = await hash('Test@123', 12)
@@ -90,7 +107,7 @@ async function main() {
 
   // ─── Sample Emails (skip if already exist) ───
   const emailCount = await prisma.email.count()
-  if (emailCount === 0) {
+  if (emailCount === 0 && admin) {
     await prisma.email.create({
       data: {
         senderId: welcome.id,
@@ -199,7 +216,11 @@ async function main() {
 
   console.log('\n🎉 Seed completed!')
   console.log('\n📋 Test Accounts:')
-  console.log('  Admin:  admin@ezy.af / Admin@123')
+  if (admin) {
+    console.log('  Admin:  admin@ezy.af / (password comes from ADMIN_PASSWORD — not printed)')
+  } else {
+    console.log('  Admin:  (not created — see warning above)')
+  }
   console.log('  User:   john.doe@ezy.af / Test@123')
   console.log('  User:   sarah.smith@ezy.af / Test@123')
   console.log('  User:   ahmad.khan@ezy.af / Test@123')

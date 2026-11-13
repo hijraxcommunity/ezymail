@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { randomUUID } from 'crypto';
 import { db } from './db';
 
 /**
@@ -48,11 +49,15 @@ export interface SessionPayload {
  *   SESSION_RENEWAL_THRESHOLD_SECONDS (24h). Active users therefore never
  *   get logged out, while a session that sees no activity for 30 days
  *   expires for good.
- * - Rotation is strictly best-effort: if the cookie cannot be rewritten in
- *   the current execution context, or the auxiliary DB session row cannot
- *   be updated, the current token simply remains valid until its own `exp`.
- *   The JWT itself is the only authentication authority; DB rows exist for
- *   the sessions list and admin statistics.
+ * - F-07: the JWT signature alone is NO LONGER the authentication
+ *   authority. getSession() additionally requires the presented token to
+ *   match a live, unexpired Session row belonging to a non-suspended user
+ *   (F-11). Every revocation surface — logout, revoke-one, revoke-all,
+ *   password change, forgot-password reset, admin password reset and admin
+ *   suspension — deletes or invalidates those rows and therefore truly
+ *   terminates access instead of leaving the cookie valid until `exp`.
+ *   Tokens that predate this change carry no row and fail closed (one
+ *   re-login per device after deploy).
  */
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const SESSION_RENEWAL_THRESHOLD_SECONDS = 60 * 60 * 24; // renew after 1 day of token age
@@ -66,6 +71,13 @@ async function signSessionToken(user: { userId: string; email: string; role: str
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
+    // Per-session unique id: iat has 1-second resolution, so two logins of
+    // the same user within the same second would otherwise mint IDENTICAL
+    // token strings and collide on Session.token (@unique) — a pre-existing
+    // flaw the old best-effort row write silently masked. The jti makes
+    // every issued token distinct (and is the natural binding id for
+    // future session-row lookups).
+    .setJti(randomUUID())
     // jose interprets a numeric input as an absolute UNIX-epoch timestamp in
     // seconds (verified against the installed version), so the 30-day window
     // must be added to "now" explicitly.
@@ -104,22 +116,20 @@ async function rotateSessionIfDue(
       role: session.role,
     });
 
-    cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+    // F-07: rows first, cookie last. If the DB write fails, the OLD token
+    // (which still has its live row) remains in the cookie and the user
+    // stays logged in — a rotated cookie must never exist without its row.
+    await db.session.deleteMany({ where: { token: currentToken } });
+    await db.session.create({
+      data: {
+        userId: session.userId,
+        token,
+        ipAddress: '',
+        expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
+      },
+    });
 
-    // Keep the auxiliary DB session rows consistent with the active cookie.
-    try {
-      await db.session.deleteMany({ where: { token: currentToken } });
-      await db.session.create({
-        data: {
-          userId: session.userId,
-          token,
-          ipAddress: '',
-          expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
-        },
-      });
-    } catch {
-      // DB rows are auxiliary — cookie rotation above is what matters.
-    }
+    cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
   } catch {
     // Renewal is best-effort: the current token stays valid until its exp.
   }
@@ -128,19 +138,18 @@ async function rotateSessionIfDue(
 export async function createSession(user: { id: string; email: string; role: string }, ipAddress?: string) {
   const token = await signSessionToken({ userId: user.id, email: user.email, role: user.role });
 
-  // Store session in database (non-blocking — cookie is set either way)
-  try {
-    await db.session.create({
-      data: {
-        userId: user.id,
-        token,
-        ipAddress: ipAddress || '',
-        expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
-      },
-    });
-  } catch {
-    // Ignore DB write failure — JWT cookie is the primary auth mechanism
-  }
+  // F-07: the Session row is REQUIRED, not best-effort. getSession() binds
+  // every presented cookie to a live row, so a cookie must never be issued
+  // without one. A DB outage at login therefore fails the login (500) —
+  // fail-closed instead of issuing a cookie that dies on the next request.
+  await db.session.create({
+    data: {
+      userId: user.id,
+      token,
+      ipAddress: ipAddress || '',
+      expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
+    },
+  });
 
   // Set cookie
   const cookieStore = await cookies();
@@ -163,9 +172,29 @@ export async function getSession(): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secret);
     const session = payload as unknown as SessionPayload;
+
+    // F-07/F-11: signature alone proves nothing about revocation. The token
+    // must still map to a live, unexpired Session row of a non-suspended
+    // user. This turns logout, revoke-one, revoke-all, password change,
+    // forgot-password reset, admin reset and suspension (all of which
+    // delete rows) into REAL termination of access. One indexed lookup
+    // (Session.token is @unique) per authenticated request.
+    const row = await db.session.findFirst({
+      where: {
+        token,
+        isActive: true,
+        expiresAt: { gt: new Date() },
+      },
+      select: { user: { select: { status: true } } },
+    });
+    if (!row) return null;
+    if (row.user.status === 'suspended') return null;
+
     await rotateSessionIfDue(cookieStore, token, session);
     return session;
   } catch {
+    // Invalid/expired token, missing Session row, or a DB hiccup — all
+    // fail closed (unauthenticated).
     return null;
   }
 }
@@ -185,6 +214,27 @@ export async function destroySession() {
   cookieStore.delete('ezymail-session');
 }
 
+/**
+ * F-07: revoke every OTHER session of a user while keeping the caller's
+ * current device logged in. Used by the password-change flow so a stolen
+ * cookie on another device dies immediately ("all other devices sign out").
+ */
+export async function revokeOtherSessions(userId: string): Promise<void> {
+  const cookieStore = await cookies();
+  const currentToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  try {
+    await db.session.deleteMany({
+      where: currentToken
+        ? { userId, token: { not: currentToken } }
+        : { userId },
+    });
+  } catch {
+    // The password change itself already succeeded; revocation is retried
+    // on the next password change. Logged for ops visibility.
+    console.error('revokeOtherSessions failed for user', userId);
+  }
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const bcrypt = await import('bcryptjs');
   return bcrypt.hash(password, 12);
@@ -202,8 +252,28 @@ export function generateEmailFromName(firstName: string, lastName: string): stri
 }
 
 export async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remaining: number }> {
-  // Simple in-memory rate limiting
-  const key = `rate_limit:${ip}`;
+  // Default 5 attempts / 15 min per IP. Env-overridable so load tests and
+  // E2E harnesses (which all share one egress IP) are not throttled.
+  const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5;
+  const result = await checkRateLimitKey(`rate_limit:${ip}`, maxAttempts, 15 * 60 * 1000);
+  return { allowed: result, remaining: result ? maxAttempts - 1 : 0 };
+}
+
+/**
+ * F-32: generic fixed-window in-memory rate limiter (shared Map with the
+ * login limiter). Residual limitation, documented in the audit: the window
+ * state lives per server instance and resets on cold start, and callers
+ * derive the key from client-controlled headers where noted. A
+ * Redis/Upstash shared store or platform WAF is the complete fix and is
+ * tracked separately — these per-route limits still stop single-instance
+ * flooding and expensive-path abuse (bcrypt registrations, base64 uploads,
+ * send spam).
+ */
+export async function checkRateLimitKey(
+  key: string,
+  maxAttempts: number,
+  windowMs: number
+): Promise<boolean> {
   const globalForRateLimit = globalThis as unknown as {
     rateLimits: Map<string, { count: number; resetTime: number }>;
   };
@@ -213,20 +283,17 @@ export async function checkRateLimit(ip: string): Promise<{ allowed: boolean; re
   }
 
   const now = Date.now();
-  const windowMs = 15 * 60 * 1000; // 15 minutes
-  const maxAttempts = 5;
-
   const record = globalForRateLimit.rateLimits.get(key);
 
   if (!record || now > record.resetTime) {
     globalForRateLimit.rateLimits.set(key, { count: 1, resetTime: now + windowMs });
-    return { allowed: true, remaining: maxAttempts - 1 };
+    return true;
   }
 
   if (record.count >= maxAttempts) {
-    return { allowed: false, remaining: 0 };
+    return false;
   }
 
   record.count++;
-  return { allowed: true, remaining: maxAttempts - record.count };
+  return true;
 }

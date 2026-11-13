@@ -34,6 +34,13 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // F-11 (defense in depth): /api/auth/me must never serve a suspended
+    // account. getSession() already rejects suspended users at the token
+    // layer; this guard covers any path that could reach here otherwise.
+    if (user.status === 'suspended') {
+      return NextResponse.json({ error: 'Your account has been suspended' }, { status: 403 });
+    }
+
     return NextResponse.json({ user });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';

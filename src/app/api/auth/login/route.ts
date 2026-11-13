@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, verifyPassword, checkRateLimit } from '@/lib/auth';
+import { verifyTOTP } from '@/lib/totp';
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +44,52 @@ export async function POST(request: NextRequest) {
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // F-06: two-factor authentication is now ENFORCED at login when the user
+    // activated it (Settings > Security). Accepts a 6-digit TOTP or a
+    // single-use backup code. Brute force is bounded by the login rate
+    // limiter above (every POST consumes one attempt, including 2FA guesses).
+    const twoFactor = await db.twoFactor.findFirst({ where: { userId: user.id } });
+    if (twoFactor?.isEnabled) {
+      const code = typeof body.twoFactorCode === 'string' ? body.twoFactorCode.trim() : '';
+      if (!code) {
+        return NextResponse.json(
+          { error: 'Enter your two-factor authentication code.', code: 'TWO_FACTOR_REQUIRED' },
+          { status: 401 }
+        );
+      }
+
+      let twoFactorOk = verifyTOTP(twoFactor.secret, code);
+      if (!twoFactorOk) {
+        // Backup codes are stored as a JSON array of codes; a used code is
+        // consumed so it can never log in twice.
+        let backupCodes: string[] = [];
+        try {
+          const parsed: unknown = JSON.parse(twoFactor.backupCodes || '[]');
+          if (Array.isArray(parsed)) {
+            backupCodes = parsed.filter((c): c is string => typeof c === 'string');
+          }
+        } catch {
+          // Malformed list — treat as empty.
+        }
+        const idx = backupCodes.indexOf(code);
+        if (idx >= 0) {
+          twoFactorOk = true;
+          const remaining = backupCodes.filter((_, i) => i !== idx);
+          await db.twoFactor.update({
+            where: { id: twoFactor.id },
+            data: { backupCodes: JSON.stringify(remaining) },
+          });
+        }
+      }
+
+      if (!twoFactorOk) {
+        return NextResponse.json(
+          { error: 'Invalid two-factor authentication code.', code: 'TWO_FACTOR_INVALID' },
+          { status: 401 }
+        );
+      }
     }
 
     // Update last login and IP (non-blocking — don't fail login if DB is readonly)

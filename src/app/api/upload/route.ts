@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, checkRateLimitKey } from '@/lib/auth';
 import { randomUUID } from 'crypto';
 
 // Limits are capped by the deployment platform's 4.5MB request-body limit:
@@ -16,6 +16,23 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // F-32: per-user upload throttle — uploads are multi-MB base64 payloads;
+    // without a limit the endpoint is a storage/CPU spam vector. Default
+    // 20 uploads / 15 min; env-overridable for tests/ops. Residual:
+    // in-memory per-instance — see auth.ts note.
+    const UPLOAD_RATE_LIMIT_MAX = Number(process.env.UPLOAD_RATE_LIMIT_MAX) || 20;
+    const uploadAllowed = await checkRateLimitKey(
+      `upload:${session.userId}`,
+      UPLOAD_RATE_LIMIT_MAX,
+      15 * 60 * 1000
+    );
+    if (!uploadAllowed) {
+      return NextResponse.json(
+        { error: 'Too many uploads. Please wait a few minutes.' },
+        { status: 429 }
+      );
     }
 
     const formData = await request.formData();

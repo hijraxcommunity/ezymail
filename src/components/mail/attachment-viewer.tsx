@@ -42,11 +42,9 @@ function extLabel(att: AttachmentFile) {
   return att.type || 'File'
 }
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string)
-  )
-}
+// escapeHtml was removed with the F-04 print fix: the print document is now
+// built with DOM APIs (textContent / property assignment), so no HTML
+// escaping is needed anywhere in this component.
 
 // Reuses the existing secure attachment access: embedded base64 data when
 // present (no extra network request), otherwise the authenticated
@@ -206,21 +204,32 @@ async function handleShare(att: AttachmentFile) {
 function handlePrint(att: AttachmentFile) {
   const kind = viewerKind(att)
   if (kind === 'image') {
-    const src = att.data || att.url
     const win = window.open('', '_blank', 'width=820,height=680')
     if (!win) {
       toast.error('Please allow pop-ups to print this image.')
       return
     }
-    win.document.write(
-      `<!doctype html><html><head><title>${escapeHtml(att.name || 'Image')}</title>` +
-      `<style>@page{margin:12mm}html,body{margin:0;padding:0}` +
-      `body{display:flex;align-items:center;justify-content:center}` +
-      `img{max-width:100%;max-height:96vh}` +
-      `@media print{body{display:block}img{width:100%;height:auto}}</style></head>` +
-      `<body><img src="${src}" alt=""></body></html>`
-    )
-    win.document.close()
+    // F-04: the print document is built with DOM APIs, never by HTML string
+    // concatenation into document.write. The old code interpolated the
+    // attachment metadata (src = att.data || att.url) into a template string,
+    // letting a crafted attachment url/name execute script same-origin when
+    // the victim clicked Print. Property assignment (title.textContent,
+    // img.src) cannot parse HTML, so metadata stays inert.
+    const doc = win.document
+    const title = doc.createElement('title')
+    title.textContent = att.name || 'Image'
+    doc.head.appendChild(title)
+    const style = doc.createElement('style')
+    style.textContent =
+      '@page{margin:12mm}html,body{margin:0;padding:0}' +
+      'body{display:flex;align-items:center;justify-content:center}' +
+      'img{max-width:100%;max-height:96vh}' +
+      '@media print{body{display:block}img{width:100%;height:auto}}'
+    doc.head.appendChild(style)
+    const img = doc.createElement('img')
+    img.src = att.data || att.url
+    img.alt = ''
+    doc.body.appendChild(img)
     win.focus()
     setTimeout(() => {
       try {

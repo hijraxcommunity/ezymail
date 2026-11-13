@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession, verifyPassword, hashPassword } from '@/lib/auth';
+import { getSession, verifyPassword, hashPassword, revokeOtherSessions } from '@/lib/auth';
 
 // PUT /api/user/password - Change password
 export async function PUT(request: NextRequest) {
@@ -64,6 +64,12 @@ export async function PUT(request: NextRequest) {
       where: { id: session.userId },
       data: { passwordHash: newHash },
     });
+
+    // F-07: a credential change must terminate access granted by the old
+    // credential. Every OTHER session of this user is revoked (their tokens
+    // no longer map to a live row), while the device that performed the
+    // change stays logged in.
+    await revokeOtherSessions(session.userId);
 
     return NextResponse.json({ success: true, message: 'Password updated successfully' });
   } catch (error: unknown) {

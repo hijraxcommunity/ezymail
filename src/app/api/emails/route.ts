@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, checkRateLimitKey } from '@/lib/auth';
+import { sanitizeAttachments } from '@/lib/attachment-sanitize';
 import { sendPushNotification } from '@/lib/notifications/sendPushNotification';
 import { buildConversationPage, resolveReplyThreadId } from '@/lib/mail/conversation';
 
@@ -232,6 +233,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
+    // F-32: per-user send throttle (env-overridable for tests/ops). Default
+    // 30 sends / 15 min is far above normal usage while blocking mailbox
+    // spam floods. Residual: in-memory per-instance — see auth.ts note.
+    const SEND_RATE_LIMIT_MAX = Number(process.env.SEND_RATE_LIMIT_MAX) || 30;
+    const sendAllowed = await checkRateLimitKey(
+      `send:${session.userId}`,
+      SEND_RATE_LIMIT_MAX,
+      15 * 60 * 1000
+    );
+    if (!sendAllowed) {
+      return NextResponse.json(
+        { error: 'You are sending emails too quickly. Please wait a few minutes.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { to, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority, senderFcmToken } = body;
 
@@ -273,9 +290,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse attachments - store as JSON string
-    const attachmentsJson = attachments && Array.isArray(attachments) && attachments.length > 0
-      ? JSON.stringify(attachments)
+    // F-04: attachments are validated and rebuilt server-side — the client
+    // array is never stored verbatim. Names are charset-restricted, URLs are
+    // regenerated from the owner id + fresh UUID, data must be a strict
+    // base64 data URL within the upload size limits, and active-content MIME
+    // types (html/xhtml/svg) are rejected. On any violation the send fails
+    // with 400 instead of persisting attacker-controlled metadata.
+    const sanitized = sanitizeAttachments(attachments, session.userId);
+    if (!sanitized.ok) {
+      return NextResponse.json({ error: sanitized.error }, { status: 400 });
+    }
+    const attachmentsJson = sanitized.value.length > 0
+      ? JSON.stringify(sanitized.value)
       : null;
 
     const isScheduled = scheduledAt && new Date(scheduledAt).getTime() > Date.now();

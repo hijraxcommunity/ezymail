@@ -22,6 +22,11 @@ export function LoginForm() {
   const { setUser, setAuthView } = useAppStore()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  // F-06: when the account has two-factor authentication enabled, the API
+  // answers the first POST with code TWO_FACTOR_REQUIRED; the form then shows
+  // the verification step and resubmits with twoFactorCode.
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false)
+  const [twoFactorCode, setTwoFactorCode] = useState('')
   // "Remember me" removed (owner request 2026-11-08): the session cookie is
   // already persistent for 30 days on EVERY login and the API never read
   // this flag — the checkbox was purely decorative.
@@ -56,12 +61,21 @@ export function LoginForm() {
         body: JSON.stringify({
           email: data.email,
           password: data.password,
+          ...(twoFactorRequired && twoFactorCode.trim()
+            ? { twoFactorCode: twoFactorCode.trim() }
+            : {}),
         }),
       })
 
       const result = await res.json()
 
       if (!res.ok) {
+        if (result.code === 'TWO_FACTOR_REQUIRED') {
+          // Account is protected with 2FA — reveal the code step.
+          setTwoFactorRequired(true)
+          toast.info('Enter your two-factor authentication code to continue.')
+          return
+        }
         toast.error(result.error || 'Invalid email or password')
         return
       }
@@ -160,6 +174,29 @@ export function LoginForm() {
               <p className="text-xs text-[#EA4335]">{errors.password.message}</p>
             )}
           </div>
+
+          {/* Two-factor code (F-06) — appears only after the server says the
+              account requires a second factor */}
+          {twoFactorRequired && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-[#1F1F1F] dark:text-gray-300">
+                Two-factor code
+              </label>
+              <Input
+                type="text"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                placeholder="6-digit code or backup code"
+                className="h-11 rounded-xl border-gray-200 dark:border-gray-700 focus:border-[#4285F4] focus:ring-[#4285F4]/20"
+                autoComplete="one-time-code"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-gray-400">
+                Enter the 6-digit code from your authenticator app, or one of
+                your backup codes.
+              </p>
+            </div>
+          )}
 
           {/* Forgot password ("Remember me" removed — sessions already
               persist 30 days; see comment at the state declarations) */}

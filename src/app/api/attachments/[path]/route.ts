@@ -2,28 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
 
-// MIME type map for serving files with correct Content-Type
-const MIME_MAP: Record<string, string> = {
+// F-05: only a safe allowlist may render INLINE in the browser. Everything
+// else — html/xhtml, svg/xml, office docs, archives, executables, unknown
+// types — is served as opaque binary with `Content-Disposition: attachment`,
+// so attacker-supplied content can never execute on the app origin (the
+// previous map happily served `.html` as text/html and `.svg` as
+// image/svg+xml, both inline). The attachment viewer's PDF preview keeps
+// working because application/pdf stays inline (browser PDF sandbox).
+const SAFE_INLINE_MIME: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-  '.bmp': 'image/bmp', '.ico': 'image/x-icon',
-  '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif', '.tiff': 'image/tiff',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
   '.pdf': 'application/pdf',
-  '.doc': 'application/msword',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.xls': 'application/vnd.ms-excel',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.ppt': 'application/vnd.ms-powerpoint',
-  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.txt': 'text/plain', '.csv': 'text/csv', '.html': 'text/html',
-  '.json': 'application/json', '.xml': 'application/xml',
-  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
-  '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
-  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
-  '.aac': 'audio/aac', '.m4a': 'audio/mp4',
-  '.zip': 'application/zip', '.rar': 'application/x-rar-compressed',
-  '.7z': 'application/x-7z-compressed', '.gz': 'application/gzip', '.tar': 'application/x-tar',
 };
+
+// Attachment names were historically free-form, so the header value must be
+// scrubbed before interpolation (new uploads/sends are charset-restricted
+// upstream; this protects legacy rows).
+function safeHeaderFilename(name: string | undefined, fallback: string): string {
+  const raw = (name || fallback).replace(/[\r\n"';\\]/g, '_').slice(0, 255);
+  return raw || 'attachment';
+}
 
 // GET /api/attachments/[path] - Serve attachment files
 // Looks up the attachment from the database and serves the base64 data
@@ -77,16 +75,23 @@ export async function GET(
           // Attachment has base64 data embedded
           const base64Data = match.data.replace(/^data:[^;]+;base64,/, '');
           const buffer = Buffer.from(base64Data, 'base64');
-          const ext = '.' + (match.name?.split('.').pop() || 'bin').toLowerCase();
-          const contentType = MIME_MAP[ext] || 'application/octet-stream';
+          const ext = '.' + (match.name?.split('.').pop() || '').toLowerCase();
+          const inlineMime = SAFE_INLINE_MIME[ext];
+          const contentType = inlineMime || 'application/octet-stream';
+          const filename = safeHeaderFilename(match.name, fileName);
+          const disposition = inlineMime ? 'inline' : 'attachment';
 
           return new NextResponse(buffer, {
             status: 200,
             headers: {
               'Content-Type': contentType,
               'Content-Length': String(buffer.length),
-              'Cache-Control': 'public, max-age=86400, immutable',
-              'Content-Disposition': `inline; filename="${match.name || fileName}"`,
+              // F-05/F-47: authenticated user content must never be shared-
+              // cacheable; proxies/CDNs could otherwise serve one user's
+              // attachment bytes to another without re-auth.
+              'Cache-Control': 'private, max-age=86400',
+              'Content-Disposition': `${disposition}; filename="${filename}"`,
+              'X-Content-Type-Options': 'nosniff',
             },
           });
         }
