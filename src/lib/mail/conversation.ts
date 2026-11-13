@@ -262,7 +262,17 @@ export async function moveConversationToTrash(
     // permanently deleted instead of going to Trash (owner report:
     // "delete from Archive permanently deletes, does not go to Trash").
     // Symmetric with restore, which also clears the flag.
-    data: { folder: 'trash', isArchived: false },
+    //
+    // snoozedUntil cleared with the move (owner report 2026-11-13: "when I
+    // delete the Spam page email it does not go to Trash"): EVERY folder
+    // view except Snoozed filters snoozedUntil=null — including Trash — and
+    // the snooze endpoint stamps the anchor wherever it lives (the detail
+    // three-dot menu offers Snooze from the Spam page too, and rows are
+    // deleted from the Snoozed page as well). A snoozed row moved to Trash
+    // kept the flag and the trash query filtered it out: the mail WAS in
+    // Trash but invisible in the Trash view — the deleted mail looked like
+    // it never arrived. Deleting a snoozed email ends the snooze.
+    data: { folder: 'trash', isArchived: false, snoozedUntil: null },
   });
   return moveIds;
 }
@@ -302,8 +312,11 @@ export function inferRestoreFolder(row: MemberRow, userId: string): 'inbox' | 's
  * back out of Trash in one transaction. Each restored row goes to its own
  * original folder (inbox, or sent for the user's own sent copies) with
  * isArchived cleared — required for inbox visibility and the restore
- * behavior this app has always had. Read/unread state is untouched.
- * Returns the ids that were restored.
+ * behavior this app has always had. snoozedUntil is cleared with the same
+ * visibility argument (a restored mail must be visible in the folder it
+ * returns to; the inbox/sent views filter snoozedUntil=null, and a snooze
+ * does not survive a delete+restore round-trip). Read/unread state is
+ * untouched. Returns the ids that were restored.
  */
 export async function restoreConversationFromTrash(
   tx: MailTx,
@@ -317,7 +330,7 @@ export async function restoreConversationFromTrash(
   for (const row of trashed) {
     await tx.email.updateMany({
       where: { id: row.id, folder: 'trash' },
-      data: { folder: inferRestoreFolder(row, userId), isArchived: false },
+      data: { folder: inferRestoreFolder(row, userId), isArchived: false, snoozedUntil: null },
     });
   }
   return trashed.map((m) => m.id);

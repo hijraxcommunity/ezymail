@@ -70,6 +70,7 @@ type SeedRow = {
   parentEmailId?: string | null
   isRead?: boolean
   isArchived?: boolean
+  snoozedUntil?: Date | null
   at?: Date
 }
 
@@ -87,6 +88,7 @@ async function seed(rows: SeedRow[]) {
         parentEmailId: r.parentEmailId ?? null,
         isRead: r.isRead ?? false,
         isArchived: r.isArchived ?? false,
+        snoozedUntil: r.snoozedUntil ?? null,
         createdAt: r.at ?? at(0),
       },
     })
@@ -98,7 +100,7 @@ async function reset() {
 }
 
 const folders = async (ids: string[]) => {
-  const rows = await db.email.findMany({ where: { id: { in: ids } }, select: { id: true, folder: true, isArchived: true, isRead: true } })
+  const rows = await db.email.findMany({ where: { id: { in: ids } }, select: { id: true, folder: true, isArchived: true, isRead: true, snoozedUntil: true } })
   return Object.fromEntries(rows.map((r) => [r.id, r]))
 }
 const countFolder = async (folder: string, recipientEmail: string) =>
@@ -737,4 +739,91 @@ test('T2 findOwnedSentTwin bridges a foreign thread row to the viewer\'s own sen
   const asent = await db.email.findUnique({ where: { id: 'asent' } })
   assert.ok(asent)
   assert.equal(await findOwnedSentTwin(db as never, asent, alice.email, alice.id), null)
+})
+
+// ─── Tests SP1-SP3 — "delete from ANY page lands visibly in Trash" ─────────
+// Owner report 2026-11-13: "when I delete the Spam page email it does not
+// go to Trash ... every email that deletes from every page directly goes
+// to Trash". The delete route itself is folder-agnostic and the anchor
+// always moves — the failure was VISIBILITY: every folder view except
+// Snoozed filters snoozedUntil=null (including Trash), and the lifecycle
+// never cleared the flag a row could already carry (the snooze endpoint
+// stamps the anchor wherever it lives). A snoozed row deleted from any
+// page landed in Trash but the Trash view filtered it out.
+
+async function visibleInTrashView() {
+  // The exact where-clause GET /api/emails?folder=trash runs (folder +
+  // recipientEmail + snoozedUntil: null).
+  const rows = await db.email.findMany({
+    where: { folder: 'trash', recipientEmail: alice.email, snoozedUntil: null },
+    select: { id: true },
+  })
+  return rows.map((r) => r.id).sort()
+}
+
+test('SP1 deleting from the Spam page (incl. a previously-snoozed spam row) lands VISIBLY in Trash', async () => {
+  await reset()
+  // spam1: plain spam mail. spam2: spam mail the user snoozed from the spam
+  // page's detail menu (snooze stamps the anchor wherever it lives). Both
+  // are separate conversations. snoz-live: an unrelated snoozed inbox mail.
+  const snoozedAt = at(60)
+  await seed([
+    { id: 'spam1', threadId: 'spam1', folder: 'spam', at: at(0) },
+    { id: 'spam2', threadId: 'spam2', folder: 'spam', snoozedUntil: snoozedAt, at: at(1) },
+    { id: 'snoz-live', threadId: 'snoz-live', folder: 'inbox', snoozedUntil: snoozedAt, at: at(2) },
+  ])
+
+  const moved1 = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'spam1', alice.email, alice.id))
+  assert.deepEqual(moved1, ['spam1'])
+  const moved2 = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'spam2', alice.email, alice.id))
+  assert.deepEqual(moved2, ['spam2'])
+
+  const f = await folders(['spam1', 'spam2', 'snoz-live'])
+  assert.equal(f['spam1'].folder, 'trash')
+  assert.equal(f['spam2'].folder, 'trash')
+  assert.equal(f['spam1'].isArchived, false, 'spam delete never lands in Archive either')
+  assert.equal(f['spam2'].isArchived, false)
+  assert.equal(f['snoz-live'].folder, 'inbox', 'unrelated snoozed mail untouched')
+  assert.equal(f['snoz-live'].snoozedUntil?.getTime(), snoozedAt.getTime(), 'unrelated snoozed mail keeps its snooze')
+
+  // THE OWNER'S CHECK: the trash view must actually LIST both mails. This
+  // is the same where-clause GET /api/emails?folder=trash runs
+  // (folder + recipientEmail + snoozedUntil: null).
+  assert.deepEqual(await visibleInTrashView(), ['spam1', 'spam2'],
+    'both spam-page deletes are VISIBLE in the trash view (snoozedUntil cleared on the snoozed one)')
+})
+
+test('SP2 deleting a snoozed mail from the Snoozed page lands VISIBLY in Trash', async () => {
+  await reset()
+  await seed([
+    { id: 'snz', threadId: 'snz', folder: 'inbox', snoozedUntil: at(60), isRead: true, at: at(0) },
+  ])
+  const moved = await db.$transaction((tx) => moveConversationToTrash(tx as never, 'snz', alice.email, alice.id))
+  assert.deepEqual(moved, ['snz'])
+  const f = await folders(['snz'])
+  assert.equal(f['snz'].folder, 'trash')
+  assert.equal(f['snz'].snoozedUntil, null, 'deleting a snoozed email ends the snooze')
+  assert.equal(f['snz'].isRead, true, 'read state untouched by the trash move')
+  assert.deepEqual(await visibleInTrashView(), ['snz'], 'the trash view lists the deleted snoozed mail')
+})
+
+test('SP3 restore/undo of a snoozed trash row returns it VISIBLE to its folder', async () => {
+  await reset()
+  // Legacy state: a row in Trash that still carries snoozedUntil (deleted
+  // before the fix). Restore must make it visible again.
+  await seed([
+    { id: 'snz2', threadId: 'snz2', folder: 'trash', snoozedUntil: at(60), isRead: false, at: at(0) },
+  ])
+  const restored = await db.$transaction((tx) =>
+    restoreConversationFromTrash(tx as never, 'snz2', alice.email, alice.id)
+  )
+  assert.deepEqual(restored, ['snz2'])
+  const f = await folders(['snz2'])
+  assert.equal(f['snz2'].folder, 'inbox')
+  assert.equal(f['snz2'].snoozedUntil, null, 'restored mail is visible in the inbox (snoozedUntil cleared)')
+  assert.equal(f['snz2'].isRead, false, 'read state untouched by restore')
+  const inboxVisible = await db.email.count({
+    where: { folder: 'inbox', recipientEmail: alice.email, snoozedUntil: null, isArchived: false },
+  })
+  assert.equal(inboxVisible, 1, 'the restored mail matches the inbox view\'s actual filters')
 })
