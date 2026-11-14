@@ -51,60 +51,69 @@ export async function POST(
     // Determine reply recipient (reply goes to the other party)
     const replyRecipientEmail = isSender ? parentEmail.recipientEmail : parentEmail.sender.email;
 
-    // Determine threadId: inherit the parent's key via the shared
-    // resolution (parent's threadId → parentEmailId chain → sent-copy
-    // inbox-twin bridge). Replying from a SENT copy used to fork a fresh
-    // key (threadId = sent-copy id) that nothing could ever link back into
-    // the recipient's conversation — the same fork shape that later made
-    // Trash show one conversation as several rows. Same rule as
-    // POST /api/emails, so both reply paths can never fork again.
-    const threadId = await resolveReplyThreadId(db, {
-      id: parentEmail.id,
-      threadId: parentEmail.threadId,
-      parentEmailId: parentEmail.parentEmailId,
-      senderId: parentEmail.senderId,
-      recipientEmail: parentEmail.recipientEmail,
-      body: parentEmail.body,
-      createdAt: parentEmail.createdAt,
-      folder: parentEmail.folder,
-    });
+    // F-22: the reply's writes are ONE transaction — thread resolution,
+    // the recipient's inbox copy and the sender's sent copy commit together
+    // or not at all. Previously two independent creates: a failure between
+    // them left a reply without its sent copy, a state the conversation
+    // fold cannot pair.
+    const reply = await db.$transaction(async (tx) => {
+      // Determine threadId: inherit the parent's key via the shared
+      // resolution (parent's threadId → parentEmailId chain → sent-copy
+      // inbox-twin bridge). Replying from a SENT copy used to fork a fresh
+      // key (threadId = sent-copy id) that nothing could ever link back into
+      // the recipient's conversation — the same fork shape that later made
+      // Trash show one conversation as several rows. Same rule as
+      // POST /api/emails, so both reply paths can never fork again.
+      const threadId = await resolveReplyThreadId(tx, {
+        id: parentEmail.id,
+        threadId: parentEmail.threadId,
+        parentEmailId: parentEmail.parentEmailId,
+        senderId: parentEmail.senderId,
+        recipientEmail: parentEmail.recipientEmail,
+        body: parentEmail.body,
+        createdAt: parentEmail.createdAt,
+        folder: parentEmail.folder,
+      });
 
-    // Create reply email in the recipient's inbox
-    const reply = await db.email.create({
-      data: {
-        senderId: session.userId,
-        recipientEmail: replyRecipientEmail,
-        subject: parentEmail.subject.startsWith('Re: ')
-          ? parentEmail.subject
-          : `Re: ${parentEmail.subject}`,
-        body: replyBody.trim(),
-        bodyHtml: bodyHtml || '',
-        folder: 'inbox',
-        parentEmailId: parentEmail.id,
-        threadId,
-      },
-      include: {
-        sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+      // Create reply email in the recipient's inbox
+      const created = await tx.email.create({
+        data: {
+          senderId: session.userId,
+          recipientEmail: replyRecipientEmail,
+          subject: parentEmail.subject.startsWith('Re: ')
+            ? parentEmail.subject
+            : `Re: ${parentEmail.subject}`,
+          body: replyBody.trim(),
+          bodyHtml: bodyHtml || '',
+          folder: 'inbox',
+          parentEmailId: parentEmail.id,
+          threadId,
         },
-        recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+        include: {
+          sender: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
+          recipient: {
+            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+          },
         },
-      },
-    });
+      });
 
-    // Create a copy in the sender's sent folder (no parentEmailId to avoid duplicate in thread)
-    await db.email.create({
-      data: {
-        senderId: session.userId,
-        recipientEmail: replyRecipientEmail,
-        subject: parentEmail.subject.startsWith('Re: ')
-          ? parentEmail.subject
-          : `Re: ${parentEmail.subject}`,
-        body: replyBody.trim(),
-        bodyHtml: bodyHtml || '',
-        folder: 'sent',
-      },
+      // Create a copy in the sender's sent folder (no parentEmailId to avoid duplicate in thread)
+      await tx.email.create({
+        data: {
+          senderId: session.userId,
+          recipientEmail: replyRecipientEmail,
+          subject: parentEmail.subject.startsWith('Re: ')
+            ? parentEmail.subject
+            : `Re: ${parentEmail.subject}`,
+          body: replyBody.trim(),
+          bodyHtml: bodyHtml || '',
+          folder: 'sent',
+        },
+      });
+
+      return created;
     });
 
     // Push notification to the reply recipient (after response — guaranteed

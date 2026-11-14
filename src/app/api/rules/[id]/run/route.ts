@@ -71,15 +71,35 @@ function applyOperator(fieldValue: string, operator: string, conditionValue: str
 /**
  * Execute a single action on a set of email IDs.
  */
+// F-17: rule folder targets are restricted to the SAFE system folders. The
+// UI used to offer every folder id (incl. 'starred'/'sent') and the runner
+// stamped action.value verbatim — a row set to folder='starred' matches no
+// view (Starred queries isStarred, not folder) and folder='sent' rows owned
+// as recipient are invisible (Sent requires senderId): the mail vanished
+// from EVERY folder permanently and only DB surgery recovered it. Each safe
+// target below writes the EXACT representation its view queries, so a
+// rule-moved mail is always browsable. Anything else is rejected upstream
+// (400) and defensively ignored here.
+const SAFE_RULE_FOLDER_WRITES: Record<string, Record<string, unknown>> = {
+  inbox: { folder: 'inbox', isArchived: false },
+  archive: { folder: 'inbox', isArchived: true },
+  trash: { folder: 'trash', isArchived: false, snoozedUntil: null },
+  spam: { folder: 'spam', isArchived: false, snoozedUntil: null },
+};
+
+function isSafeRuleFolder(value: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SAFE_RULE_FOLDER_WRITES, value);
+}
+
 async function executeAction(emailIds: string[], action: Action, userId: string): Promise<number> {
   if (emailIds.length === 0) return 0;
 
   switch (action.type) {
     case 'moveToFolder': {
-      if (!action.value) return 0;
+      if (!action.value || !isSafeRuleFolder(action.value)) return 0;
       const result = await db.email.updateMany({
         where: { id: { in: emailIds }, recipientEmail: userId },
-        data: { folder: action.value },
+        data: SAFE_RULE_FOLDER_WRITES[action.value],
       });
       return result.count;
     }
@@ -172,6 +192,26 @@ export async function POST(
 
     if (!Array.isArray(actions) || actions.length === 0) {
       return NextResponse.json({ success: false, error: 'Rule has no actions' }, { status: 400 });
+    }
+
+    // F-17: reject unsafe folder targets LOUDLY instead of stamping a value
+    // that matches no view (the mail became permanently invisible). Legacy
+    // rules pointing at 'starred'/'sent'/custom ids surface here with a
+    // clear message instead of destroying inbox mail on run.
+    for (const action of actions) {
+      if (
+        action &&
+        action.type === 'moveToFolder' &&
+        (!action.value || !isSafeRuleFolder(action.value))
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Invalid folder target: "${action.value || ''}". Rules can only move mail to Inbox, Archive, Spam or Trash. Edit the rule and pick one of those folders.`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Fetch all inbox emails for the user

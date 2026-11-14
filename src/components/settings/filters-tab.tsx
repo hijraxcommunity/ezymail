@@ -883,15 +883,17 @@ export function FiltersTab() {
                             <SelectValue placeholder="Select folder..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {folders.length > 0 ? (
-                              folders.map(f => (
-                                <SelectItem key={f.id} value={f.id} className="text-xs">
-                                  {f.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="inbox" className="text-xs">Inbox</SelectItem>
-                            )}
+                            {/* F-17: only the SAFE system folders are offered.
+                            The old list came from /api/folders (ids incl.
+                            'starred'/'sent') and the runner stamped the value
+                            verbatim — mail moved to such a "folder" matched no
+                            view and vanished permanently. The server rejects
+                            anything else; these four are the only targets that
+                            are always browsable. */}
+                            <SelectItem value="inbox" className="text-xs">Inbox</SelectItem>
+                            <SelectItem value="archive" className="text-xs">Archive</SelectItem>
+                            <SelectItem value="spam" className="text-xs">Spam</SelectItem>
+                            <SelectItem value="trash" className="text-xs">Trash</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (

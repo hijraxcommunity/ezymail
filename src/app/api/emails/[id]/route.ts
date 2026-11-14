@@ -303,6 +303,25 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not authorized to delete this email' }, { status: 403 });
     }
 
+    // F-23: drafts are DISCARDED, not trashed. A draft row is owned by its
+    // sender and often carries a REAL recipientEmail (the address being
+    // composed to), which places it outside the caller's mailbox — the
+    // conversation-scoped trash move below resolves members scoped to
+    // recipientEmail=session.email, so it found no members and the draft
+    // silently SURVIVED every delete (discarded drafts came back, and the
+    // send-path draft cleanup left ghosts in Drafts). A discarded draft is
+    // not trash material either — it never existed as mail. Sender-scoped
+    // hard delete, mirroring how every mail client treats Discard.
+    if (email.folder === 'drafts' && email.isDraft && isSender) {
+      await db.email.delete({ where: { id } });
+      return NextResponse.json({
+        success: true,
+        permanentlyDeleted: true,
+        deletedIds: [id],
+        deletedCount: 1,
+      });
+    }
+
     // The list renders ONE row per conversation (the newest message), so
     // "delete this email" means the conversation the user sees. Trashing
     // only the clicked row left the older messages in the inbox and the

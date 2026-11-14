@@ -69,7 +69,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (folder === 'scheduled') {
-      delete where.folder;
+      // F-03: the base clause set recipientEmail=session.email for this branch
+      // (folder !== sent/drafts). ANDed with senderId below, the Scheduled
+      // view could only ever show SELF-ADDRESSED mail — scheduling to a real
+      // recipient left the view empty forever. Both copies of a scheduled
+      // send carry senderId (the recipient's inbox copy lives in the
+      // recipient's mailbox but is authored by the sender), so the view
+      // pins folder='sent': exactly the sender's pending copy, never a
+      // duplicate of the recipient's row.
+      where.folder = 'sent';
+      delete where.recipientEmail;
       where.senderId = session.userId;
       where.scheduledAt = { not: null };
       where.sentAt = null;
@@ -100,6 +109,29 @@ export async function GET(request: NextRequest) {
         { sender: { firstName: { contains: search } } },
         { sender: { lastName: { contains: search } } },
       ];
+    }
+
+    // F-03: a scheduled email's INBOX copy is created immediately (folder=
+    // 'inbox', sentAt=null, scheduledAt=<future>), and the inbox query had
+    // NO scheduled filter — the recipient saw the mail before its send time
+    // (owner-facing harm: mail arrives EARLY). Not-yet-dispatched mail is
+    // now invisible to the recipient: only rows without a schedule, or whose
+    // schedule has already passed, are listed. The dispatch cron flips
+    // sentAt exactly when due; visibility here does not depend on it (a
+    // due-but-not-yet-dispatched row is still shown, matching the audit
+    // fix's "exclude scheduledAt-future rows" contract).
+    if (folder === 'inbox') {
+      const dueOr: Array<Record<string, unknown>> = [
+        { scheduledAt: null },
+        { scheduledAt: { lte: new Date() } },
+      ];
+      if (where.OR) {
+        // Merge with the search OR-group without losing either condition.
+        where.AND = [{ OR: where.OR }, { OR: dueOr }];
+        delete where.OR;
+      } else {
+        where.OR = dueOr;
+      }
     }
 
     // ─── Conversation-level pagination ───
@@ -250,10 +282,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { to, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority, senderFcmToken } = body;
+    const { to, cc, bcc, subject, body: emailBody, bodyHtml, replyToId, attachments, scheduledAt, priority, senderFcmToken } = body;
 
     // Validate fields
-    if (!to || !to.trim()) {
+    if (!to || !String(to).trim()) {
       return NextResponse.json({ error: 'Recipient is required' }, { status: 400 });
     }
     if (!subject || !subject.trim()) {
@@ -263,27 +295,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email body is required' }, { status: 400 });
     }
 
-    const recipientEmail = to.trim().toLowerCase();
+    // F-01: the compose UI accumulates TO/CC/BCC chips into comma-joined
+    // strings; the API used to treat the WHOLE string as one address, so
+    // every multi-recipient send failed with 404 "Recipient not found" and
+    // nothing was delivered. Split on commas/semicolons/whitespace,
+    // normalize, and dedupe with a fixed precedence (to > cc > bcc): the
+    // same address listed in two roles is delivered exactly once, in the
+    // most visible role.
+    const parseAddressList = (input: unknown): string[] => {
+      if (typeof input !== 'string') return [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const raw of input.split(/[,;\s]+/)) {
+        const addr = raw.trim().toLowerCase();
+        if (!addr || seen.has(addr)) continue;
+        seen.add(addr);
+        out.push(addr);
+      }
+      return out;
+    };
+    const toList = parseAddressList(to);
+    const ccList = parseAddressList(cc).filter((a) => !toList.includes(a));
+    const bccList = parseAddressList(bcc).filter(
+      (a) => !toList.includes(a) && !ccList.includes(a)
+    );
 
-    // Validate recipient is @ezy.af
-    if (!recipientEmail.endsWith('@ezy.af')) {
+    if (toList.length === 0) {
+      return NextResponse.json({ error: 'Recipient is required' }, { status: 400 });
+    }
+
+    // Bound the fan-out: the send is one transaction with one row per
+    // recipient plus per-recipient notifications. 50 delivered copies is
+    // far above any normal personal use while keeping the write bounded.
+    const MAX_RECIPIENTS = 50;
+    if (toList.length + ccList.length + bccList.length > MAX_RECIPIENTS) {
       return NextResponse.json(
-        { error: 'EzyMail only supports sending to @ezy.af addresses' },
+        { error: `Too many recipients. Up to ${MAX_RECIPIENTS} addresses can be delivered per email.` },
         { status: 400 }
       );
     }
 
-    // Check if recipient exists
-    const recipient = await db.user.findUnique({
-      where: { email: recipientEmail },
-    });
+    const allAddresses = [...toList, ...ccList, ...bccList];
 
-    if (!recipient) {
-      return NextResponse.json({ error: 'Recipient not found' }, { status: 404 });
+    // Validate every address (F-01 applies the single-recipient rule to all).
+    for (const addr of allAddresses) {
+      if (!addr.endsWith('@ezy.af')) {
+        return NextResponse.json(
+          { error: 'EzyMail only supports sending to @ezy.af addresses' },
+          { status: 400 }
+        );
+      }
     }
 
-    // Check recipient status
-    if (recipient.status === 'suspended') {
+    // Resolve EVERY recipient up front: a send naming a missing or suspended
+    // recipient fails before a single row is written (previously only the
+    // one modeled recipient was checked).
+    const recipientUsers = await db.user.findMany({
+      where: { email: { in: allAddresses } },
+      select: { id: true, email: true, status: true },
+    });
+    const userByEmail = new Map(recipientUsers.map((u) => [u.email, u]));
+    const missingRecipient = allAddresses.find((addr) => !userByEmail.has(addr));
+    if (missingRecipient) {
+      return NextResponse.json(
+        { error: `Recipient not found: ${missingRecipient}` },
+        { status: 404 }
+      );
+    }
+    const suspendedRecipient = allAddresses.find(
+      (addr) => userByEmail.get(addr)?.status === 'suspended'
+    );
+    if (suspendedRecipient) {
       return NextResponse.json(
         { error: 'Cannot send email to a suspended account' },
         { status: 400 }
@@ -307,101 +389,108 @@ export async function POST(request: NextRequest) {
     const isScheduled = scheduledAt && new Date(scheduledAt).getTime() > Date.now();
     const emailPriority = (priority === 'high' || priority === 'low') ? priority : 'normal';
 
-    // Create email in recipient's inbox
-    const inboxEmail = await db.email.create({
-      data: {
-        senderId: session.userId,
-        recipientEmail,
-        subject: subject.trim(),
-        body: emailBody.trim(),
-        bodyHtml: bodyHtml || '',
-        attachments: attachmentsJson,
-        folder: 'inbox',
-        parentEmailId: replyToId || null,
-        sentAt: isScheduled ? null : new Date(),
-        scheduledAt: isScheduled ? new Date(scheduledAt) : null,
-        priority: emailPriority,
-      },
-      include: {
-        sender: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-        },
-        recipient: {
-          select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-        },
-      },
-    });
+    // F-02: cc/bcc persist on the rows (the columns already existed for
+    // drafts). Visibility follows standard mail semantics:
+    //  - To/CC copies carry the CC header, never the BCC list.
+    //  - BCC copies carry the CC header but never the other BCC addresses.
+    //  - Only the sender's SENT copy records the full BCC list.
+    const ccHeader = ccList.length ? ccList.join(', ') : null;
+    const bccHeaderPrivate = bccList.length ? bccList.join(', ') : null;
 
-    // Determine threadId
-    let threadId: string | null = null
-    if (replyToId) {
+    const sentAtValue = isScheduled ? null : new Date();
+    const scheduledAtValue = isScheduled ? new Date(scheduledAt) : null;
+
+    // F-22 + F-01: the whole delivery is ONE transaction — every
+    // per-recipient inbox copy, the threadId stamp and the sender's sent
+    // copy commit together or not at all. The writes used to be three
+    // independent statements, so a failure mid-send left a recipient copy
+    // without its sent twin (or a reply without its sent copy) — a state
+    // the conversation fold cannot pair.
+    const { primaryInbox, inboxCopyIds } = await db.$transaction(async (tx) => {
       // Reply: inherit the parent's thread key via the shared resolution
       // (src/lib/mail/conversation.ts) — parent's threadId, else the
       // parentEmailId chain, else — when the parent is a SENT COPY (no
       // threadId, no parent chain by design) — the parent's inbox twin.
-      // Replying from the Sent folder used to fork a FRESH key
-      // (threadId = sent-copy id), which no later relation could ever link
-      // back into the recipient's conversation: the forked rows then
-      // rendered — and after the conversation-scoped delete, TRASHED — as
-      // separate rows (owner report 2026-11-11). Future replies can never
-      // fork again. Sent copies keep carrying no key themselves, unchanged.
-      const parentEmail = await db.email.findUnique({
-        where: { id: replyToId },
-        select: {
-          id: true,
-          threadId: true,
-          parentEmailId: true,
-          senderId: true,
-          recipientEmail: true,
-          body: true,
-          createdAt: true,
-          folder: true,
-        },
-      })
-      if (parentEmail) {
-        threadId = await resolveReplyThreadId(db, parentEmail)
-      } else {
-        threadId = replyToId
+      // Resolved ONCE so every delivered copy shares the key and replies
+      // from any recipient fold into the same conversation.
+      let threadId: string | null = null;
+      if (replyToId) {
+        const parentEmail = await tx.email.findUnique({
+          where: { id: replyToId },
+          select: {
+            id: true,
+            threadId: true,
+            parentEmailId: true,
+            senderId: true,
+            recipientEmail: true,
+            body: true,
+            createdAt: true,
+            folder: true,
+          },
+        });
+        threadId = parentEmail ? await resolveReplyThreadId(tx, parentEmail) : replyToId;
       }
-    } else {
-      // New email: generate threadId
-      threadId = inboxEmail.id
-    }
 
-    // Set threadId on the inbox email
-    await db.email.update({
-      where: { id: inboxEmail.id },
-      data: { threadId },
-    })
-
-    // Create email in sender's sent folder
-    // The sent copy should NOT be part of the reply thread (no parentEmailId, no threadId)
-    // Only the inbox copy participates in the thread to avoid duplicates
-    const sentEmail = await db.email.create({
-      data: {
+      const baseRow = {
         senderId: session.userId,
-        recipientEmail,
         subject: subject.trim(),
         body: emailBody.trim(),
         bodyHtml: bodyHtml || '',
         attachments: attachmentsJson,
-        folder: 'sent',
-        sentAt: isScheduled ? null : new Date(),
-        scheduledAt: isScheduled ? new Date(scheduledAt) : null,
+        parentEmailId: replyToId || null,
+        sentAt: sentAtValue,
+        scheduledAt: scheduledAtValue,
         priority: emailPriority,
-      },
-      include: {
+      };
+      const inboxInclude = {
         sender: {
           select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
         recipient: {
           select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
         },
-      },
-    });
+      };
 
-    // Send push notification to recipient (after response — guaranteed to run
-    // on serverless; a bare fire-and-forget promise can be frozen/dropped)
+      // First TO recipient's copy anchors the thread for new mail; its id
+      // becomes the shared key (same rule as before, unchanged).
+      const first = await tx.email.create({
+        data: { ...baseRow, recipientEmail: toList[0], cc: ccHeader, folder: 'inbox' },
+        include: inboxInclude,
+      });
+      if (!threadId) threadId = first.id;
+      await tx.email.update({ where: { id: first.id }, data: { threadId } });
+      const copyIds: string[] = [first.id];
+
+      // Remaining recipients each get their OWN inbox copy (one delivery
+      // per recipient) with the shared thread key stamped directly.
+      const restRecipients = [...toList.slice(1), ...ccList, ...bccList];
+      for (const addr of restRecipients) {
+        const row = await tx.email.create({
+          data: { ...baseRow, recipientEmail: addr, cc: ccHeader, folder: 'inbox', threadId },
+        });
+        copyIds.push(row.id);
+      }
+
+      // Sender's sent copy — single row, full CC + private BCC record,
+      // outside the reply thread by design (no parentEmailId/threadId).
+      await tx.email.create({
+        data: {
+          ...baseRow,
+          recipientEmail: toList[0],
+          cc: ccHeader,
+          bcc: bccHeaderPrivate,
+          folder: 'sent',
+        },
+      });
+
+      return { primaryInbox: first, inboxCopyIds: copyIds };
+    });
+    const inboxEmail = primaryInbox;
+
+    // Push notifications for EVERY delivered recipient (after response —
+    // guaranteed to run on serverless; a bare fire-and-forget promise can be
+    // frozen/dropped). inboxCopyIds is aligned with allAddresses order, so
+    // each recipient's notification deep-links to THEIR OWN copy.
     if (!isScheduled) {
       const sender = await db.user.findUnique({
         where: { id: session.userId },
@@ -427,24 +516,29 @@ export async function POST(request: NextRequest) {
           ? `${APP_BASE_URL}/api/user/avatar/${sender.id}`
           : undefined;
 
-      after(() =>
-        sendPushNotification({
-          recipientUserId: recipient.id,
-          senderName,
-          subject: subject.trim(),
-          emailId: inboxEmail.id,
-          senderEmail: sender?.email,
-          avatarUrl,
-          preview,
-          // The SENDING device never rings for its own outgoing mail — even
-          // when a stale token row still binds this device to the recipient's
-          // account (the "notification comes back to A" wrong-device bug).
-          skipFcmToken:
-            typeof senderFcmToken === 'string' && senderFcmToken.length >= 32
-              ? senderFcmToken
-              : undefined,
-        }).catch(() => {})
-      );
+      allAddresses.forEach((addr, i) => {
+        const recipientUser = userByEmail.get(addr);
+        const copyId = inboxCopyIds[i];
+        if (!recipientUser || !copyId) return;
+        after(() =>
+          sendPushNotification({
+            recipientUserId: recipientUser.id,
+            senderName,
+            subject: subject.trim(),
+            emailId: copyId,
+            senderEmail: sender?.email,
+            avatarUrl,
+            preview,
+            // The SENDING device never rings for its own outgoing mail — even
+            // when a stale token row still binds this device to the recipient's
+            // account (the "notification comes back to A" wrong-device bug).
+            skipFcmToken:
+              typeof senderFcmToken === 'string' && senderFcmToken.length >= 32
+                ? senderFcmToken
+                : undefined,
+          }).catch(() => {})
+        );
+      });
     }
 
     return NextResponse.json(

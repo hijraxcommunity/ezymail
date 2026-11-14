@@ -30,7 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useAppStore, type Template } from '@/store/use-app-store'
+import { useAppStore, type Template, type EmailWithSender } from '@/store/use-app-store'
 
 // Attachment limits are capped by the deployment platform's 4.5MB request-body
 // limit: attachments travel base64-encoded (+~33%) inside a single JSON request,
@@ -62,6 +62,11 @@ interface PendingSendData {
   subject: string
   html: string
   replyToId?: string
+  // F-24: the reply CONTEXT travels with the pending send so Undo can
+  // restore it — without it, undoing a reply lost the linkage and the next
+  // send stopped being a reply at all.
+  replyToEmail?: EmailWithSender | null
+  replyMode?: 'reply' | 'replyAll' | 'forward' | null
   attachments?: Array<{ name: string; url: string; size: number; type: string; data?: string }>
   priority?: string
   scheduledAt?: string | null
@@ -315,6 +320,12 @@ export function ComposeModal() {
   const isSendingRef = useRef(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedDraftIdRef = useRef<string | null>(null)
+  // F-24: reply linkage restored by Undo — applies ONLY to the session that
+  // restored it; cleared on every other open path, on send and on discard.
+  const pendingReplyRef = useRef<{
+    email: EmailWithSender
+    mode: 'reply' | 'replyAll' | 'forward'
+  } | null>(null)
 
   // TipTap Editor
   const editor = useEditor({
@@ -377,6 +388,15 @@ export function ComposeModal() {
   useEffect(() => {
     if (!composeOpen || !editor) return
 
+    // F-23/F-24: the saved-draft anchor belongs to THIS compose session. It
+    // used to survive across sessions: a fresh compose auto-saved onto the
+    // PREVIOUS session's draft id (phantom overwrite), and after sending an
+    // edited draft the stale id made every autosave POST a deleted draft —
+    // the 404 was swallowed and the undo-restored compose was never
+    // persisted. Editing a specific draft anchors to that draft; every
+    // other open path starts clean.
+    savedDraftIdRef.current = editDraftEmail?.id || null
+
     if (restoreDataRef.current) {
       const data = restoreDataRef.current
       restoreDataRef.current = null
@@ -395,9 +415,22 @@ export function ComposeModal() {
       editor.commands.setContent(data.html)
       setAttachments(data.attachments || [])
       setPriority((data.priority as 'normal' | 'high') || 'normal')
+      // F-25: the restore branch sets attachments/priority from the pending
+      // send but never reset the scheduler fields — stale schedule UI from
+      // the previous session survived an undo.
+      setScheduleDate(undefined)
+      setScheduleHour('9')
+      setScheduleMinute('00')
+      setScheduleAmPm('AM')
+      setShowCustomSchedule(false)
+      setShowSchedulePopover(false)
       setErrors({})
       return
     }
+
+    // F-23: a pending reply-linkage restored by Undo applies only to that
+    // restored session; every other open path clears it.
+    pendingReplyRef.current = null
 
     // Load draft content when editing a draft
     if (editDraftEmail) {
@@ -421,6 +454,20 @@ export function ComposeModal() {
       setBccInput('')
       setSubject(editDraftEmail.subject || '')
       editor.commands.setContent(editDraftEmail.bodyHtml || editDraftEmail.body?.replace(/\n/g, '<br>') || '')
+      // F-25: this branch early-returns before the common reset tail ran, so
+      // attachments/priority/schedule state from the PREVIOUS compose session
+      // stayed attached — a stale attachment badge could then be SENT with
+      // this draft (privacy: unintended file disclosure). Drafts carry no
+      // attachments, so this branch always starts with a clean slate.
+      setAttachments([])
+      setPriority('normal')
+      setScheduleDate(undefined)
+      setScheduleHour('9')
+      setScheduleMinute('00')
+      setScheduleAmPm('AM')
+      setShowCustomSchedule(false)
+      setShowSchedulePopover(false)
+      setShowTemplatesPopover(false)
       setErrors({})
       return
     }
@@ -591,11 +638,19 @@ export function ComposeModal() {
   }, [requestComposeClose, composeOpen, handleClose])
 
   const handleDiscard = useCallback(() => {
-    if (editDraftEmail) {
-      removeEmail(editDraftEmail.id)
-      fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    // F-23/F-26: discard removes BOTH the edited draft and any auto-saved
+    // draft of this session, then clears the session refs. The footer
+    // button labeled "Discard" used to call handleClose — which SAVED the
+    // draft and navigated to Drafts, the exact opposite of its label.
+    const draftId = editDraftEmail?.id || savedDraftIdRef.current
+    if (draftId) {
+      removeEmail(draftId)
+      fetch(`/api/emails/${draftId}`, { method: 'DELETE' }).catch(() => {})
       toast.success('Draft discarded')
     }
+    savedDraftIdRef.current = null
+    pendingReplyRef.current = null
     setComposeOpen(false)
   }, [editDraftEmail, removeEmail, setComposeOpen])
 
@@ -677,6 +732,17 @@ export function ComposeModal() {
     if (pending.sentEmailId) {
       fetch(`/api/emails/${pending.sentEmailId}`, { method: 'DELETE' }).catch(() => {})
     }
+
+    // F-24: the draft (if any) was deleted at send time; the stale anchor
+    // here made every post-undo autosave POST a DEAD draft id and the 404
+    // was swallowed — the restored compose was never persisted and closing
+    // lost it. Start clean; the restore-open effect anchors a fresh draft.
+    savedDraftIdRef.current = null
+    // F-24: restore the reply linkage so the restored compose is still a
+    // reply to the original message on the next send.
+    pendingReplyRef.current = pending.replyToEmail
+      ? { email: pending.replyToEmail, mode: pending.replyMode || 'reply' }
+      : null
 
     restoreDataRef.current = {
       to: pending.to,
@@ -801,7 +867,10 @@ export function ComposeModal() {
 
       const data: PendingSendData = {
         to, cc, bcc, subject, html,
-        replyToId: replyToEmail?.id,
+        replyToId: replyToEmail?.id || pendingReplyRef.current?.email.id,
+        // F-24: carry the reply context so Undo can restore it.
+        replyToEmail: replyToEmail,
+        replyMode: replyMode,
         attachments: uploadedFiles,
         priority,
         scheduledAt: scheduledAtDate ? scheduledAtDate.toISOString() : null,
@@ -816,19 +885,27 @@ export function ComposeModal() {
         // Schedule send — send immediately to API (no undo)
         toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
         actuallySendEmail(data)
-        // Delete draft if editing one
-        if (editDraftEmail) {
-          fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+        // F-23: send consumes the auto-saved draft (ghost draft cleanup).
+        const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
+        if (draftIdToDelete) {
+          fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
         }
+        savedDraftIdRef.current = null
+        pendingReplyRef.current = null
       } else {
         // Normal send with undo
         const sendResult = await actuallySendEmailWithResponse(data)
         if (sendResult?.emailId) {
           pendingSendRef.current = { ...data, sentEmailId: sendResult.emailId }
-          // Delete draft if editing one
-          if (editDraftEmail) {
-            fetch(`/api/emails/${editDraftEmail.id}`, { method: 'DELETE' }).catch(() => {})
+          // F-23: send consumes the auto-saved draft — the compose UI used
+          // to leave the ghost behind in Drafts, and the still-set ref made
+          // the NEXT compose overwrite that phantom with new content.
+          const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
+          if (draftIdToDelete) {
+            fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
           }
+          savedDraftIdRef.current = null
+          pendingReplyRef.current = null
         }
 
         toast('Message sent.', {
@@ -1638,7 +1715,7 @@ export function ComposeModal() {
               <div className="flex-1" />
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={handleDiscard}
                 className="inline-flex items-center justify-center h-9 px-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
               >
                 Discard
