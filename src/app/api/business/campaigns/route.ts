@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { requireActiveBusiness } from '@/lib/business-guard';
 
 export async function GET() {
   try {
@@ -9,17 +10,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, accountType: true },
-    });
-
-    if (!user || user.accountType !== 'business') {
-      return NextResponse.json({ error: 'Not a business account' }, { status: 403 });
-    }
+    // F-16: business DATA routes require an active subscription — expired
+    // businesses previously kept full access forever.
+    const guard = await requireActiveBusiness(session.userId);
+    if (guard) return guard;
 
     const campaigns = await db.campaign.findMany({
-      where: { businessId: user.id },
+      where: { businessId: session.userId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -55,14 +52,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, accountType: true },
-    });
-
-    if (!user || user.accountType !== 'business') {
-      return NextResponse.json({ error: 'Not a business account' }, { status: 403 });
-    }
+    // F-16: business DATA routes require an active subscription — expired
+    // businesses previously kept full access forever.
+    const guard = await requireActiveBusiness(session.userId);
+    if (guard) return guard;
 
     const body = await request.json();
     const { subject, body: campaignBody, bodyHtml, recipientCustomerIds } = body;
@@ -83,7 +76,7 @@ export async function POST(request: NextRequest) {
     const customers = await db.customer.findMany({
       where: {
         id: { in: recipientCustomerIds },
-        businessId: user.id,
+        businessId: session.userId,
       },
       select: { id: true },
     });
@@ -101,7 +94,7 @@ export async function POST(request: NextRequest) {
     // Create campaign with recipients
     const campaign = await db.campaign.create({
       data: {
-        businessId: user.id,
+        businessId: session.userId,
         subject: subject.trim(),
         body: campaignBody.trim(),
         bodyHtml: bodyHtml || '',

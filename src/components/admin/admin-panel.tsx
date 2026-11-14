@@ -2143,6 +2143,38 @@ function BusinessVerificationsTab() {
   // View documents dialog
   const [selectedV, setSelectedV] = useState<BusinessVerification | null>(null)
   const [docsOpen, setDocsOpen] = useState(false)
+  // F-15: verification documents can be real uploaded files now — the dialog
+  // fetches them (content included) from the admin documents endpoint
+  // instead of rendering fabricated links from the list row.
+  interface VerificationDoc {
+    kind: 'file' | 'url'
+    name: string
+    type?: string
+    size?: number
+    url?: string
+    dataUrl?: string | null
+  }
+  const [docEntries, setDocEntries] = useState<{ id: string; docs: VerificationDoc[] } | null>(null)
+
+  useEffect(() => {
+    if (!docsOpen || !selectedV) return
+    let cancelled = false
+    fetch(`/api/admin/business-verifications/${selectedV.id}/documents`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return
+        setDocEntries({
+          id: selectedV.id,
+          docs: Array.isArray(data?.documents) ? data.documents : [],
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setDocEntries({ id: selectedV.id, docs: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [docsOpen, selectedV])
 
   // Review dialog (approve/reject)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -2200,15 +2232,6 @@ function BusinessVerificationsTab() {
       toast.error(`Failed to ${reviewAction} verification`)
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  const parseDocUrls = (urlsStr: string): string[] => {
-    try {
-      const parsed = JSON.parse(urlsStr)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
     }
   }
 
@@ -2360,21 +2383,41 @@ function BusinessVerificationsTab() {
               <Separator />
               <div className="space-y-2">
                 <p className="text-xs text-gray-500 font-medium">Documents</p>
-                {parseDocUrls(selectedV.documentUrls).length === 0 ? (
+                {!docEntries || docEntries.id !== selectedV.id ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading documents…
+                  </div>
+                ) : docEntries.docs.length === 0 ? (
                   <p className="text-sm text-gray-400">No documents uploaded</p>
                 ) : (
                   <div className="max-h-64 overflow-y-auto space-y-2">
-                    {parseDocUrls(selectedV.documentUrls).map((url, i) => (
-                      <a
-                        key={i}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-[#4285F4] hover:underline truncate"
-                      >
-                        Document {i + 1}
-                      </a>
-                    ))}
+                    {docEntries.docs.map((doc, i) =>
+                      doc.kind === 'file' && doc.dataUrl ? (
+                        <a
+                          key={i}
+                          href={doc.dataUrl}
+                          download={doc.name}
+                          className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-[#4285F4] hover:underline"
+                        >
+                          <span className="truncate">{doc.name || `Document ${i + 1}`}</span>
+                          <span className="text-xs text-gray-400 shrink-0 ml-2">
+                            {doc.type?.includes('pdf') ? 'PDF' : doc.type?.includes('png') ? 'PNG' : 'JPG'}
+                            {doc.size ? ` · ${(doc.size / 1024).toFixed(0)} KB` : ''}
+                          </span>
+                        </a>
+                      ) : (
+                        <a
+                          key={i}
+                          href={doc.url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-[#4285F4] hover:underline"
+                        >
+                          <span className="truncate">{doc.name || `Document ${i + 1}`}</span>
+                          <span className="text-xs text-gray-400 shrink-0 ml-2">Link</span>
+                        </a>
+                      )
+                    )}
                   </div>
                 )}
               </div>

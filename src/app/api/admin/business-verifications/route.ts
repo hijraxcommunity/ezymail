@@ -65,8 +65,31 @@ export async function GET(request: NextRequest) {
       db.businessVerification.count({ where }),
     ]);
 
+    // F-15: file documents now carry their base64 content in the documentUrls
+    // column. The admin LIST payload must stay light — strip the data here;
+    // the documents endpoint serves the real bytes on demand.
+    const stripDocPayloads = (row: (typeof verifications)[number]) => {
+      try {
+        const parsed: unknown = JSON.parse(row.documentUrls);
+        if (Array.isArray(parsed)) {
+          const slim = parsed.map((entry) => {
+            if (entry && typeof entry === 'object' && (entry as { kind?: string }).kind === 'file') {
+              const { data, ...rest } = entry as { data?: string } & Record<string, unknown>;
+              void data;
+              return rest;
+            }
+            return entry;
+          });
+          return { ...row, documentUrls: JSON.stringify(slim) };
+        }
+        return row;
+      } catch {
+        return row;
+      }
+    };
+
     return NextResponse.json({
-      verifications,
+      verifications: verifications.map(stripDocPayloads),
       total,
       totalPages: Math.ceil(total / limit),
       page,

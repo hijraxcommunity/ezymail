@@ -287,19 +287,66 @@ function UploadForm({
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file')
   const [urlInput, setUrlInput] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string }[]>([])
+  // F-15: file mode previously fabricated 'https://example.com/<name>' URLs
+  // that never left the browser — documents were never actually submitted.
+  // Selected files are now read as base64 data URLs (same transport the mail
+  // attachment pipeline uses) and posted as real content; the server
+  // re-validates type and size.
+  interface FileDoc { name: string; type: string; size: number; data: string }
+  interface PendingDoc { key: string; kind: 'file' | 'url'; name: string; url?: string; doc?: FileDoc }
+  const [uploadedFiles, setUploadedFiles] = useState<PendingDoc[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const MAX_FILE_MB = 2
+  const MAX_TOTAL_MB = 3
+  const MAX_FILES = 3
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    const newFiles = Array.from(files).map((file) => ({
-      name: file.name,
-      url: `https://example.com/${file.name}`, // Demo placeholder URL
-    }))
+    const incoming = Array.from(files)
+    for (const file of incoming) {
+      const okType = /\.(pdf|jpe?g|png)$/i.test(file.name) ||
+        ['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)
+      if (!okType) {
+        toast.error(`"${file.name}" is not supported — PDF, JPG or PNG only`)
+        continue
+      }
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds the ${MAX_FILE_MB}MB per-file limit`)
+        continue
+      }
+      const currentTotal = uploadedFiles.reduce((sum, d) => sum + (d.doc?.size || 0), 0)
+      if (currentTotal + file.size > MAX_TOTAL_MB * 1024 * 1024) {
+        toast.error(`Total document size cannot exceed ${MAX_TOTAL_MB}MB`)
+        continue
+      }
+      if (uploadedFiles.length >= MAX_FILES) {
+        toast.error(`You can submit up to ${MAX_FILES} files`)
+        continue
+      }
 
-    setUploadedFiles((prev) => [...prev, ...newFiles])
+      const reader = new FileReader()
+      reader.onload = () => {
+        const data = typeof reader.result === 'string' ? reader.result : ''
+        if (!data) {
+          toast.error(`Could not read "${file.name}"`)
+          return
+        }
+        setUploadedFiles((prev) => [
+          ...prev,
+          {
+            key: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            kind: 'file',
+            name: file.name,
+            doc: { name: file.name, type: file.type || 'application/pdf', size: file.size, data },
+          },
+        ])
+      }
+      reader.onerror = () => toast.error(`Could not read "${file.name}"`)
+      reader.readAsDataURL(file)
+    }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -315,14 +362,21 @@ function UploadForm({
     }
 
     try {
-      new URL(trimmed)
+      const parsed = new URL(trimmed)
+      if (parsed.protocol !== 'https:') {
+        toast.error('Please enter a secure HTTPS URL')
+        return
+      }
     } catch {
       toast.error('Please enter a valid URL')
       return
     }
 
     const name = trimmed.split('/').pop() || 'document'
-    setUploadedFiles((prev) => [...prev, { name, url: trimmed }])
+    setUploadedFiles((prev) => [
+      ...prev,
+      { key: `url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, kind: 'url', name, url: trimmed },
+    ])
     setUrlInput('')
   }
 
@@ -334,11 +388,16 @@ function UploadForm({
 
     setUploading(true)
     try {
-      const docUrls = uploadedFiles.map((f) => f.url)
+      const fileDocs = uploadedFiles.filter((d) => d.kind === 'file' && d.doc).map((d) => d.doc as FileDoc)
+      const urls = uploadedFiles.filter((d) => d.kind === 'url' && d.url).map((d) => d.url as string)
+
       const res = await fetch('/api/business/verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentUrls: docUrls }),
+        body: JSON.stringify({
+          ...(fileDocs.length > 0 ? { documents: fileDocs } : {}),
+          ...(urls.length > 0 ? { documentUrls: urls } : {}),
+        }),
       })
 
       if (res.ok) {
@@ -412,7 +471,7 @@ function UploadForm({
             Click to upload documents
           </p>
           <p className="text-xs text-gray-400 mt-1.5">
-            PDF, JPG, PNG files accepted &middot; Max 10MB per file
+            PDF, JPG, PNG files accepted &middot; Max {MAX_FILE_MB}MB per file, {MAX_FILES} files ({MAX_TOTAL_MB}MB total)
           </p>
         </div>
       ) : (
@@ -444,7 +503,7 @@ function UploadForm({
         id="biz-verification-files"
         name="verification-files"
         type="file"
-        accept=".pdf,.jpg,.jpeg,.png,.gif"
+        accept=".pdf,.jpg,.jpeg,.png"
         multiple
         onChange={handleFileSelect}
         className="hidden"
@@ -466,7 +525,7 @@ function UploadForm({
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {uploadedFiles.map((file, index) => (
                 <motion.div
-                  key={`${file.name}-${index}`}
+                  key={file.key}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 ring-1 ring-gray-200 dark:ring-gray-700"
@@ -497,7 +556,7 @@ function UploadForm({
         >
           <p className="text-xs text-gray-400">
             <AlertTriangle className="w-3 h-3 inline mr-1" />
-            Note: In this demo, files are stored as placeholder URLs
+            Files upload securely and are reviewed by our team
           </p>
           <Button
             onClick={handleSubmit}

@@ -41,7 +41,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Your account has been suspended' }, { status: 403 });
     }
 
-    return NextResponse.json({ user });
+    // F-08: tell the client this identity is an admin impersonation session
+    // so the UI can show the exit affordance. Returned OUTSIDE the user
+    // object so the session payload shape stays untouched.
+    return NextResponse.json({ user, impersonating: Boolean(session.imp) });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get current user error:', message);

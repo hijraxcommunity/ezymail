@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { z } from 'zod';
+import { ENFORCED_SETTING_KEYS } from '@/lib/system-settings';
 
 const defaultSettings = [
   { key: 'app_name', value: 'EzyMail', category: 'general' },
@@ -48,9 +49,19 @@ export async function GET() {
       orderBy: [{ category: 'asc' }, { settingKey: 'asc' }],
     });
 
+    // F-10: only settings that are actually enforced at runtime are surfaced.
+    // Keys without a consumer (max_attachment_size, storage_limit_per_user,
+    // email_domain, app_name, ...) used to render as editable controls that
+    // changed nothing — they are hidden until they are wired up. Rows with
+    // unknown keys that predate this allowlist (the old PUT accepted anything)
+    // are filtered out here as well.
+    const visibleSettings = settings.filter((s) =>
+      (ENFORCED_SETTING_KEYS as readonly string[]).includes(s.settingKey)
+    );
+
     // Group by category
     const grouped: Record<string, { settingKey: string; settingValue: string | null; id: string }[]> = {};
-    for (const setting of settings) {
+    for (const setting of visibleSettings) {
       const cat = setting.category || 'uncategorized';
       if (!grouped[cat]) {
         grouped[cat] = [];
@@ -64,7 +75,7 @@ export async function GET() {
 
     // Also return flat key-value map for convenience
     const flat: Record<string, string | null> = {};
-    for (const setting of settings) {
+    for (const setting of visibleSettings) {
       flat[setting.settingKey] = setting.settingValue;
     }
 
@@ -103,6 +114,22 @@ export async function PUT(request: NextRequest) {
     }
 
     const { settings } = parsed.data;
+
+    // F-10: unknown keys are REJECTED, not persisted. The old code upserted
+    // arbitrary keys (and echoed them into AdminLog) even though nothing read
+    // them back — a misleading control plane.
+    const unknownKeys = Object.keys(settings).filter(
+      (key) => !(ENFORCED_SETTING_KEYS as readonly string[]).includes(key)
+    );
+    if (unknownKeys.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Unknown setting key(s): ${unknownKeys.join(', ')}. Editable settings: ${ENFORCED_SETTING_KEYS.join(', ')}.`,
+        },
+        { status: 400 }
+      );
+    }
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
 
     // Upsert each setting

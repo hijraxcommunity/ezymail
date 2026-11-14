@@ -1,10 +1,10 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User, Lock, Shield, Bell, Sun, Pen, Globe, Filter,
-  HelpCircle, Info, FileText, ChevronRight, LogOut,
+  HelpCircle, Info, FileText, ChevronRight, LogOut, UserCog,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -26,6 +26,25 @@ interface MenuItem {
 export function ProfileMenu({ open, onOpenChange }: ProfileMenuProps) {
   const { user, setSettingsView, setAdminView, logout } = useAppStore()
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // F-08: an impersonation session (admin viewing as this user) is flagged by
+  // /api/auth/me. While impersonating, the menu offers a way back to the
+  // admin identity — without it, an admin could be stuck in the victim's
+  // view until the 1h session expired.
+  const [impersonating, setImpersonating] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) setImpersonating(data?.impersonating === true)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   // Close on outside click
   useEffect(() => {
@@ -70,6 +89,26 @@ export function ProfileMenu({ open, onOpenChange }: ProfileMenuProps) {
       toast.error('Failed to log out')
     }
     onOpenChange(false)
+  }
+
+  const handleExitImpersonation = async () => {
+    try {
+      const res = await fetch(`/api/admin/users/${user?.id || 'me'}/impersonate`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.success) {
+        toast.success('Impersonation ended — returning to admin')
+      } else {
+        toast.error(data?.error || 'Failed to exit impersonation')
+      }
+    } catch {
+      toast.error('Failed to exit impersonation')
+    }
+    onOpenChange(false)
+    // Reload so the whole app re-boots from /api/auth/me as the restored
+    // admin (or the login screen if the admin session is gone).
+    window.location.reload()
   }
 
   const closeAnd = (action: () => void) => () => {
@@ -204,6 +243,22 @@ export function ProfileMenu({ open, onOpenChange }: ProfileMenuProps) {
                       Admin Panel
                     </span>
                     <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── 4.5 Impersonation exit ── */}
+            {impersonating && (
+              <>
+                <Separator />
+                <div className="px-2 py-2">
+                  <button
+                    onClick={handleExitImpersonation}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 cursor-pointer transition-colors text-sm font-medium"
+                  >
+                    <UserCog className="w-4 h-4" />
+                    Exit Impersonation
                   </button>
                 </div>
               </>

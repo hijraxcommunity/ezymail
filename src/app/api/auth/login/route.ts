@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { createSession, verifyPassword, checkRateLimit } from '@/lib/auth';
+import { createSession, verifyPassword, checkRateLimit, writeLoginLog } from '@/lib/auth';
 import { verifyTOTP } from '@/lib/totp';
+import {
+  getEnforcedSystemSettings,
+  isMaintenanceMode,
+  maintenanceMessage,
+} from '@/lib/system-settings';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,19 +35,40 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user
+    const userAgent = request.headers.get('user-agent');
     const user = await db.user.findUnique({ where: { email: email.trim().toLowerCase() } });
     if (!user) {
+      // F-09: LoginLog.userId is a required FK — attempts against unknown
+      // addresses cannot be recorded (no migration in this batch).
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // F-14/F-16: soft-deleted accounts (business self-service deletion or the
+    // trial-expiry cron) are terminated — login is refused outright.
+    if (user.softDeletedAt) {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
+      return NextResponse.json({ error: 'This account has been deleted' }, { status: 403 });
+    }
+
+    // F-10: maintenance_mode now gates non-admin logins (admins retain
+    // access to fix/monitor). Checked after the account exists so the
+    // rejection is logged against the account.
+    const systemSettings = await getEnforcedSystemSettings();
+    if (user.role !== 'admin' && isMaintenanceMode(systemSettings)) {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
+      return NextResponse.json({ error: maintenanceMessage(systemSettings) }, { status: 503 });
     }
 
     // Check user status
     if (user.status === 'suspended') {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
       return NextResponse.json({ error: 'Your account has been suspended' }, { status: 403 });
     }
 
     // Verify password
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
@@ -85,6 +111,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!twoFactorOk) {
+        await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
         return NextResponse.json(
           { error: 'Invalid two-factor authentication code.', code: 'TWO_FACTOR_INVALID' },
           { status: 401 }
@@ -107,6 +134,10 @@ export async function POST(request: NextRequest) {
 
     // Create session
     await createSession({ id: user.id, email: user.email, role: user.role }, ip);
+
+    // F-09: successful attempt is recorded too — the login-history and admin
+    // Logs surfaces need both sides of the story.
+    await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: true });
 
     return NextResponse.json({
       user: {

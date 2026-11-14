@@ -51,6 +51,15 @@ export async function POST() {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
+    // F-08: 2FA mutations are refused under an impersonation session — the
+    // signed `imp` claim marks it. An admin viewing as a user must never be
+    // able to weaken or reset that user's second factor.
+    if (session.imp) {
+      return NextResponse.json(
+        { success: false, error: '2FA changes are not available while impersonating a user' },
+        { status: 403 }
+      );
+    }
 
     // Check if 2FA is already enabled
     const existing = await db.twoFactor.findFirst({
@@ -109,6 +118,12 @@ export async function PUT(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+    if (session.imp) {
+      return NextResponse.json(
+        { success: false, error: '2FA changes are not available while impersonating a user' },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();
@@ -177,6 +192,12 @@ export async function DELETE(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+    if (session.imp) {
+      return NextResponse.json(
+        { success: false, error: '2FA changes are not available while impersonating a user' },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();

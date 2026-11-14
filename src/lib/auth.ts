@@ -35,6 +35,13 @@ export interface SessionPayload {
   userId: string;
   email: string;
   role: string;
+  /**
+   * F-08: present ONLY on impersonation sessions. Carries the admin user id
+   * who started the impersonation. The claim lives inside the signed JWT, so
+   * it cannot be forged or stripped by the client; password/2FA mutation
+   * routes refuse requests whose session carries it.
+   */
+  imp?: string;
   iat?: number;
   exp: number;
 }
@@ -61,7 +68,7 @@ export interface SessionPayload {
  */
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const SESSION_RENEWAL_THRESHOLD_SECONDS = 60 * 60 * 24; // renew after 1 day of token age
-const SESSION_COOKIE_NAME = 'ezymail-session';
+export const SESSION_COOKIE_NAME = 'ezymail-session';
 
 async function signSessionToken(user: { userId: string; email: string; role: string }): Promise<string> {
   return new SignJWT({
@@ -185,10 +192,15 @@ export async function getSession(): Promise<SessionPayload | null> {
         isActive: true,
         expiresAt: { gt: new Date() },
       },
-      select: { user: { select: { status: true } } },
+      select: { user: { select: { status: true, softDeletedAt: true } } },
     });
     if (!row) return null;
     if (row.user.status === 'suspended') return null;
+    // F-14/F-16: a soft-deleted account (business self-service deletion or
+    // the trial-expiry cron) must lose API access immediately, even if a
+    // session row was missed — defense in depth on top of session revocation
+    // and the login rejection.
+    if (row.user.softDeletedAt) return null;
 
     await rotateSessionIfDue(cookieStore, token, session);
     return session;
@@ -232,6 +244,44 @@ export async function revokeOtherSessions(userId: string): Promise<void> {
     // The password change itself already succeeded; revocation is retried
     // on the next password change. Logged for ops visibility.
     console.error('revokeOtherSessions failed for user', userId);
+  }
+}
+
+/**
+ * F-09: every login attempt (success or failure) against an EXISTING account
+ * is recorded so the admin Logs tab and the user's login-history surface are
+ * real forensic trails instead of permanently empty views. Limitation,
+ * documented in the audit fix: LoginLog.userId is a REQUIRED foreign key, so
+ * attempts against unknown email addresses cannot be recorded without a
+ * schema migration — they are skipped here. The write never fails a login:
+ * any error is swallowed (an observability gap must not become an outage).
+ */
+export async function writeLoginLog(entry: {
+  userId: string;
+  email: string;
+  ipAddress?: string;
+  userAgent?: string | null;
+  success: boolean;
+}): Promise<void> {
+  try {
+    const ua = entry.userAgent || '';
+    const deviceType = /mobile/i.test(ua)
+      ? 'mobile'
+      : /tablet|ipad/i.test(ua)
+        ? 'tablet'
+        : 'desktop';
+    await db.loginLog.create({
+      data: {
+        userId: entry.userId,
+        email: entry.email,
+        ipAddress: entry.ipAddress || '',
+        userAgent: entry.userAgent || null,
+        deviceType,
+        success: entry.success,
+      },
+    });
+  } catch {
+    // Never let the audit write break the login flow.
   }
 }
 

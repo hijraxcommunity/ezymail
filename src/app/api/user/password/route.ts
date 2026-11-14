@@ -9,6 +9,15 @@ export async function PUT(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
+    // F-08: an impersonating admin must never be able to change the victim's
+    // password (it would silently take over the account). The session's
+    // signed `imp` claim marks impersonation.
+    if (session.imp) {
+      return NextResponse.json(
+        { error: 'Password changes are not available while impersonating a user' },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const { currentPassword, newPassword } = body;

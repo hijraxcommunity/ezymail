@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { reservationExpired } from '@/lib/business-guard';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,11 +23,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
-    // Check in both email and businessEmail fields
+    // Check in both email and businessEmail fields. F-16: a soft-deleted
+    // business whose 30-day reservation window has passed no longer holds the
+    // address — it reads as available (register performs the actual release).
     const existingByEmail = await db.user.findUnique({ where: { email: normalizedEmail } });
     const existingByBusinessEmail = await db.user.findUnique({ where: { businessEmail: normalizedEmail } });
 
-    const available = !existingByEmail && !existingByBusinessEmail;
+    const emailTaken = existingByEmail && !reservationExpired(existingByEmail);
+    const businessEmailTaken = existingByBusinessEmail && !reservationExpired(existingByBusinessEmail);
+
+    const available = !emailTaken && !businessEmailTaken;
 
     return NextResponse.json({ available });
   } catch (error: unknown) {

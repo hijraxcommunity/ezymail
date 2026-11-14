@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { requireActiveBusiness } from '@/lib/business-guard';
 
 export async function GET() {
   try {
@@ -9,14 +10,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, email: true, accountType: true },
-    });
-
-    if (!user || user.accountType !== 'business') {
-      return NextResponse.json({ error: 'Not a business account' }, { status: 403 });
-    }
+    // F-16: business DATA routes require an active subscription — expired
+    // businesses previously kept full analytics access forever.
+    const guard = await requireActiveBusiness(session.userId);
+    if (guard) return guard;
 
     // Run queries in parallel for performance
     const [
@@ -29,31 +26,31 @@ export async function GET() {
     ] = await Promise.all([
       // Total emails sent
       db.email.count({
-        where: { senderId: user.id },
+        where: { senderId: session.userId },
       }),
       // Total emails received
       db.email.count({
-        where: { recipientEmail: user.email },
+        where: { recipientEmail: session.email },
       }),
       // Total customers
       db.customer.count({
-        where: { businessId: user.id },
+        where: { businessId: session.userId },
       }),
       // Campaign stats
       db.campaign.findMany({
-        where: { businessId: user.id },
+        where: { businessId: session.userId },
         select: { opens: true, clicks: true },
       }),
       // Team member count
       db.teamMember.count({
-        where: { businessId: user.id },
+        where: { businessId: session.userId },
       }),
       // Recent 10 emails (sent or received)
       db.email.findMany({
         where: {
           OR: [
-            { senderId: user.id },
-            { recipientEmail: user.email },
+            { senderId: session.userId },
+            { recipientEmail: session.email },
           ],
         },
         orderBy: { createdAt: 'desc' },
@@ -78,7 +75,7 @@ export async function GET() {
     // Calculate total recipients for rate calculations
     const totalRecipients = await db.campaignRecipient.count({
       where: {
-        campaign: { businessId: user.id },
+        campaign: { businessId: session.userId },
       },
     });
 
@@ -99,7 +96,7 @@ export async function GET() {
         recentActivity: recentEmails.map(e => ({
           id: e.id,
           subject: e.subject,
-          type: e.senderId === user.id ? 'sent' : 'received',
+          type: e.senderId === session.userId ? 'sent' : 'received',
           isRead: e.isRead,
           folder: e.folder,
           createdAt: e.createdAt,

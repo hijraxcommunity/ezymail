@@ -57,6 +57,19 @@ export async function PUT(
     const now = new Date();
 
     if (action === 'approve') {
+      // F-19: a trial is granted ONCE per business. The subscription status
+      // can only reach 'trial' (via a previous approval), 'active' (admin
+      // upgrade) or 'expired' (the trial consumed it) THROUGH a consumed
+      // approval — re-approval would otherwise restart the 14-day clock
+      // indefinitely, since the user can resubmit documents at any time.
+      if (verification.user.subscriptionStatus !== 'pending_verification') {
+        return NextResponse.json(
+          {
+            error: `A trial has already been granted for this business (current status: ${verification.user.subscriptionStatus}). Approving again would restart the trial clock.`,
+          },
+          { status: 409 }
+        );
+      }
       // Approve verification: set status and start user trial
       await db.$transaction([
         db.businessVerification.update({

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, hashPassword, checkRateLimitKey } from '@/lib/auth';
 import {
+  getEnforcedSystemSettings,
+  isRegistrationOpen,
+} from '@/lib/system-settings';
+import {
   normalizePhoneE164,
   verifyPhoneVerificationToken,
   consumePhoneVerificationToken,
@@ -28,6 +32,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Too many registration attempts. Please try again later.' },
         { status: 429 }
+      );
+    }
+
+    // F-10: the admin's registration_open toggle is now enforced. Checked
+    // before any other validation so a closed instance answers immediately
+    // and unambiguously.
+    const systemSettings = await getEnforcedSystemSettings();
+    if (!isRegistrationOpen(systemSettings)) {
+      return NextResponse.json(
+        { error: 'Registration is currently closed. Please try again later.' },
+        { status: 403 }
       );
     }
 

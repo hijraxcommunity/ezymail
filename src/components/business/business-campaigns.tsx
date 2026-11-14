@@ -7,10 +7,7 @@ import {
   Plus,
   Loader2,
   X,
-  Eye,
-  MousePointerClick,
   Users,
-  Send,
   Trash2,
   ChevronRight,
   ChevronLeft,
@@ -21,7 +18,6 @@ import {
   FileEdit,
   Zap,
   Target,
-  TrendingUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -255,11 +251,11 @@ export function BusinessCampaigns() {
     }
   }
 
-  // Stats
-  const totalOpens = campaigns.reduce((sum, c) => sum + c.opens, 0)
-  const totalClicks = campaigns.reduce((sum, c) => sum + c.clicks, 0)
+  // Stats — F-13: campaigns are draft-only (delivery/tracking is not built),
+  // so the old opens/clicks aggregates — structurally zero forever while the
+  // UI promised real-time engagement tracking — are replaced by honest counts.
   const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipientCount, 0)
-  const avgOpenRate = totalRecipients > 0 ? Math.round((totalOpens / totalRecipients) * 100) : 0
+  const totalDrafts = campaigns.filter((c) => !c.sentAt).length
 
   if (loading) return <CampaignsSkeleton />
 
@@ -299,8 +295,8 @@ export function BusinessCampaigns() {
             </Badge>
           </div>
 
-          {/* Stats Row */}
-          <div className="grid grid-cols-4 gap-4 mt-6">
+          {/* Stats Row — F-13: rate widgets hidden; campaigns are draft-only */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
             <div className="rounded-xl bg-gradient-to-br from-gray-50 to-transparent dark:from-gray-800/50 dark:to-transparent p-4 ring-1 ring-gray-200 dark:ring-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-gray-400" />
@@ -308,26 +304,14 @@ export function BusinessCampaigns() {
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">{selectedCampaign.recipientCount}</div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-[#4285F4]/5 to-transparent p-4 ring-1 ring-[#4285F4]/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-4 h-4 text-[#4285F4]" />
-                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Open Rate</span>
-              </div>
-              <div className="text-2xl font-bold text-[#4285F4]">{selectedCampaign.openRate}%</div>
-            </div>
-            <div className="rounded-xl bg-gradient-to-br from-[#34A853]/5 to-transparent p-4 ring-1 ring-[#34A853]/10">
-              <div className="flex items-center gap-2 mb-2">
-                <MousePointerClick className="w-4 h-4 text-[#34A853]" />
-                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Click Rate</span>
-              </div>
-              <div className="text-2xl font-bold text-[#34A853]">{selectedCampaign.clickRate}%</div>
-            </div>
             <div className="rounded-xl bg-gradient-to-br from-[#FBBC04]/5 to-transparent p-4 ring-1 ring-[#FBBC04]/10">
               <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-4 h-4 text-[#FBBC04]" />
-                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Total Opens</span>
+                <Clock className="w-4 h-4 text-[#FBBC04]" />
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Delivery &amp; Tracking</span>
               </div>
-              <div className="text-2xl font-bold text-[#FBBC04]">{selectedCampaign.openedCount}</div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Not available yet — campaigns are saved as drafts. Open/click tracking will appear here once delivery ships.
+              </p>
             </div>
           </div>
         </motion.div>
@@ -347,14 +331,12 @@ export function BusinessCampaigns() {
               <TableRow className="border-b border-gray-100 dark:border-gray-800">
                 <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</TableHead>
                 <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</TableHead>
-                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Opened</TableHead>
-                <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Clicked</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loadingDetail ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={2} className="text-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" />
                   </TableCell>
                 </TableRow>
@@ -373,29 +355,11 @@ export function BusinessCampaigns() {
                     <TableCell className="text-[13px] text-gray-600 dark:text-gray-400">
                       {r.customer.email}
                     </TableCell>
-                    <TableCell>
-                      {r.openedAt ? (
-                        <Badge className="bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-[10px] px-2 py-0.5">
-                          <Eye className="w-3 h-3 mr-1" /> Yes
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-gray-400">No</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {r.clickedAt ? (
-                        <Badge className="bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/20 text-[10px] px-2 py-0.5">
-                          <MousePointerClick className="w-3 h-3 mr-1" /> Yes
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-gray-400">No</span>
-                      )}
-                    </TableCell>
                   </motion.tr>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={2} className="text-center py-8">
                     <p className="text-sm text-gray-500">No recipients</p>
                   </TableCell>
                 </TableRow>
@@ -451,12 +415,12 @@ export function BusinessCampaigns() {
           className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Opens</span>
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Recipients</span>
             <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#4285F4]/10 to-[#4285F4]/5">
-              <Eye className="w-4 h-4 text-[#4285F4]" />
+              <Users className="w-4 h-4 text-[#4285F4]" />
             </div>
           </div>
-          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{totalOpens}</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{totalRecipients}</p>
           <p className="text-[11px] text-gray-400 mt-0.5">Across all campaigns</p>
         </motion.div>
         <motion.div
@@ -466,13 +430,13 @@ export function BusinessCampaigns() {
           className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Clicks</span>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#34A853]/10 to-[#34A853]/5">
-              <MousePointerClick className="w-4 h-4 text-[#34A853]" />
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Drafts</span>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#FBBC04]/10 to-[#FBBC04]/5">
+              <FileEdit className="w-4 h-4 text-[#FBBC04]" />
             </div>
           </div>
-          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{totalClicks}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">Link interactions</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{totalDrafts}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Delivery not available yet</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -481,13 +445,13 @@ export function BusinessCampaigns() {
           className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Open Rate</span>
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Opens &amp; Clicks</span>
             <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#6366F1]/10 to-[#6366F1]/5">
-              <TrendingUp className="w-4 h-4 text-[#6366F1]" />
+              <Clock className="w-4 h-4 text-[#6366F1]" />
             </div>
           </div>
-          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{avgOpenRate}%</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">Average performance</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">Coming soon</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Tracking ships with delivery</p>
         </motion.div>
       </div>
 
@@ -502,7 +466,8 @@ export function BusinessCampaigns() {
               Create New Campaign
             </DialogTitle>
             <DialogDescription className="text-[13px] text-gray-500">
-              Compose your campaign email and select recipients to send it to.
+              Compose your campaign email and select recipients. Campaigns are saved as drafts —
+              email delivery and engagement tracking are not available yet.
             </DialogDescription>
           </DialogHeader>
 
@@ -609,9 +574,9 @@ export function BusinessCampaigns() {
               {creating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Send className="w-4 h-4" />
+                <FileEdit className="w-4 h-4" />
               )}
-              Create Campaign
+              Save as Draft
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -625,7 +590,6 @@ export function BusinessCampaigns() {
               <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Campaign</TableHead>
               <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</TableHead>
               <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Recipients</TableHead>
-              <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Performance</TableHead>
               <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</TableHead>
               <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Actions</TableHead>
             </TableRow>
@@ -633,7 +597,6 @@ export function BusinessCampaigns() {
           <TableBody>
             {campaigns.length > 0 ? (
               campaigns.map((campaign, index) => {
-                const openRate = campaign.recipientCount > 0 ? Math.round((campaign.opens / campaign.recipientCount) * 100) : 0
                 return (
                   <motion.tr
                     key={campaign.id}
@@ -651,10 +614,6 @@ export function BusinessCampaigns() {
                           <span className="text-[13px] font-medium text-gray-900 dark:text-white truncate block max-w-[220px]">
                             {campaign.subject}
                           </span>
-                          {/* Open rate progress bar at bottom of row */}
-                          <div className="mt-2 h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-[#4285F4] to-[#6366F1] rounded-full" style={{ width: `${openRate}%` }} />
-                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -672,21 +631,6 @@ export function BusinessCampaigns() {
                       <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
                         {campaign.recipientCount}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 min-w-[120px]">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1">
-                            <Eye className="w-3.5 h-3.5 text-[#4285F4]" />
-                            <span className="text-[12px] text-gray-600 dark:text-gray-400">{campaign.opens}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <MousePointerClick className="w-3.5 h-3.5 text-[#34A853]" />
-                            <span className="text-[12px] text-gray-600 dark:text-gray-400">{campaign.clicks}</span>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-gray-400">{openRate}% open rate</span>
-                      </div>
                     </TableCell>
                     <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">
                       {new Date(campaign.createdAt).toLocaleDateString()}
@@ -717,14 +661,15 @@ export function BusinessCampaigns() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-16">
+                <TableCell colSpan={5} className="text-center py-16">
                   <div className="flex flex-col items-center">
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-800/50 flex items-center justify-center mb-4">
                       <BarChart3 className="w-8 h-8 text-gray-300 dark:text-gray-600" />
                     </div>
                     <p className="text-[15px] font-semibold text-gray-700 dark:text-gray-300">No campaigns yet</p>
                     <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-1.5 max-w-sm text-center">
-                      Create your first email campaign to reach your customers. Track opens, clicks, and engagement in real time.
+                      Create your first email campaign to reach your customers. Campaigns are saved as drafts;
+                      delivery and engagement tracking are not available yet.
                     </p>
                     <Button
                       onClick={() => setShowCreateForm(true)}

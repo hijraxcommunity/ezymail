@@ -38,6 +38,15 @@ export async function GET(request: NextRequest) {
 
     const { type, page, limit, search, userId } = parsed.data;
     const skip = (page - 1) * limit;
+    // F-12: for the merged view, skip/take must be applied over the MERGED
+    // ordering, not per source. The old code took rows [skip, skip+limit) from
+    // EACH source and sliced the (at most 2*limit) union again — page 2
+    // skipped and duplicated entries as pages advanced. Fix: fetch
+    // 0..(skip+limit) from both sources, merge, sort, then slice the window
+    // (capped defensively at 2000 fetched rows per source).
+    const mergedPagination = type === 'all';
+    const fetchTake = Math.min(mergedPagination ? skip + limit : limit, 2000);
+    const fetchSkip = mergedPagination ? 0 : skip;
 
     interface LogEntry {
       id: string;
@@ -66,8 +75,8 @@ export async function GET(request: NextRequest) {
 
       const adminLogs = await db.adminLog.findMany({
         where: adminWhere,
-        skip,
-        take: limit,
+        skip: fetchSkip,
+        take: fetchTake,
         orderBy: { createdAt: 'desc' },
         include: {
           admin: {
@@ -108,8 +117,8 @@ export async function GET(request: NextRequest) {
 
       const loginLogs = await db.loginLog.findMany({
         where: loginWhere,
-        skip,
-        take: limit,
+        skip: fetchSkip,
+        take: fetchTake,
         orderBy: { createdAt: 'desc' },
         include: {
           user: {
@@ -171,7 +180,8 @@ export async function GET(request: NextRequest) {
 
     const total = adminTotal + loginTotal;
 
-    // Paginate the combined result
+    // Paginate the combined result (the slice is the ONLY pagination step in
+    // the merged view — sources were fetched from row 0 for that purpose).
     const paginatedLogs = allLogs.slice(skip, skip + limit);
 
     return NextResponse.json({

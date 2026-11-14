@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { requireActiveBusiness } from '@/lib/business-guard';
 
 export async function GET() {
   try {
@@ -10,17 +11,13 @@ export async function GET() {
     }
 
     // Verify business account
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, accountType: true },
-    });
-
-    if (!user || user.accountType !== 'business') {
-      return NextResponse.json({ error: 'Not a business account' }, { status: 403 });
-    }
+    // F-16: business DATA routes require an active subscription — expired
+    // businesses previously kept full access forever.
+    const guard = await requireActiveBusiness(session.userId);
+    if (guard) return guard;
 
     const teamMembers = await db.teamMember.findMany({
-      where: { businessId: user.id },
+      where: { businessId: session.userId },
       orderBy: { invitedAt: 'desc' },
       select: {
         id: true,
@@ -47,14 +44,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify business account
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, accountType: true },
-    });
-
-    if (!user || user.accountType !== 'business') {
-      return NextResponse.json({ error: 'Not a business account' }, { status: 403 });
-    }
+    // F-16: business DATA routes require an active subscription — expired
+    // businesses previously kept full access forever.
+    const guard = await requireActiveBusiness(session.userId);
+    if (guard) return guard;
 
     const body = await request.json();
     const { email, role } = body;
@@ -78,7 +71,7 @@ export async function POST(request: NextRequest) {
     const existing = await db.teamMember.findUnique({
       where: {
         businessId_memberEmail: {
-          businessId: user.id,
+          businessId: session.userId,
           memberEmail: normalizedEmail,
         },
       },
@@ -90,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const teamMember = await db.teamMember.create({
       data: {
-        businessId: user.id,
+        businessId: session.userId,
         memberEmail: normalizedEmail,
         role: memberRole,
       },

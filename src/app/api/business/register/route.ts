@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, hashPassword } from '@/lib/auth';
 import {
+  getEnforcedSystemSettings,
+  isRegistrationOpen,
+} from '@/lib/system-settings';
+import {
+  reservationExpired,
+  releaseReservedBusinessEmail,
+} from '@/lib/business-guard';
+import {
   normalizePhoneE164,
   verifyPhoneVerificationToken,
   consumePhoneVerificationToken,
@@ -9,6 +17,16 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
+    // F-10: honor the registration_open toggle for business accounts too —
+    // an instance with registration closed must not accept new businesses.
+    const systemSettings = await getEnforcedSystemSettings();
+    if (!isRegistrationOpen(systemSettings)) {
+      return NextResponse.json(
+        { error: 'Registration is currently closed. Please try again later.' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { businessName, firstName, lastName, businessEmail, phone, employeeCount, password } = body;
 
@@ -97,21 +115,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check businessEmail uniqueness (both email and businessEmail fields)
+    // Check businessEmail uniqueness (both email and businessEmail fields).
+    // F-16: a soft-deleted business holds its address only during the 30-day
+    // reservation window written by the trial-expiry cron — once that window
+    // has passed, the address is released (the stale row's unique columns are
+    // rewritten) and a NEW business can claim it. Before this fix the
+    // uniqueness lookup matched soft-deleted rows forever, so reserved
+    // addresses were silently unregistrable.
     const existingByEmail = await db.user.findUnique({ where: { email: normalizedEmail } });
     if (existingByEmail) {
-      return NextResponse.json(
-        { error: 'This business email is already taken' },
-        { status: 409 }
-      );
+      if (!reservationExpired(existingByEmail)) {
+        return NextResponse.json(
+          { error: 'This business email is already taken' },
+          { status: 409 }
+        );
+      }
+      await releaseReservedBusinessEmail(normalizedEmail);
     }
 
     const existingByBusinessEmail = await db.user.findUnique({ where: { businessEmail: normalizedEmail } });
     if (existingByBusinessEmail) {
-      return NextResponse.json(
-        { error: 'This business email is already taken' },
-        { status: 409 }
-      );
+      if (!reservationExpired(existingByBusinessEmail)) {
+        return NextResponse.json(
+          { error: 'This business email is already taken' },
+          { status: 409 }
+        );
+      }
+      await releaseReservedBusinessEmail(normalizedEmail);
     }
 
     // Hash password
@@ -152,14 +182,13 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       if (
-        normalizedPhone &&
         err && typeof err === 'object' && 'code' in err &&
         (err as { code?: string }).code === 'P2002'
       ) {
-        // Database-level uniqueness: another account already holds this
-        // WhatsApp number (e.g. two registrations racing to claim it).
+        // Two registrations racing for a released address (or a phone
+        // collision) — the DB-level unique constraints are the final word.
         return NextResponse.json(
-          { error: 'This WhatsApp number is already registered to an EzyMail account' },
+          { error: 'This business email is already taken' },
           { status: 409 }
         );
       }
