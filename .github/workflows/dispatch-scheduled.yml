@@ -26,6 +26,8 @@
 name: Dispatch Scheduled Mail
 
 on:
+  push:
+    branches: [main] # TEMPORARY diagnostic trigger — revert after debugging
   schedule:
     - cron: '13 * * * *' # hourly (UTC), offset from the Integrity Guard heartbeat (:07)
   workflow_dispatch: {} # allow manual runs
@@ -38,15 +40,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Ping production dispatcher
+      - name: Ping production dispatcher (TEMP diagnostics)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           PROD_URL: https://ezymail.vercel.app
         run: |
+          # TEMP diagnostics: report whether the repository secret resolves and
+          # its LENGTH ONLY — the value itself is never printed.
+          if [ -z "$CRON_SECRET" ]; then
+            echo "DIAG github-secret: EMPTY (secret name not found or no value)"
+          else
+            echo "DIAG github-secret: present, length=${#CRON_SECRET}"
+          fi
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
             -H "Authorization: Bearer $CRON_SECRET" \
             "$PROD_URL/api/cron/dispatch-scheduled")
-          echo "dispatcher HTTP $code"
+          echo "DIAG dispatch-scheduled HTTP $code"
+          code2=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$PROD_URL/api/cron/trial-expiry")
+          echo "DIAG trial-expiry HTTP $code2"
           if [ "$code" != "200" ]; then
             echo "::error::dispatcher returned HTTP $code — if this is 401, set the CRON_SECRET repository secret (must match the Vercel CRON_SECRET env var); if 5xx, check the Vercel function logs"
             exit 1
