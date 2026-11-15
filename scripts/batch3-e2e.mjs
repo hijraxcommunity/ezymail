@@ -214,6 +214,21 @@ const run = async () => {
   })
   check('F-08 I12: AdminLog records start and exit', impLogs.length >= 2, `rows=${impLogs.length}`)
 
+  // Review fix regression: an admin can never impersonate ANOTHER admin —
+  // the impersonation session would carry role=admin and pass every admin
+  // route guard with actions misattributed to the victim admin in AdminLog.
+  const admin2 = await seedUser(`b3.admin2.${stamp}@ezy.af`, { role: 'admin', firstName: 'Second', lastName: 'Admin' })
+  const impAdminRes = await api(adminCj, 'POST', `/api/admin/users/${admin2.id}/impersonate`)
+  check('F-08 I13: impersonating another admin refused (403)', impAdminRes.status === 403, `status=${impAdminRes.status}`)
+  const meAfterRefusal = await api(adminCj, 'GET', '/api/auth/me')
+  check('F-08 I14: admin still themselves after refused admin-target attempt',
+    meAfterRefusal.status === 200 && meAfterRefusal.json?.user?.email === admin.email && meAfterRefusal.json?.impersonating === false,
+    `email=${meAfterRefusal.json?.user?.email} imp=${meAfterRefusal.json?.impersonating}`)
+  const admin2ImpSessions = await prisma.session.count({
+    where: { userId: admin2.id, deviceType: 'admin_impersonation' },
+  })
+  check('F-08 I15: no impersonation Session row minted for the refused target', admin2ImpSessions === 0, `rows=${admin2ImpSessions}`)
+
   // ═══════════════ F-12: merged logs pagination ═══════════════
   const base = Date.now() - 60 * 60 * 1000
   const adminLogRows = []

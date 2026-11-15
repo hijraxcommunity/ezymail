@@ -79,6 +79,20 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Cannot impersonate an inactive user' }, { status: 400 });
     }
 
+    // Review fix (F-08 hardening): never impersonate another administrator.
+    // An impersonation session carries the target's role, so an admin target
+    // would mint an admin-privileged session that passes every admin-route
+    // role check while the AdminLog rows attribute those actions to the
+    // VICTIM admin — exactly the action-misattribution class F-08 fixed.
+    // Impersonation exists to support regular users; admins are managed
+    // through named, logged admin actions instead.
+    if (targetUser.role === 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot impersonate another administrator account' },
+        { status: 403 }
+      );
+    }
+
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
 
     // Short-lived victim JWT, tagged with the impersonating admin (`imp`).
