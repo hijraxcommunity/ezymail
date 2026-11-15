@@ -1,0 +1,53 @@
+# EzyMail scheduled-email dispatcher ping (F-03) — Hobby-plan workaround.
+#
+# Vercel Hobby plans only allow cron jobs that run once per day, so the
+# vercel.json entry for /api/cron/dispatch-scheduled is a daily baseline
+# (0 3 * * * UTC). Scheduled emails must be dispatched far more often than
+# that, so this workflow pings the same endpoint hourly from GitHub Actions
+# (the same trusted off-sandbox mechanism as the Integrity Guard heartbeat
+# in ci.yml).
+#
+# Safety: the dispatch endpoint is idempotent — it flips sentAt with ONE
+# conditional update and a second run finds no due rows and is a no-op — so
+# hourly pings plus the daily Vercel cron can never double-deliver a mail.
+#
+# SETUP (one-time, required or every run fails loudly with 401):
+#   GitHub repo → Settings → Secrets and variables → Actions
+#   → New repository secret:
+#       Name:  CRON_SECRET
+#       Value: the same value as the CRON_SECRET environment variable
+#              configured on Vercel (Settings → Environment Variables).
+#   Never put the actual secret value in this file.
+#
+# Note: GitHub may delay scheduled runs by a few minutes at peak times and
+# auto-disables schedules on repos with 60 days of no activity — any push
+# (or re-enabling in the Actions tab) revives it.
+
+name: Dispatch Scheduled Mail
+
+on:
+  schedule:
+    - cron: '13 * * * *' # hourly (UTC), offset from the Integrity Guard heartbeat (:07)
+  workflow_dispatch: {} # allow manual runs
+
+permissions: {}
+
+jobs:
+  ping:
+    name: Ping /api/cron/dispatch-scheduled
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping production dispatcher
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PROD_URL: https://ezymail.vercel.app
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$PROD_URL/api/cron/dispatch-scheduled")
+          echo "dispatcher HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::dispatcher returned HTTP $code — if this is 401, set the CRON_SECRET repository secret (must match the Vercel CRON_SECRET env var); if 5xx, check the Vercel function logs"
+            exit 1
+          fi
