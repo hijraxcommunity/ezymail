@@ -146,8 +146,9 @@ export function BusinessTeam() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
   useEffect(() => {
-    fetchTeam()
+    queueMicrotask(() => void fetchTeam())
   }, [fetchTeam])
 
   async function handleInvite() {

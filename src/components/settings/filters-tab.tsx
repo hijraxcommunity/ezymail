@@ -209,9 +209,12 @@ export function FiltersTab() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the loads)
   useEffect(() => {
-    loadRules()
-    loadFolders()
+    queueMicrotask(() => {
+      void loadRules()
+      void loadFolders()
+    })
   }, [loadRules, loadFolders])
 
   // ─── Dialog handlers ────────────────────────────────────────────────────

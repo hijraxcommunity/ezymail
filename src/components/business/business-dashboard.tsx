@@ -7,6 +7,7 @@ import {
   ArrowUpRight, ArrowDownLeft, Send, TrendingUp,
   UserCheck, UserPlus, Sparkles, Clock, Zap,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/use-app-store'
 import { Badge } from '@/components/ui/badge'
@@ -48,15 +49,28 @@ interface BusinessProfile {
 
 const COLORS = ['#4285F4', '#34A853', '#FBBC04', '#EA4335', '#8AB4F8', '#F97316', '#EC4899', '#06B6D4']
 
-const statCards = [
-  { key: 'totalEmailsSent' as const, label: 'Emails Sent', icon: Send, color: '#4285F4', gradient: 'from-blue-500/10 to-blue-600/5' },
-  { key: 'totalEmailsReceived' as const, label: 'Emails Received', icon: Mail, color: '#34A853', gradient: 'from-emerald-500/10 to-emerald-600/5' },
-  { key: 'totalCustomers' as const, label: 'Total Customers', icon: Users, color: '#FBBC04', gradient: 'from-amber-500/10 to-amber-600/5' },
-  { key: 'totalCampaigns' as const, label: 'Campaigns', icon: Megaphone, color: '#EA4335', gradient: 'from-red-500/10 to-red-600/5' },
-  { key: 'openRate' as const, label: 'Open Rate', icon: Eye, color: '#8AB4F8', gradient: 'from-sky-500/10 to-sky-600/5', suffix: '%' },
-  { key: 'clickRate' as const, label: 'Click Rate', icon: MousePointerClick, color: '#F97316', gradient: 'from-orange-500/10 to-orange-600/5', suffix: '%' },
-  { key: 'totalOpens' as const, label: 'Total Opens', icon: Eye, color: '#06B6D4', gradient: 'from-cyan-500/10 to-cyan-600/5' },
-  { key: 'teamMemberCount' as const, label: 'Team Members', icon: UserCheck, color: '#EC4899', gradient: 'from-pink-500/10 to-pink-600/5' },
+// F-68: explicit shape — entries carry optional suffix/format, so the render
+// template (card.format ? card.format(value) : value.toLocaleString()) is
+// type-checked against this contract instead of an inferred union.
+interface StatCard {
+  key: 'totalEmailsSent' | 'totalEmailsReceived' | 'totalCustomers' | 'totalCampaigns' | 'openRate' | 'clickRate' | 'totalOpens' | 'teamMemberCount'
+  label: string
+  icon: LucideIcon
+  color: string
+  gradient: string
+  suffix?: string
+  format?: (v: number) => string
+}
+
+const statCards: StatCard[] = [
+  { key: 'totalEmailsSent', label: 'Emails Sent', icon: Send, color: '#4285F4', gradient: 'from-blue-500/10 to-blue-600/5' },
+  { key: 'totalEmailsReceived', label: 'Emails Received', icon: Mail, color: '#34A853', gradient: 'from-emerald-500/10 to-emerald-600/5' },
+  { key: 'totalCustomers', label: 'Total Customers', icon: Users, color: '#FBBC04', gradient: 'from-amber-500/10 to-amber-600/5' },
+  { key: 'totalCampaigns', label: 'Campaigns', icon: Megaphone, color: '#EA4335', gradient: 'from-red-500/10 to-red-600/5' },
+  { key: 'openRate', label: 'Open Rate', icon: Eye, color: '#8AB4F8', gradient: 'from-sky-500/10 to-sky-600/5', suffix: '%' },
+  { key: 'clickRate', label: 'Click Rate', icon: MousePointerClick, color: '#F97316', gradient: 'from-orange-500/10 to-orange-600/5', suffix: '%' },
+  { key: 'totalOpens', label: 'Total Opens', icon: Eye, color: '#06B6D4', gradient: 'from-cyan-500/10 to-cyan-600/5' },
+  { key: 'teamMemberCount', label: 'Team Members', icon: UserCheck, color: '#EC4899', gradient: 'from-pink-500/10 to-pink-600/5' },
 ]
 
 function DashboardSkeleton() {

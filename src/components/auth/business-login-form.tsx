@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type HTMLMotionProps } from 'framer-motion'
 import { Eye, EyeOff, Loader2, Building2, Mail, Lock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -69,7 +69,7 @@ export function BusinessLoginForm() {
     }
   }
 
-  const motionProps = {
+  const motionProps: HTMLMotionProps<'div'> = {
       initial: { opacity: 0, y: 20, scale: 0.95 },
       animate: { opacity: 1, y: 0, scale: 1 },
       transition: { duration: 0.5, ease: 'easeOut' },

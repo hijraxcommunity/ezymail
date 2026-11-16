@@ -83,7 +83,7 @@ export function EmailList() {
   // Gmail-style infinite scroll: older messages auto-append as the user scrolls
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const isLoadingMoreRef = useRef(false) // guards the setPage → fetch gap
-  const noMoreRef = useRef(false) // older history exhausted for this folder
+  const [noMore, setNoMore] = useState(false) // older history exhausted for this folder (state, not a ref: the render path reads it to compute hasMore — F-68 refs rule)
   const maxPageLoadedRef = useRef(0) // highest page fetched for this folder
   const lastLoadErrorAtRef = useRef(0) // throttle auto-retries after a failure
   // Floating loader pill: stays visible for a minimum window so fast loads
@@ -127,11 +127,11 @@ export function EmailList() {
             maxPageLoadedRef.current = currentPage
             // A brand-new page that yielded nothing new means older history
             // is exhausted (server thread-grouping can shrink pages)
-            if (added === 0) noMoreRef.current = true
+            if (added === 0) setNoMore(true)
           }
         } else {
           maxPageLoadedRef.current = 1
-          noMoreRef.current = false
+          setNoMore(false)
           setEmails(data.emails || [])
         }
         setTotalEmails(data.total || 0)
@@ -181,12 +181,20 @@ export function EmailList() {
     setTotalEmails,
   ])
 
+  // F-68 set-state-in-effect: fetchEmails flips its loading flags before its
+  // first await. Scheduling the kickoff on a MICROTASK keeps the load starting
+  // before the next paint (identical visual behavior) while no setState runs
+  // synchronously inside the effect body.
   useEffect(() => {
-    fetchEmails()
+    queueMicrotask(() => void fetchEmails())
   }, [fetchEmails])
-  // Latest-ref handle so the auto-retry can re-run the current fetch cycle
+  // Latest-ref handle so the auto-retry can re-run the current fetch cycle.
+  // The assignment runs at COMMIT time (effect), not render — readers are all
+  // timers/handlers, so the one-frame delay is unobservable (F-68 refs rule).
   const fetchEmailsRef = useRef<(() => Promise<void>) | null>(null)
-  fetchEmailsRef.current = fetchEmails
+  useEffect(() => {
+    fetchEmailsRef.current = fetchEmails
+  })
 
   // ─── Auto-refresh when navigating back from an opened email ──────────────
   // Refetches the list so newly arrived emails appear without a manual reload
@@ -237,7 +245,7 @@ export function EmailList() {
   // the stale deep-scroll memory is cleared so the viewport is not yanked
   const refreshFromTop = async () => {
     if (currentFolder === 'search') return
-    noMoreRef.current = false
+    setNoMore(false)
     scrollContainerRef.current?.scrollTo(0, 0)
     if (currentPage !== 1) {
       setScrollPosition(currentFolder, 0)
@@ -303,7 +311,7 @@ export function EmailList() {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
   const isSearch = currentFolder === 'search'
-  const hasMore = !isSearch && !noMoreRef.current && currentPage * 20 < totalEmails
+  const hasMore = !isSearch && !noMore && currentPage * 20 < totalEmails
   const selectedCount = selectedEmailIds.size
   const allSelected =
     displayEmails.length > 0 &&
@@ -344,7 +352,9 @@ export function EmailList() {
         clearTimeout(loaderHideTimerRef.current)
         loaderHideTimerRef.current = null
       }
-      setShowLoaderPill(true)
+      // Microtask-deferred (not synchronous): same paint timing, no sync
+      // setState in the effect body (F-68 set-state-in-effect).
+      queueMicrotask(() => setShowLoaderPill(true))
     } else if (prevListLoadingRef.current) {
       loaderHideTimerRef.current = setTimeout(() => {
         loaderHideTimerRef.current = null

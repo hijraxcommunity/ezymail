@@ -254,8 +254,9 @@ export function SettingsPanel() {
     }
   }, [signatureEditor])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the load)
   useEffect(() => {
-    loadProfile()
+    queueMicrotask(() => void loadProfile())
   }, [loadProfile])
 
   // ─── Profile handlers ──────────────────────────────────────────────────
@@ -824,7 +825,7 @@ export function SettingsPanel() {
                   onClick={async () => {
                     // Carry the device's push token so the logout route
                     // deletes the row server-side (post-logout cleanup
-                    // 401'd — see profile-menu).
+                    // 401'd — historical note).
                     await fetch('/api/auth/logout', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },

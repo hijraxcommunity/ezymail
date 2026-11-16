@@ -295,12 +295,6 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function generateEmailFromName(firstName: string, lastName: string): string {
-  const cleanFirst = firstName.toLowerCase().replace(/[^a-z]/g, '');
-  const cleanLast = lastName.toLowerCase().replace(/[^a-z]/g, '');
-  return `${cleanFirst}.${cleanLast}@ezy.af`;
-}
-
 export async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remaining: number }> {
   // Default 5 attempts / 15 min per IP. Env-overridable so load tests and
   // E2E harnesses (which all share one egress IP) are not throttled.

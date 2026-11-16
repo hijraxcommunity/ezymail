@@ -74,15 +74,6 @@ export function phoneCandidateSet(countryCode: string, national: string): string
   return Array.from(set).filter((s) => s.replace(/\D/g, '').length >= 7);
 }
 
-/** Tolerant comparison used when re-checking legacy stored numbers. */
-export function storedPhoneMatchesE164(stored: string, e164: string): boolean {
-  const a = stored.replace(/\D/g, '');
-  const b = e164.replace(/\D/g, '');
-  if (!a || !b) return false;
-  if (a === b) return true;
-  return a.length >= 7 && b.length >= 7 && (a.endsWith(b) || b.endsWith(a));
-}
-
 // ── OTP store (in-memory, TTL-bounded, hash-only) ────────────────────────────
 
 interface PendingOtp {

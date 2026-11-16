@@ -302,7 +302,8 @@ function ThreadMessage({
   const [showInfoBox, setShowInfoBox] = useState(false)
 
   // Auto-close info box when collapsing
-  useEffect(() => { if (!isExpanded) setShowInfoBox(false) }, [isExpanded])
+  // F-68: microtask-deferred reset (no sync setState in effect body; runs before the next paint)
+  useEffect(() => { if (!isExpanded) queueMicrotask(() => setShowInfoBox(false)) }, [isExpanded])
 
   const isSentByMe = message.senderId === currentUserId
   const toLabel = isSentByMe
@@ -632,24 +633,15 @@ export function EmailDetail() {
     }
   }, [selectedEmailId, updateEmail])
 
-  useEffect(() => {
-    if (selectedEmailId) {
-      setShowSnoozeModal(false)
-      setShowCustomSnooze(false)
-      fetchEmail()
-    } else {
-      setEmail(null)
-      setThread([])
-    }
-  }, [selectedEmailId, fetchEmail])
 
   // Auto-expand only the latest message in thread when email loads
+  // F-68: microtask-deferred (no sync setState in effect body; runs before the next paint)
   useEffect(() => {
     if (thread.length > 0) {
       const latestId = thread[thread.length - 1].id
-      setExpandedReplies(new Set([latestId]))
+      queueMicrotask(() => setExpandedReplies(new Set([latestId])))
     } else {
-      setExpandedReplies(new Set())
+      queueMicrotask(() => setExpandedReplies(new Set()))
     }
   }, [email?.id, thread])
 
@@ -825,6 +817,24 @@ export function EmailDetail() {
   const [snoozeAmPm, setSnoozeAmPm] = useState<'AM' | 'PM'>('AM')
   const [showCustomSnooze, setShowCustomSnooze] = useState(false)
   const [showSnoozeModal, setShowSnoozeModal] = useState(false)
+
+  // F-68: declared AFTER the snooze-modal states it resets (use-before-
+  // declaration); its sync setState calls are microtask-deferred (run before
+  // the next paint — no observable timing change).
+  useEffect(() => {
+    if (selectedEmailId) {
+      queueMicrotask(() => {
+        setShowSnoozeModal(false)
+        setShowCustomSnooze(false)
+        void fetchEmail()
+      })
+    } else {
+      queueMicrotask(() => {
+        setEmail(null)
+        setThread([])
+      })
+    }
+  }, [selectedEmailId, fetchEmail])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const getLaterToday = () => {

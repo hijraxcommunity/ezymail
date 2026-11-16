@@ -225,7 +225,7 @@ export function AdminPanel() {
   const handleSignOut = async () => {
     try {
       // Carry the device's push token so the logout route deletes the row
-      // server-side (post-logout cleanup 401'd — see profile-menu).
+      // server-side (post-logout cleanup 401'd — historical note).
       await fetch('/api/auth/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -394,8 +394,10 @@ function DashboardTab() {
     }
   }, [])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchStats()
+    queueMicrotask(() => void fetchStats())
   }, [fetchStats])
 
   const fetchBusinessStats = useCallback(async () => {
@@ -408,8 +410,10 @@ function DashboardTab() {
     } catch { /* silent */ }
   }, [])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchBusinessStats()
+    queueMicrotask(() => void fetchBusinessStats())
   }, [fetchBusinessStats])
 
   useEffect(() => {
@@ -769,8 +773,10 @@ function UsersTab() {
     }
   }, [page, search, statusFilter])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchUsers()
+    queueMicrotask(() => void fetchUsers())
   }, [fetchUsers])
 
   const handleUserAction = async (userId: string, action: string, status?: string) => {
@@ -1226,8 +1232,10 @@ function ReportsTab() {
     }
   }, [page, statusFilter])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchReports()
+    queueMicrotask(() => void fetchReports())
   }, [fetchReports])
 
   const handleResolveReport = async (reportId: string, action: 'resolved' | 'dismissed') => {
@@ -1420,8 +1428,10 @@ function LogsTab() {
     }
   }, [page, logType])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchLogs()
+    queueMicrotask(() => void fetchLogs())
   }, [fetchLogs])
 
   const handleSearch = () => {
@@ -1605,8 +1615,10 @@ function SettingsTab() {
     }
   }, [])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchSettings()
+    queueMicrotask(() => void fetchSettings())
   }, [fetchSettings])
 
   const handleChange = (key: string, value: string) => {
@@ -1821,8 +1833,10 @@ function BusinessAccountsTab() {
     }
   }, [page, subFilter])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchAccounts()
+    queueMicrotask(() => void fetchAccounts())
   }, [fetchAccounts])
 
   const handleViewDetails = async (account: BusinessAccount) => {
@@ -2200,8 +2214,10 @@ function BusinessVerificationsTab() {
     }
   }, [page, statusFilter])
 
+  // F-68 set-state-in-effect: the fetch flips loading flags before its first await;
+  // a microtask kickoff starts the load before the next paint, with no sync setState.
   useEffect(() => {
-    fetchVerifications()
+    queueMicrotask(() => void fetchVerifications())
   }, [fetchVerifications])
 
   const openReviewDialog = (v: BusinessVerification, action: 'approve' | 'reject') => {

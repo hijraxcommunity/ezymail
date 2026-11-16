@@ -171,7 +171,8 @@ export function BusinessApp() {
     }
   }, [])
 
-  useEffect(() => { fetchProfile() }, [fetchProfile])
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
+  useEffect(() => { queueMicrotask(() => void fetchProfile()) }, [fetchProfile])
 
   const displayName = profile?.businessName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Business'
   const displayEmail = profile?.businessEmail || user?.email || ''
@@ -182,7 +183,7 @@ export function BusinessApp() {
     setLoggingOut(true)
     try {
       // Carry the device's push token so the logout route deletes the row
-      // server-side (post-logout cleanup 401'd — see profile-menu).
+      // server-side (post-logout cleanup 401'd — historical note).
       await fetch('/api/auth/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

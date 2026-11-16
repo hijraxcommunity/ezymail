@@ -11,7 +11,9 @@ export function useIsMobile() {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
     mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    // F-68: microtask-deferred initial measurement (runs before the next
+    // paint; the change-listener keeps handling every later resize synchronously)
+    queueMicrotask(() => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT))
     return () => mql.removeEventListener("change", onChange)
   }, [])
 

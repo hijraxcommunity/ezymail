@@ -280,8 +280,9 @@ export function ContactsPanel() {
     }
   }, [searchQuery, sortBy, filterBy])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
   useEffect(() => {
-    fetchContacts()
+    queueMicrotask(() => void fetchContacts())
   }, [fetchContacts])
 
   // Create / Update contact

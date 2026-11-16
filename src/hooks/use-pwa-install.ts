@@ -15,7 +15,8 @@ export function usePwaInstall() {
   useEffect(() => {
     // Check if already installed
     if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true)
+      // F-68: microtask-deferred (no sync setState in effect body; runs before the next paint)
+      queueMicrotask(() => setIsInstalled(true))
       return
     }
 

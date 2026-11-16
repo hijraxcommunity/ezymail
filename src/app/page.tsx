@@ -339,7 +339,7 @@ export default function HomePage() {
         } else if (s.contactsView) {
           s.setContactsView(false)
         } else if (s.adminView) {
-          s.setAdminView(false)
+          s.setAdminView(null)
         }
       } else {
         // Base view — second back within 2.5s exits, like a native app
@@ -404,7 +404,7 @@ export default function HomePage() {
             else if (s.sidebarOpen) s.setSidebarOpen(false)
             else if (s.settingsView) s.setSettingsView(null)
             else if (s.contactsView) s.setContactsView(false)
-            else if (s.adminView) s.setAdminView(false)
+            else if (s.adminView) s.setAdminView(null)
             return
           }
           // Main page — second press within 2.5s exits, like a native app

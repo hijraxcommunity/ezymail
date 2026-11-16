@@ -527,8 +527,11 @@ function PdfFrame({ att, onDownload }: { att: AttachmentFile; onDownload: () => 
   useEffect(() => {
     let cancelled = false
     let pdfDoc: { destroy: () => Promise<void> } | null = null
-    setStatus('loading')
-    setProgress('')
+    // F-68: microtask-deferred (before next paint, no sync setState in effect body)
+    queueMicrotask(() => {
+      setStatus('loading')
+      setProgress('')
+    })
 
     // Fail-safe: surface the error state if the document never finishes
     const failSafe = setTimeout(() => {

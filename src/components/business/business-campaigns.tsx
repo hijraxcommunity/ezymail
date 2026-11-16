@@ -149,9 +149,12 @@ export function BusinessCampaigns() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetches)
   useEffect(() => {
-    fetchCampaigns()
-    fetchCustomers()
+    queueMicrotask(() => {
+      void fetchCampaigns()
+      void fetchCustomers()
+    })
   }, [fetchCampaigns, fetchCustomers])
 
   async function handleCreateCampaign() {

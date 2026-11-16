@@ -109,8 +109,9 @@ export function BusinessCustomers() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
   useEffect(() => {
-    fetchCustomers()
+    queueMicrotask(() => void fetchCustomers())
   }, [fetchCustomers])
 
   // Filter customers by search

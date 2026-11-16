@@ -671,9 +671,14 @@ export function ComposeModal() {
     } catch { /* silent */ }
   }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail])
 
-  // Stable ref to saveDraftNow so the debounce effect doesn't reset when it recreates
+  // Stable ref to saveDraftNow so the debounce effect doesn't reset when it recreates.
+  // Assignment at COMMIT time (effect), not render - all readers are timers/
+  // callbacks that fire after commit, so the one-frame delay is unobservable
+  // (F-68 refs rule).
   const saveDraftNowRef = useRef(saveDraftNow)
-  saveDraftNowRef.current = saveDraftNow
+  useEffect(() => {
+    saveDraftNowRef.current = saveDraftNow
+  })
 
   // Debounced auto-save: saves 3s after user stops typing/changing fields
   useEffect(() => {

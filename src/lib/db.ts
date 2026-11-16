@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -12,7 +13,6 @@ function createPrismaClient() {
   // In production (Vercel), use the pg adapter for connection pooling
   // In development, use standard PrismaClient
   if (process.env.NODE_ENV === 'production' && connectionString.startsWith('postgresql://')) {
-    const { Pool } = require('pg')
     const pool = new Pool({
       connectionString,
       max: 5, // Max connections for serverless

@@ -152,7 +152,7 @@ export async function GET(
     // (/api/attachments serves the bytes with a 24h immutable cache).
     // Sending multi-MB data URLs here - duplicated again for the same email
     // inside `thread` - is what made opening emails slow.
-    const slimAttachments = (raw?: string | null): string | null | undefined => {
+    const slimAttachments = (raw: string | null): string | null => {
       if (!raw) return raw;
       try {
         const list = JSON.parse(raw);

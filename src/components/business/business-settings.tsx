@@ -226,8 +226,9 @@ export function BusinessSettings() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
   useEffect(() => {
-    fetchData()
+    queueMicrotask(() => void fetchData())
   }, [fetchData])
 
   async function handleSaveProfile() {

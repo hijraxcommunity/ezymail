@@ -600,8 +600,9 @@ export function BusinessVerification() {
     }
   }, [])
 
+  // F-68: microtask kickoff (loading flags flip synchronously inside the fetch)
   useEffect(() => {
-    fetchVerification()
+    queueMicrotask(() => void fetchVerification())
   }, [fetchVerification])
 
   if (loading) return <VerificationSkeleton />

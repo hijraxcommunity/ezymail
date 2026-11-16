@@ -23,6 +23,10 @@ export interface EmailWithSender extends Email {
   sender: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar' | 'bio'> | null;
   recipient: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'avatar' | 'bio'> | null;
   replies?: EmailWithSender[];
+  // Conversation badge: total messages in this conversation the viewer can
+  // see (list + search endpoints compute it server-side; the detail response
+  // has no thread badge, hence optional).
+  replyCount?: number;
 }
 
 export interface UndoAction {

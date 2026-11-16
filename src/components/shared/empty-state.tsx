@@ -6,7 +6,10 @@ import { Inbox, Clock, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface EmptyStateProps {
-  icon?: React.ElementType
+  // 'celebration' is the inbox sentinel: the folder-empty-state layer passes
+  // the string to request the celebration SVG variant (F-68: typed as part of
+  // the union instead of an ElementType-vs-string comparison).
+  icon?: React.ElementType | 'celebration'
   title: string
   description: string
   action?: { label: string; onClick: () => void }
@@ -69,7 +72,7 @@ interface FolderEmptyStateProps {
 }
 
 export function FolderEmptyState({ folder, isSearch, onClearSearch }: FolderEmptyStateProps) {
-  const messages: Record<string, { icon: React.ElementType | string; title: string; description: string }> = {
+  const messages: Record<string, { icon: React.ElementType | 'celebration'; title: string; description: string }> = {
     inbox: {
       icon: 'celebration',
       title: "You're all caught up!",

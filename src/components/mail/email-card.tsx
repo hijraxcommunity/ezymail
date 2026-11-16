@@ -402,7 +402,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
                   {email.subject || '(No subject)'}
                 </p>
-                {email.replyCount > 0 && (
+                {(email.replyCount ?? 0) > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
                     <MessageSquare className="w-2.5 h-2.5" />
                     {email.replyCount}
@@ -533,7 +533,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
               {email.subject || '(No subject)'}
             </p>
-            {email.replyCount > 0 && (
+            {(email.replyCount ?? 0) > 0 && (
               <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
                 <MessageSquare className="w-2.5 h-2.5" />
                 {email.replyCount}
