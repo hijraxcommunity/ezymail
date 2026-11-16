@@ -5,7 +5,7 @@ import {
   moveConversationToTrash,
   permanentlyDeleteConversation,
   restoreConversationFromTrash,
-  findOwnedSentTwin,
+  findOwnedSentTwinsBatch,
   dedupeThreadForViewer,
 } from '@/lib/mail/conversation';
 
@@ -106,21 +106,39 @@ export async function GET(
     // delete/undo can no longer change what it renders, and read-state no
     // longer leaks from another user's copy.
     const foreignRows = thread.filter((msg) => msg.recipientEmail !== session.email);
+    // F-34: the twin resolution used to run up to 40 x (twin lookup + full
+    // re-fetch) = up to 80 SEQUENTIAL queries per email open. The batch
+    // helper answers every per-row twin match (same recipient, same body,
+    // ±10s window, newest match, excluding the row itself — identical
+    // semantics to the old per-row query) in ONE grouped query, and the
+    // matched twins' full rows come back in a SECOND single query. The
+    // assembled ownTwinRows keep the foreignRows order the old loop pushed.
+    const twinByRowId = await findOwnedSentTwinsBatch(
+      db as never,
+      foreignRows,
+      session.email,
+      session.userId
+    );
+    const twinIds = [...new Set([...twinByRowId.values()].map((t) => t.id))];
+    const twinFullRows = twinIds.length
+      ? await db.email.findMany({
+          where: { id: { in: twinIds } },
+          include: {
+            sender: {
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+            },
+            recipient: {
+              select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
+            },
+          },
+        })
+      : [];
+    const twinFullById = new Map(twinFullRows.map((e) => [e.id, e]));
     const ownTwinRows: typeof thread = [];
-    for (const msg of foreignRows.slice(0, 40)) {
-      const twin = await findOwnedSentTwin(db as never, msg, session.email, session.userId);
+    for (const msg of foreignRows) {
+      const twin = twinByRowId.get(msg.id);
       if (!twin) continue;
-      const full = await db.email.findUnique({
-        where: { id: twin.id },
-        include: {
-          sender: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-          },
-          recipient: {
-            select: { id: true, email: true, firstName: true, lastName: true, avatar: true, bio: true },
-          },
-        },
-      });
+      const full = twinFullById.get(twin.id);
       if (full) ownTwinRows.push(full);
     }
     const dedupedThread = dedupeThreadForViewer(

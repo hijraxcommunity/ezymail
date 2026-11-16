@@ -323,7 +323,11 @@ export default function HomePage() {
       if (s.composeOpen || s.attachmentViewer || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
         lastBaseBackAt = 0 // In-app navigation resets the exit timer
         if (s.composeOpen) {
-          s.setComposeOpen(false)
+          // F-37: never close compose directly — the draft-save path would be
+          // skipped and content typed inside the 3s autosave debounce lost.
+          // Raise the close-request flag; compose-modal saves the draft, then
+          // closes (and the flag resets with it).
+          s.setRequestComposeClose(true)
         } else if (s.attachmentViewer) {
           s.setAttachmentViewer(null)
         } else if (s.selectedEmailId) {
@@ -392,7 +396,9 @@ export default function HomePage() {
           // Any open in-app view — step back toward the main page
           if (s.composeOpen || s.attachmentViewer || s.selectedEmailId || s.sidebarOpen || s.settingsView || s.contactsView || s.adminView) {
             lastBaseBackAt = 0 // In-app navigation resets the exit timer
-            if (s.composeOpen) s.setComposeOpen(false)
+            // F-37: same contract as the popstate handler above — request the
+            // save-then-close path instead of closing compose directly.
+            if (s.composeOpen) s.setRequestComposeClose(true)
             else if (s.attachmentViewer) s.setAttachmentViewer(null)
             else if (s.selectedEmailId) s.setSelectedEmailId(null)
             else if (s.sidebarOpen) s.setSidebarOpen(false)

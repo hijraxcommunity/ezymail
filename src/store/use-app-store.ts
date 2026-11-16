@@ -181,6 +181,12 @@ interface AppState {
   selectedEmailId: string | null;
   composeOpen: boolean;
   requestComposeClose: boolean;
+  // F-37: the back-button contract — external callers (popstate, Android
+  // backButton) must NEVER close compose directly (setComposeOpen would skip
+  // the draft-save path and lose content typed inside the 3s autosave
+  // debounce). They raise this flag instead; compose-modal watches it and
+  // runs the save-then-close path. Opening/closing compose resets it.
+  setRequestComposeClose: (v: boolean) => void;
   replyToEmail: EmailWithSender | null;
   replyMode: 'reply' | 'replyAll' | 'forward' | null;
   editDraftEmail: EmailWithSender | null;
@@ -565,6 +571,11 @@ export const useAppStore = create<AppState>()(
       },
       setSelectedEmailId: (id) => set({ selectedEmailId: id, emailDetailOpen: !!id }),
       setComposeOpen: (open) => set({ composeOpen: open, replyToEmail: null, replyMode: null, editDraftEmail: null, requestComposeClose: false }),
+      // F-37: see setRequestComposeClose in the interface. Compose-modal
+      // consumes the flag via an effect and calls the save-then-close path;
+      // setComposeOpen(false) inside handleClose resets the flag, so a stale
+      // true can never close a compose that opens later.
+      setRequestComposeClose: (v) => set({ requestComposeClose: v }),
       setReplyToEmail: (email, mode) => set({ replyToEmail: email, composeOpen: true, replyMode: mode || null }),
       setEditDraftEmail: (email) => set({ editDraftEmail: email, composeOpen: true }),
       setSearchQuery: (query) => set({ searchQuery: query }),

@@ -396,6 +396,11 @@ export function ComposeModal() {
     // persisted. Editing a specific draft anchors to that draft; every
     // other open path starts clean.
     savedDraftIdRef.current = editDraftEmail?.id || null
+    // F-61: the forward attachment carry runs async (it fetches each source
+    // file from /api/attachments); if compose closes/reopens before the
+    // fetches finish, the stale loop must not write into the NEW session's
+    // attachment state. The effect cleanup flips this flag.
+    let forwardCarryCancelled = false
 
     if (restoreDataRef.current) {
       const data = restoreDataRef.current
@@ -492,6 +497,67 @@ export function ComposeModal() {
           : `Fwd: ${replyToEmail.subject || '(No subject)'}`)
         const fwdBody = `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-top:16px;color:#555"><p>---------- Forwarded message ----------</p><p>From: ${senderName} &lt;${senderEmail}&gt;</p><p>Date: ${new Date(replyToEmail.createdAt).toLocaleString()}</p><p>Subject: ${replyToEmail.subject || '(No subject)'}</p><br>${replyToEmail.bodyHtml || replyToEmail.body?.replace(/\n/g, '<br>') || ''}</div>`
         editor.commands.setContent(fwdBody)
+        // F-61: forward used to build the quoted body only — the original
+        // email's attachments were silently dropped (handleSend sends only
+        // freshly-picked files). Carry the source attachments through the
+        // SAME pipeline a manual pick uses: fetch each file from the
+        // same-origin /api/attachments route (session-scoped, data already
+        // verified against the viewer's mailbox), wrap it as a File, and put
+        // it in the attachments state so the normal upload-then-send path
+        // uploads and attaches it. The same MAX_FILES / MAX_TOTAL_SIZE limits
+        // as manual picks apply — anything that no longer fits is dropped
+        // LOUDLY (toast), never silently.
+        const rawFwdAtts = replyToEmail.attachments
+        if (rawFwdAtts) {
+          let fwdSrcAtts: Array<{ name?: string; url?: string; size?: number; type?: string }> = []
+          try {
+            const parsed = typeof rawFwdAtts === 'string' ? JSON.parse(rawFwdAtts) : rawFwdAtts
+            if (Array.isArray(parsed)) fwdSrcAtts = parsed
+          } catch { fwdSrcAtts = [] }
+          const fetchable = fwdSrcAtts.filter(
+            (a): a is { name?: string; url: string; size?: number; type?: string } =>
+              !!a && typeof a.url === 'string' && a.url.startsWith('/api/attachments/')
+          )
+          if (fetchable.length > 0) {
+            void (async () => {
+              const carried: File[] = []
+              let carriedSize = 0
+              let dropped = 0
+              for (const att of fetchable) {
+                if (carried.length >= MAX_FILES || carriedSize + (Number(att.size) || 0) > MAX_TOTAL_SIZE) {
+                  dropped++
+                  continue
+                }
+                try {
+                  const res = await fetch(att.url)
+                  if (!res.ok) { dropped++; continue }
+                  const blob = await res.blob()
+                  if (carriedSize + blob.size > MAX_TOTAL_SIZE) { dropped++; continue }
+                  carriedSize += blob.size
+                  carried.push(new File([blob], att.name || 'attachment', {
+                    type: att.type || blob.type || 'application/octet-stream',
+                  }))
+                } catch { dropped++ }
+              }
+              if (forwardCarryCancelled || carried.length === 0) {
+                if (!forwardCarryCancelled && dropped > 0) {
+                  toast.error(`Could not attach ${dropped} of the original file(s). Attach them manually before sending.`)
+                }
+                return
+              }
+              setAttachments(prev => {
+                const room = MAX_FILES - prev.length
+                if (room <= 0) return prev
+                return [...prev, ...carried.slice(0, room)]
+              })
+              if (dropped > 0) {
+                toast(`Attached ${carried.length} of ${fetchable.length} original file(s) — the rest exceed the ${MAX_FILES}-file / ${MAX_TOTAL_SIZE / 1024 / 1024}MB forward limit.`, { duration: 6000 })
+              } else {
+                toast.success(`Attached ${carried.length} file(s) from the original email`)
+              }
+            })()
+          }
+        }
       } else {
         const senderName2 = replyToEmail.sender
           ? `${replyToEmail.sender.firstName} ${replyToEmail.sender.lastName}`
@@ -563,6 +629,9 @@ export function ComposeModal() {
     setShowSchedulePopover(false)
     setShowTemplatesPopover(false)
     setErrors({})
+    // F-61: cancel an in-flight forward attachment carry from the PREVIOUS
+    // compose session before the next one writes its own state.
+    return () => { forwardCarryCancelled = true }
   }, [composeOpen, editor, replyToEmail, replyMode])
 
   // Cleanup timers
@@ -671,7 +740,12 @@ export function ComposeModal() {
       .join(', ')
   }
 
-  const actuallySendEmail = useCallback(async (data: PendingSendData) => {
+  // F-62: returns whether the scheduled send actually persisted. The caller
+  // (scheduled branch of handleSend) awaits it and toasts/cleans up only on
+  // success — the old fire-and-forget showed success BEFORE the request
+  // resolved, then a second contradictory error toast arrived on failure.
+  // Error toasts still fire inside this function (same messages as before).
+  const actuallySendEmail = useCallback(async (data: PendingSendData): Promise<boolean> => {
     try {
       const finalTo = processRecipients(data.to)
       const payload: Record<string, unknown> = {
@@ -692,7 +766,7 @@ export function ComposeModal() {
         const totalSize = data.attachments.reduce((s, a) => s + (a.size || 0), 0)
         if (data.attachments.length > MAX_FILES || totalSize > MAX_TOTAL_SIZE) {
           toast.error(`Attachments exceed the ${MAX_FILES}-file / ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit. Please remove some attachments and try again.`)
-          return
+          return false
         }
         payload.attachments = data.attachments.map(a => ({ name: a.name, url: a.url, size: a.size, type: a.type, data: a.data }))
       }
@@ -708,9 +782,12 @@ export function ComposeModal() {
       if (!res.ok) {
         const errData = await res.json()
         toast.error(errData.error || 'Failed to send email')
+        return false
       }
+      return true
     } catch {
       toast.error('Failed to send email')
+      return false
     }
   }, [])
 
@@ -882,16 +959,25 @@ export function ComposeModal() {
       setShowSchedulePopover(false)
 
       if (scheduledAtDate) {
-        // Schedule send — send immediately to API (no undo)
-        toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
-        actuallySendEmail(data)
-        // F-23: send consumes the auto-saved draft (ghost draft cleanup).
-        const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
-        if (draftIdToDelete) {
-          fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
+        // F-62: schedule send — await the request, THEN give feedback. The old
+        // path toasted success immediately and fired the send in the
+        // background, so a failed request left a false "scheduled" toast plus
+        // a contradictory error toast afterwards — and deleted the auto-saved
+        // draft even though nothing was scheduled (content loss). Now: the
+        // success toast and the draft cleanup run only when the send really
+        // persisted; on failure the in-function error toast is the only
+        // feedback and the auto-saved draft stays in Drafts for retry.
+        const scheduledOk = await actuallySendEmail(data)
+        if (scheduledOk) {
+          toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
+          // F-23: send consumes the auto-saved draft (ghost draft cleanup).
+          const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
+          if (draftIdToDelete) {
+            fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
+          }
+          savedDraftIdRef.current = null
+          pendingReplyRef.current = null
         }
-        savedDraftIdRef.current = null
-        pendingReplyRef.current = null
       } else {
         // Normal send with undo
         const sendResult = await actuallySendEmailWithResponse(data)

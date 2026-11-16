@@ -18,6 +18,29 @@ function csvEscape(val: unknown): string {
   return str;
 }
 
+// F-36: the export used to be ONE unbounded findMany that pulled every
+// email's FULL body, bodyHtml and base64 attachment data for both the sent
+// and the received copies — a heavy mailbox produced a multi-hundred-MB
+// response assembled in memory (OOM/timeout risk). Now bounded:
+//   - attachment base64 `data` fields are stripped, the {name,url,size,type}
+//     metadata is kept (what the export conveys, not the bytes);
+//   - bodyHtml is omitted — body carries the content, bodyHtml only the
+//     styling, and it routinely doubles the payload;
+//   - the email set is capped (newest first) with an explicit truncation
+//     marker so the artifact never silently lies about completeness.
+const EXPORT_EMAIL_CAP = 5000;
+
+function stripAttachmentData(raw: string | null): string | null {
+  if (!raw) return raw;
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return raw;
+    return JSON.stringify(list.map(({ data: _drop, ...rest }) => rest));
+  } catch {
+    return raw;
+  }
+}
+
 // GET /api/user/export - Export all user data
 export async function GET(request: NextRequest) {
   try {
@@ -60,19 +83,26 @@ export async function GET(request: NextRequest) {
             { recipientEmail: session.email },
           ],
         },
+        // F-36: cap + 1 so the truncation marker is exact; sender email is
+        // included so the CSV From column can carry the REAL sender of each
+        // row (it used to print the exporting user's address for sent rows
+        // and '' for received rows).
+        take: EXPORT_EMAIL_CAP + 1,
         select: {
           id: true,
           senderId: true,
           recipientEmail: true,
           subject: true,
           body: true,
-          bodyHtml: true,
           attachments: true,
           isRead: true,
           isStarred: true,
           isArchived: true,
           folder: true,
           createdAt: true,
+          sender: {
+            select: { email: true },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -130,6 +160,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    // F-36: exact truncation — the query fetched cap + 1 rows.
+    const emailsTruncated = emails.length > EXPORT_EMAIL_CAP;
+    if (emailsTruncated) emails.length = EXPORT_EMAIL_CAP;
+    const exportEmails = emails.map((email) => ({
+      ...email,
+      senderEmail: email.sender?.email || null,
+      sender: undefined,
+      attachments: stripAttachmentData(email.attachments),
+    }));
+
     const timestamp = new Date().toISOString().slice(0, 10);
 
     if (format === 'json') {
@@ -139,7 +179,9 @@ export async function GET(request: NextRequest) {
           ...user,
           preferences: JSON.parse(user.preferences || '{}'),
         },
-        emails,
+        emails: exportEmails,
+        emailsTruncated,
+        emailsExported: exportEmails.length,
         contacts,
         folders,
         labels,
@@ -172,12 +214,14 @@ export async function GET(request: NextRequest) {
       'Created At',
     ];
 
-    const csvRows = emails.map((email) => {
+    const csvRows = exportEmails.map((email) => {
       return [
         csvEscape(email.id),
         csvEscape(email.folder),
         csvEscape(email.subject),
-        csvEscape(email.senderId === session.userId ? user.email : ''),
+        // F-36: the row's REAL sender — the exporting user's own address was
+        // printed for sent rows and '' for everything received.
+        csvEscape(email.senderEmail || ''),
         csvEscape(email.recipientEmail),
         csvEscape(email.body),
         csvEscape(email.attachments || ''),
@@ -217,6 +261,9 @@ export async function GET(request: NextRequest) {
       '# Emails',
       csvHeaders.join(','),
       ...csvRows,
+      ...(emailsTruncated
+        ? [`# NOTE: export capped at ${EXPORT_EMAIL_CAP} newest emails — older rows were truncated (F-36)`]
+        : []),
       '',
       '# Contacts',
       contactHeaders.join(','),

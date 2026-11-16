@@ -11,6 +11,7 @@ import {
   Shield,
   Clock,
   CheckCircle,
+  Info,
   X,
   Pencil,
   Crown,
@@ -170,7 +171,11 @@ export function BusinessTeam() {
       })
 
       if (res.ok) {
-        toast.success(`Invitation sent to ${inviteEmail.trim()}`)
+        // F-20: the old toast said "Invitation sent" — but the endpoint only
+        // records the row. No email is delivered, there is no acceptance
+        // flow, and invited members get no workspace access yet. The toast
+        // must not claim delivery that does not happen.
+        toast.success(`Invite recorded for ${inviteEmail.trim()} — team member access is not available yet`, { duration: 6000 })
         setInviteEmail('')
         setInviteRole('member')
         setShowInviteForm(false)
@@ -264,7 +269,7 @@ export function BusinessTeam() {
               <div>
                 <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">Team Management</h2>
                 <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                  Manage your team members and permissions
+                  Record teammates and roles — member access is not available yet
                 </p>
               </div>
             </div>
@@ -283,6 +288,20 @@ export function BusinessTeam() {
           </Button>
         </div>
       </motion.div>
+
+      {/* ─── F-20: honest state banner ───
+          The Team feature currently records invite rows only — nothing is
+          delivered, nothing can be accepted, and invited members get no
+          access to the business workspace. Until invite delivery, acceptance
+          and member resolution are built, this page says so explicitly
+          instead of implying a working collaboration feature. */}
+      <div className="rounded-2xl ring-1 ring-[#FBBC04]/30 bg-[#FBBC04]/5 p-4 flex items-start gap-3">
+        <Info className="w-4 h-4 text-[#FBBC04] mt-0.5 shrink-0" />
+        <p className="text-[13px] text-gray-600 dark:text-gray-300">
+          Invites are recorded only — no email is sent and members cannot access the business workspace yet.
+          Invite delivery and member access are planned; the entries below are kept as your team roster.
+        </p>
+      </div>
 
       {/* ─── Pending Invites Section ─── */}
       {pendingInvites.length > 0 && (
@@ -330,7 +349,8 @@ export function BusinessTeam() {
                 Invite a New Team Member
               </h4>
               <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-4">
-                Invite a team member to collaborate on your business email account.
+                Records the teammate&apos;s email and role in your team roster. No email is sent and they cannot
+                access the business workspace yet.
               </p>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
@@ -373,7 +393,7 @@ export function BusinessTeam() {
                     ) : (
                       <Mail className="w-4 h-4" />
                     )}
-                    Send Invite
+                    Record Invite
                   </Button>
                   <Button
                     variant="outline"

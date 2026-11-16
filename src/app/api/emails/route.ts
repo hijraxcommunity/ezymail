@@ -159,6 +159,18 @@ export async function GET(request: NextRequest) {
     const total = totalConversations;
 
     const repIds = pageRepresentatives.map((r) => r.id);
+    // F-34: the client polls this endpoint every 15s, and the response used
+    // to carry every representative's FULL body AND bodyHtml — megabytes of
+    // re-serialized content per poll on a busy mailbox. The list consumers
+    // need only a preview: the card snippet reads body.substring(0, 100)
+    // (email-card.tsx) and nothing on the list path reads bodyHtml EXCEPT
+    // draft editing, which passes the list ROW straight into the compose
+    // editor (email-card -> setEditDraftEmail -> editDraftEmail.bodyHtml).
+    // So: drafts keep the full body + bodyHtml (content correctness beats
+    // payload size), every other folder gets a 300-char body slice and no
+    // bodyHtml at all.
+    const isDraftsFolder = folder === 'drafts';
+    const LIST_PREVIEW_CHARS = 300;
     const fullRows = repIds.length
       ? await db.email.findMany({
           where: { ...where, id: { in: repIds } },
@@ -219,8 +231,6 @@ export async function GET(request: NextRequest) {
       senderId: email.senderId,
       recipientEmail: email.recipientEmail,
       subject: email.subject,
-      body: email.body,
-      bodyHtml: email.bodyHtml,
       isRead: email.isRead,
       isStarred: email.isStarred,
       isArchived: email.isArchived,
@@ -235,6 +245,13 @@ export async function GET(request: NextRequest) {
       createdAt: email.createdAt,
       sender: email.sender,
       recipient: email.recipient,
+      // F-34: preview slices on the list path — see the isDraftsFolder note
+      // above. Non-drafts: body sliced to LIST_PREVIEW_CHARS (the snippet
+      // uses the first 100), bodyHtml omitted ('' keeps the field type
+      // stable for the client; it is falsy either way). Drafts: full content
+      // so editing a draft from the list never truncates the editor prefill.
+      body: isDraftsFolder ? email.body : (email.body || '').slice(0, LIST_PREVIEW_CHARS),
+      bodyHtml: isDraftsFolder ? email.bodyHtml : '',
       // The conversation badge = every message of this conversation the
        // user can see in this folder (the visible row + the members folded
        // under it). The old value (the row's direct children) was almost

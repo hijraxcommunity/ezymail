@@ -43,6 +43,9 @@ interface Analytics {
   totalCampaigns: number
   totalOpens: number
   totalClicks: number
+  // F-21: real campaign audience denominator (unique campaign-recipient
+  // rows). The engagement charts read against THIS, not totalCustomers.
+  totalRecipients: number
   openRate: number
   clickRate: number
   teamMemberCount: number
@@ -173,7 +176,10 @@ export function BusinessAnalytics() {
   const { user } = useAppStore()
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeRange, setActiveRange] = useState<'7d' | '30d' | 'all'>('30d')
+  // F-21: the 7d/30d/All-Time range switcher was removed. It changed local
+  // state only — the API accepts no range parameter, so the numbers never
+  // changed and the control was decorative (audit F-21). It returns when
+  // /api/business/analytics learns to accept a range.
 
   useEffect(() => {
     async function fetchData() {
@@ -197,17 +203,25 @@ export function BusinessAnalytics() {
 
   if (loading) return <AnalyticsSkeleton />
 
-  // Build chart data
+  // Build chart data — F-21: every chart reads against the REAL campaign
+  // audience (totalRecipients, returned by the API now) instead of mixing
+  // customer counts into campaign metrics, and the ||1 distortions are gone
+  // (guards happen at render time instead, so zeros render as "no data").
   const campaignBarData = analytics && analytics.totalCampaigns > 0 ? [
-    { name: 'Recipients', value: analytics.totalCustomers },
+    { name: 'Recipients', value: analytics.totalRecipients },
     { name: 'Opens', value: analytics.totalOpens },
     { name: 'Clicks', value: analytics.totalClicks },
   ] : []
 
+  // Funnel decomposition (clicks are a subset of opens — a click requires an
+  // open), so the three slices never overlap and sum to totalRecipients:
+  //   Clicked          = totalClicks
+  //   Opened, no click = totalOpens - totalClicks
+  //   No Engagement    = totalRecipients - totalOpens
   const engagementPieData = analytics ? [
-    { name: 'Opens', value: analytics.totalOpens || 1 },
-    { name: 'Clicks', value: analytics.totalClicks || 1 },
-    { name: 'No Engagement', value: Math.max(0, (analytics.totalCustomers - analytics.totalOpens)) || 1 },
+    { name: 'Clicked', value: Math.max(0, analytics.totalClicks) },
+    { name: 'Opened, no click', value: Math.max(0, analytics.totalOpens - analytics.totalClicks) },
+    { name: 'No Engagement', value: Math.max(0, analytics.totalRecipients - analytics.totalOpens) },
   ] : []
 
   const activityData = analytics?.recentActivity || []
@@ -222,21 +236,9 @@ export function BusinessAnalytics() {
             Detailed performance metrics and insights
           </p>
         </div>
-        <div className="flex items-center gap-1.5 rounded-xl ring-1 ring-gray-200/80 dark:ring-gray-800/80 bg-white dark:bg-gray-900 p-1">
-          {([['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All Time']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveRange(key)}
-              className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
-                activeRange === key
-                  ? 'bg-[#4285F4] text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* F-21: the decorative 7d/30d/All-Time switcher lived here. It sent
+            nothing to the API (which accepts no range parameter), so the
+            charts never changed — removed instead of pretending to filter. */}
       </div>
 
       {/* ─── Stat Cards ─── */}
@@ -368,7 +370,7 @@ export function BusinessAnalytics() {
             <TrendingUp className="w-5 h-5 text-[#34A853]" />
             <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Engagement Breakdown</h3>
           </div>
-          {analytics && analytics.totalCustomers > 0 ? (
+          {analytics && analytics.totalRecipients > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie

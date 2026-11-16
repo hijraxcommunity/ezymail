@@ -556,6 +556,87 @@ export async function findOwnedSentTwin(
   return asRows(found)[0] ?? null;
 }
 
+/** The twin-lookup cap shared with the detail endpoint (F-34). */
+export const TWIN_LOOKUP_CAP = 40;
+
+/**
+ * F-34: batched twin resolution. The detail endpoint used to call
+ * findOwnedSentTwin once per foreign thread row (up to TWIN_LOOKUP_CAP
+ * rows) — each call its own query — and then re-fetched every matched twin
+ * full-row one by one: up to 2 x 40 = 80 sequential queries per email open.
+ *
+ * This helper resolves ALL twin lookups in ONE grouped query: the same
+ * match semantics per row (same recipient, same exact body, createdAt
+ * within ±10s, newest match first, excluding the row itself), evaluated in
+ * JS against one bounded result set. Returns a map keyed by the foreign
+ * row's id (the same id the per-row helper would have been called with);
+ * rows that have no twin (or are the viewer's own) are absent from the map.
+ * Callers still own the full-row fetch — do ONE findMany over the matched
+ * twin ids instead of a findUnique per twin.
+ */
+export async function findOwnedSentTwinsBatch(
+  tx: MailTx,
+  rows: ReadonlyArray<{
+    id: string;
+    recipientEmail: string;
+    body: string | null;
+    createdAt: Date | string;
+  }>,
+  userEmail: string,
+  userId: string
+): Promise<Map<string, MemberRow>> {
+  const foreign = rows
+    .filter((r) => r.recipientEmail !== userEmail)
+    .slice(0, TWIN_LOOKUP_CAP);
+  const result = new Map<string, MemberRow>();
+  if (foreign.length === 0) return result;
+
+  // One query covering every foreign row's per-row match condition. The
+  // per-row `id: { not: row.id }` exclusion moves into the JS grouping
+  // below; everything else is identical to findOwnedSentTwin's WHERE.
+  const found = await tx.email.findMany({
+    where: {
+      senderId: userId,
+      folder: 'sent',
+      OR: foreign.map((r) => {
+        const created = new Date(r.createdAt).getTime();
+        return {
+          recipientEmail: r.recipientEmail,
+          body: r.body ?? '',
+          createdAt: {
+            gte: new Date(created - 10_000),
+            lte: new Date(created + 10_000),
+          },
+        };
+      }),
+    },
+    select: MEMBER_SELECT,
+    orderBy: { createdAt: 'desc' },
+    // Bounded: TWIN_LOOKUP_CAP groups, newest-first — every group needs at
+    // most its newest match, so cap x 5 candidates is ample headroom for
+    // duplicate sends inside one window while keeping the scan bounded.
+    take: TWIN_LOOKUP_CAP * 5,
+  });
+  const candidates = asRows(found);
+
+  for (const r of foreign) {
+    const targetTime = new Date(r.createdAt).getTime();
+    // The query returned candidates newest-first; the first candidate that
+    // matches THIS row (same recipient, same body, inside the ±10s window,
+    // not the row itself) is exactly the row findOwnedSentTwin's
+    // `take: 1, orderBy: createdAt desc` would have returned.
+    const match = candidates.find(
+      (c) =>
+        c.id !== r.id &&
+        c.recipientEmail === r.recipientEmail &&
+        c.body === (r.body ?? '') &&
+        Math.abs(new Date(c.createdAt).getTime() - targetTime) <= 10_000
+    );
+    if (match) result.set(r.id, match);
+  }
+  return result;
+}
+
 export interface ThreadCopyRow {
   id: string;
   senderId: string;

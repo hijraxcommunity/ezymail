@@ -90,6 +90,12 @@ export async function GET() {
         totalCampaigns,
         totalOpens,
         totalClicks,
+        // F-21: the real campaign audience denominator. It was computed here
+        // all along but never returned, so the UI charts fell back to
+        // customer counts and an invented formula — authoritative-looking
+        // numbers measuring the wrong thing. The engagement charts now read
+        // opens/clicks against THIS value.
+        totalRecipients,
         openRate,
         clickRate,
         teamMemberCount: teamMemberCountResult,

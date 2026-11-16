@@ -16,7 +16,7 @@ interface Action {
 /**
  * Evaluate a single condition against an email.
  */
-function evaluateCondition(email: { sender?: { email: string; firstName: string; lastName: string } | null; recipientEmail: string; subject: string; body: string; attachments: string | null }, condition: Condition): boolean {
+function evaluateCondition(email: { sender?: { email: string; firstName: string; lastName: string } | null; recipientEmail: string; subject: string; body: string; attachments?: string | null }, condition: Condition): boolean {
   const { field, operator, value } = condition;
   const lowerValue = value.toLowerCase();
 
@@ -214,24 +214,64 @@ export async function POST(
       }
     }
 
-    // Fetch all inbox emails for the user
+    // F-35: the scan used to be `findMany` with NO take and a blanket
+    // `include` — every inbox row's FULL body, bodyHtml AND base64
+    // attachment blobs, all re-serialized into JS and evaluated per run.
+    // One large mailbox made a single rule click slow/memory-heavy. Now:
+    //
+    // 1. `hasAttachment` conditions are pushed into the WHERE clause — the
+    //    attachments column stores null (no files) or a JSON string (files
+    //    present, verified: the send path writes null/JSON.stringify, never
+    //    '' or '[]'), so `attachments: { not: null }` / `attachments: null`
+    //    is EXACTLY the JS truthiness the old evaluator applied, without
+    //    loading the blobs.
+    // 2. The select is slim — only the fields evaluateCondition reads
+    //    (bodyHtml and attachment payloads were dead weight here).
+    // 3. The scan is bounded: newest RULE_SCAN_CAP inbox rows per run.
+    //    totalInboxEmails reports the SCANNED count.
+    const RULE_SCAN_CAP = 500;
+
+    interface ScanCondition { field: string; operator: string; value: string }
+    const attachmentFilters: Array<Record<string, unknown>> = [];
+    const jsConditions: ScanCondition[] = [];
+    for (const condition of conditions as ScanCondition[]) {
+      if (condition && condition.field === 'hasAttachment') {
+        // Same truthiness contract as evaluateCondition's hasAttachment case:
+        // value 'true' ↔ attachments not null, anything else ↔ null.
+        attachmentFilters.push(
+          String(condition.value).toLowerCase() === 'true'
+            ? { attachments: { not: null } }
+            : { attachments: null }
+        );
+      } else {
+        jsConditions.push(condition);
+      }
+    }
+
     const inboxEmails = await db.email.findMany({
       where: {
         recipientEmail: session.email,
         folder: 'inbox',
+        ...(attachmentFilters.length > 0 ? { AND: attachmentFilters } : {}),
       },
-      include: {
+      orderBy: { createdAt: 'desc' },
+      take: RULE_SCAN_CAP,
+      select: {
+        id: true,
+        recipientEmail: true,
+        subject: true,
+        body: true,
         sender: {
           select: { email: true, firstName: true, lastName: true },
         },
       },
     });
 
-    // Evaluate each email against all conditions
+    // Evaluate each email against the remaining (non-attachment) conditions
     const matchingEmailIds: string[] = [];
 
     for (const email of inboxEmails) {
-      const allMatch = conditions.every((condition) =>
+      const allMatch = jsConditions.every((condition) =>
         evaluateCondition(email, condition)
       );
 

@@ -22,6 +22,8 @@ interface Analytics {
   totalCampaigns: number
   totalOpens: number
   totalClicks: number
+  // F-21: real campaign audience denominator (returned by the API now).
+  totalRecipients: number
   openRate: number
   clickRate: number
   teamMemberCount: number
@@ -105,16 +107,22 @@ export function BusinessDashboard() {
     { name: 'Clicks', value: analytics.totalClicks },
   ] : []
 
+  // F-21: the campaign bar reads against the real audience (totalRecipients),
+  // not the customer count — customers and campaign recipients are different
+  // populations.
   const campaignChart = analytics ? [
-    { name: 'Customers', value: analytics.totalCustomers },
+    { name: 'Recipients', value: analytics.totalRecipients },
     { name: 'Opens', value: analytics.totalOpens },
     { name: 'Clicks', value: analytics.totalClicks },
   ] : []
 
+  // F-21: the engagement pie used to invent "No Response = campaigns*10 -
+  // opens - clicks". Real funnel decomposition against the audience
+  // (clicks ⊆ opens, slices never overlap, sum = totalRecipients):
   const engagementPie = analytics ? [
-    { name: 'Opened', value: analytics.totalOpens || 0 },
-    { name: 'Clicked', value: analytics.totalClicks || 0 },
-    { name: 'No Response', value: Math.max(0, analytics.totalCampaigns * 10 - analytics.totalOpens - analytics.totalClicks) || 0 },
+    { name: 'Clicked', value: Math.max(0, analytics.totalClicks) },
+    { name: 'Opened, no click', value: Math.max(0, analytics.totalOpens - analytics.totalClicks) },
+    { name: 'No Response', value: Math.max(0, analytics.totalRecipients - analytics.totalOpens) },
   ] : []
 
   if (loading) return <DashboardSkeleton />
@@ -263,7 +271,9 @@ export function BusinessDashboard() {
             </div>
             <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Engagement</h3>
           </div>
-          {(analytics?.totalOpens || 0) > 0 ? (
+          {/* F-21: gate on the real audience, not opens — opens can be 0
+              while the pie should still show "No Response" for delivered mail. */}
+          {(analytics?.totalRecipients || 0) > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie data={engagementPie} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value" strokeWidth={0}>
