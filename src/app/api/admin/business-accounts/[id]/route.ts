@@ -89,7 +89,12 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({ account, recentCampaigns });
+    // F-30: the detail dialog expects the standard { success, data } envelope
+    // (admin-panel.tsx reads data.success && data.data); the bare
+    // { account, recentCampaigns } shape was fetched and silently discarded,
+    // so the dialog kept showing row-level data. Merge recentCampaigns into
+    // the account object so every enriched field travels in data.
+    return NextResponse.json({ success: true, data: { ...account, recentCampaigns } });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Admin get business account error:', message);

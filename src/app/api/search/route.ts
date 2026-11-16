@@ -98,10 +98,10 @@ function buildWhereClause(ops: ParsedOperators, userId: string, email: string): 
   if (ops.generalQuery) {
     conditions.push({
       OR: [
-        { subject: { contains: ops.generalQuery } },
-        { body: { contains: ops.generalQuery } },
-        { sender: { firstName: { contains: ops.generalQuery } } },
-        { sender: { lastName: { contains: ops.generalQuery } } },
+        { subject: { contains: ops.generalQuery, mode: 'insensitive' } },
+        { body: { contains: ops.generalQuery, mode: 'insensitive' } },
+        { sender: { firstName: { contains: ops.generalQuery, mode: 'insensitive' } } },
+        { sender: { lastName: { contains: ops.generalQuery, mode: 'insensitive' } } },
       ],
     });
   }
@@ -110,9 +110,9 @@ function buildWhereClause(ops: ParsedOperators, userId: string, email: string): 
   if (ops.from) {
     conditions.push({
       OR: [
-        { sender: { email: { contains: ops.from } } },
-        { sender: { firstName: { contains: ops.from } } },
-        { sender: { lastName: { contains: ops.from } } },
+        { sender: { email: { contains: ops.from, mode: 'insensitive' } } },
+        { sender: { firstName: { contains: ops.from, mode: 'insensitive' } } },
+        { sender: { lastName: { contains: ops.from, mode: 'insensitive' } } },
       ],
     });
   }
@@ -121,10 +121,10 @@ function buildWhereClause(ops: ParsedOperators, userId: string, email: string): 
   if (ops.to) {
     conditions.push({
       OR: [
-        { recipientEmail: { contains: ops.to } },
-        { recipient: { email: { contains: ops.to } } },
-        { recipient: { firstName: { contains: ops.to } } },
-        { recipient: { lastName: { contains: ops.to } } },
+        { recipientEmail: { contains: ops.to, mode: 'insensitive' } },
+        { recipient: { email: { contains: ops.to, mode: 'insensitive' } } },
+        { recipient: { firstName: { contains: ops.to, mode: 'insensitive' } } },
+        { recipient: { lastName: { contains: ops.to, mode: 'insensitive' } } },
       ],
     });
   }
@@ -132,7 +132,7 @@ function buildWhereClause(ops: ParsedOperators, userId: string, email: string): 
   // Subject filter
   if (ops.subject) {
     conditions.push({
-      subject: { contains: ops.subject },
+      subject: { contains: ops.subject, mode: 'insensitive' },
     });
   }
 
@@ -140,8 +140,8 @@ function buildWhereClause(ops: ParsedOperators, userId: string, email: string): 
   if (ops.body) {
     conditions.push({
       OR: [
-        { body: { contains: ops.body } },
-        { bodyHtml: { contains: ops.body } },
+        { body: { contains: ops.body, mode: 'insensitive' } },
+        { bodyHtml: { contains: ops.body, mode: 'insensitive' } },
       ],
     });
   }
@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
         emailLabels: {
           some: {
             label: {
-              name: { contains: label },
+              name: { contains: label, mode: 'insensitive' },
               userId: session.userId,
             },
           },

@@ -8,16 +8,26 @@ const addLabelsSchema = z.object({
 })
 
 /**
- * Returns the email only when it exists AND the session user may access it.
- * Access follows the same rule as /api/emails/[id]: the user is the sender
- * or the recipient. Returns null otherwise, so callers answer 404 and never
- * confirm the existence of another user's email.
+ * Returns the email row only when it exists AND it belongs to the session
+ * user's OWN mailbox — not merely when they can see it.
+ *
+ * F-29: the old access rule (sender OR recipient) let a sender pass the
+ * check on the RECIPIENT's inbox copy (senderId matches) and attach his own
+ * labels to someone else's row; the recipient then saw foreign labels on
+ * their mail. Ownership follows the same mailbox-scope rule the lifecycle
+ * primitives use: a received copy (recipientEmail = caller, folder != sent)
+ * belongs to the recipient; a sent copy (senderId = caller, folder = sent)
+ * belongs to the sender. Returns null otherwise, so callers answer 404 and
+ * never confirm the existence of another user's email.
  */
-async function getEmailIfAccessible(emailId: string, userId: string, userEmail: string) {
+async function getOwnEmailRow(emailId: string, userId: string, userEmail: string) {
   return db.email.findFirst({
     where: {
       id: emailId,
-      OR: [{ senderId: userId }, { recipientEmail: userEmail }],
+      OR: [
+        { recipientEmail: userEmail, folder: { not: 'sent' } },
+        { senderId: userId, folder: 'sent' },
+      ],
     },
     select: { id: true },
   })
@@ -31,13 +41,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const { id } = await params
-    const email = await getEmailIfAccessible(id, session.userId, session.email)
+    const email = await getOwnEmailRow(id, session.userId, session.email)
     if (!email) {
       return NextResponse.json({ success: false, error: 'Email not found' }, { status: 404 })
     }
 
+    // F-29: scope to the caller's OWN labels. Pre-fix data could carry
+    // foreign label rows on this mailbox's email; those are never surfaced.
     const emailLabels = await db.emailLabel.findMany({
-      where: { emailId: id },
+      where: { emailId: id, label: { userId: session.userId } },
       include: { label: true },
     })
 
@@ -57,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const { id } = await params
-    const email = await getEmailIfAccessible(id, session.userId, session.email)
+    const email = await getOwnEmailRow(id, session.userId, session.email)
     if (!email) {
       return NextResponse.json({ success: false, error: 'Email not found' }, { status: 404 })
     }
@@ -101,7 +113,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const { id } = await params
-    const email = await getEmailIfAccessible(id, session.userId, session.email)
+    const email = await getOwnEmailRow(id, session.userId, session.email)
     if (!email) {
       return NextResponse.json({ success: false, error: 'Email not found' }, { status: 404 })
     }

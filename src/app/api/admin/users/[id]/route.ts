@@ -102,6 +102,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Cannot suspend your own account' }, { status: 400 });
     }
 
+    // F-45: admins cannot suspend other admins. Admin availability is a
+    // whole-system dependency (the only actors who can undo a suspension),
+    // so a suspension of an admin by an admin is a lock-out risk with no
+    // legitimate flow. Admins recover their own accounts out-of-band.
+    if (user.role === 'admin' && status === 'suspended') {
+      return NextResponse.json({ error: 'Cannot suspend another administrator account' }, { status: 403 });
+    }
+
     // Update user status. F-11: suspension must terminate the victim's
     // existing sessions in the same transaction — previously only the DB row
     // changed and the victim's live cookie kept working until its 30-day exp
@@ -169,6 +177,62 @@ export async function DELETE(
     // Prevent admin from deleting themselves
     if (id === session.userId) {
       return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 });
+    }
+
+    // F-45: admins are never deleted through this route. Deleting an admin
+    // would orphan their AdminLog rows (FK RESTRICT → raw 500) and remove an
+    // actor who is the only one able to manage the system. Admin offboarding
+    // happens out-of-band with the logs archived first.
+    if (user.role === 'admin') {
+      return NextResponse.json({ error: 'Cannot delete another administrator account' }, { status: 403 });
+    }
+
+    // F-31: business accounts must never hard-delete from this route — the
+    // user.delete cascade would destroy their customers, campaigns and team
+    // irreversibly, while the Business Accounts tab only soft-deletes. Route
+    // them through the exact same soft-delete the business tab uses.
+    if (user.accountType === 'business') {
+      const [softDeleted] = await db.$transaction([
+        db.user.update({
+          where: { id },
+          data: {
+            softDeletedAt: new Date(),
+            status: 'suspended',
+            subscriptionStatus: 'expired',
+          },
+          select: {
+            id: true,
+            email: true,
+            status: true,
+            subscriptionStatus: true,
+            softDeletedAt: true,
+          },
+        }),
+        // Suspension semantics (F-11): kill live sessions too.
+        db.session.deleteMany({ where: { userId: id } }),
+      ]);
+
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+      await db.adminLog.create({
+        data: {
+          adminId: session.userId,
+          action: 'delete_business_account',
+          targetType: 'business_account',
+          targetId: id,
+          details: JSON.stringify({
+            targetEmail: user.email,
+            note: 'soft-deleted via Users tab — routed to the business soft-delete',
+          }),
+          ipAddress: ip,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        softDeleted: true,
+        user: softDeleted,
+        message: 'Business account soft-deleted (deactivated) rather than destroyed — manage it from the Business Accounts tab.',
+      });
     }
 
     // Log admin action before deletion

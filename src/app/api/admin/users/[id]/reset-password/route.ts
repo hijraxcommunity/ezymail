@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
-// Generate a random temporary password (8 characters)
+// Generate a random temporary password (8 characters).
+// F-42: this value grants account access, so every draw comes from a
+// cryptographic RNG (crypto.randomInt), never Math.random — the old
+// non-CSPRNG draws were predictable within same-process bursts.
 function generateTemporaryPassword(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   let password = '';
   // Ensure at least one uppercase, one lowercase, one digit
-  password += 'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random() * 22)];
-  password += 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random() * 23)];
-  password += '23456789'[Math.floor(Math.random() * 8)];
+  password += 'ABCDEFGHJKMNPQRSTUVWXYZ'[randomInt(0, 22)];
+  password += 'abcdefghjkmnpqrstuvwxyz'[randomInt(0, 23)];
+  password += '23456789'[randomInt(0, 8)];
 
   // Fill remaining 5 chars randomly
   for (let i = 0; i < 5; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)];
+    password += chars[randomInt(0, chars.length)];
   }
 
   // Shuffle the password
   const arr = password.split('');
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 
@@ -42,11 +46,22 @@ export async function POST(
     // Check user exists
     const user = await db.user.findUnique({
       where: { id },
-      select: { id: true, email: true, firstName: true, lastName: true },
+      select: { id: true, email: true, firstName: true, lastName: true, role: true },
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    // F-45: administrators are outside this route's blast radius. Admin A
+    // resetting admin B's password would hand A a credential for B's account
+    // (and B would never know); admins recover their own access through the
+    // standard forgot-password flow instead.
+    if (user.role === 'admin') {
+      return NextResponse.json(
+        { success: false, error: "Cannot reset another administrator's password" },
+        { status: 403 }
+      );
     }
 
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';

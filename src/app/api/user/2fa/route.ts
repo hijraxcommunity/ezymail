@@ -8,6 +8,29 @@ const verifyBodySchema = z.object({
   code: z.string().length(6, 'Code must be 6 digits'),
 });
 
+// F-48: activation attempts are throttled per user — without this, the
+// verify endpoint can be hammered with 6-digit guesses offline-style (the
+// account is known, the rate is unbounded). 5 tries per 15 minutes, matching
+// the in-memory limiter conventions used elsewhere in this codebase (see
+// audit S-02 for the accepted per-instance limitation).
+const TWO_FA_MAX_ATTEMPTS = 5;
+const TWO_FA_WINDOW_MS = 15 * 60 * 1000;
+const twoFaAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function consumeTwoFaAttempt(userId: string): { allowed: boolean; retryAfterSec: number } {
+  const now = Date.now();
+  const entry = twoFaAttempts.get(userId);
+  if (!entry || entry.resetAt <= now) {
+    twoFaAttempts.set(userId, { count: 1, resetAt: now + TWO_FA_WINDOW_MS });
+    return { allowed: true, retryAfterSec: 0 };
+  }
+  entry.count += 1;
+  if (entry.count > TWO_FA_MAX_ATTEMPTS) {
+    return { allowed: false, retryAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
 const disableBodySchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
@@ -137,6 +160,15 @@ export async function PUT(request: NextRequest) {
     }
 
     const { code } = parsed.data;
+
+    // F-48: throttle verification attempts before any TOTP work.
+    const attempt = consumeTwoFaAttempt(session.userId);
+    if (!attempt.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Too many verification attempts. Try again in ${attempt.retryAfterSec} seconds.` },
+        { status: 429, headers: { 'Retry-After': String(attempt.retryAfterSec) } }
+      );
+    }
 
     // Find the TwoFactor record
     const twoFactor = await db.twoFactor.findFirst({

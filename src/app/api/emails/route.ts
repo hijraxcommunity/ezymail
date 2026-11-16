@@ -104,10 +104,10 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       where.OR = [
-        { subject: { contains: search } },
-        { body: { contains: search } },
-        { sender: { firstName: { contains: search } } },
-        { sender: { lastName: { contains: search } } },
+        { subject: { contains: search, mode: 'insensitive' } },
+        { body: { contains: search, mode: 'insensitive' } },
+        { sender: { firstName: { contains: search, mode: 'insensitive' } } },
+        { sender: { lastName: { contains: search, mode: 'insensitive' } } },
       ];
     }
 

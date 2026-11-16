@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     if (type === 'admin' || type === 'all') {
       const adminWhere: Record<string, unknown> = {};
       if (search) {
-        adminWhere.action = { contains: search };
+        adminWhere.action = { contains: search, mode: 'insensitive' };
       }
       if (userId) {
         adminWhere.adminId = userId;
@@ -110,8 +110,8 @@ export async function GET(request: NextRequest) {
       // For search on login logs, filter by email or deviceType
       if (search) {
         loginWhere.OR = [
-          { email: { contains: search } },
-          { deviceType: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { deviceType: { contains: search, mode: 'insensitive' } },
         ];
       }
 
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     if (type === 'admin' || type === 'all') {
       const adminWhere: Record<string, unknown> = {};
       if (search) {
-        adminWhere.action = { contains: search };
+        adminWhere.action = { contains: search, mode: 'insensitive' };
       }
       if (userId) {
         adminWhere.adminId = userId;
@@ -171,8 +171,8 @@ export async function GET(request: NextRequest) {
       }
       if (search) {
         loginWhere.OR = [
-          { email: { contains: search } },
-          { deviceType: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { deviceType: { contains: search, mode: 'insensitive' } },
         ];
       }
       loginTotal = await db.loginLog.count({ where: loginWhere });
