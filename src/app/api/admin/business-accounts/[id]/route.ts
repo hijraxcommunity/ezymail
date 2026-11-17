@@ -154,10 +154,12 @@ export async function PUT(
     if (status) updateData.status = status;
 
     // Auto-set trial dates when activating subscription
+    // Batch 7 review correction: 15 days per the product requirement, matching
+    // the approval writer in business-verifications/[id] (was 14 here too).
     if (subscriptionStatus === 'trial' && !existing.trialStart) {
       const now = new Date();
       const trialEnd = new Date(now);
-      trialEnd.setDate(trialEnd.getDate() + 14); // 14-day trial
+      trialEnd.setDate(trialEnd.getDate() + 15); // 15-day trial (product requirement)
       updateData.trialStart = now;
       updateData.trialEnd = trialEnd;
     }

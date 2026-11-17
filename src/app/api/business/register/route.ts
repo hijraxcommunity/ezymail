@@ -163,7 +163,8 @@ export async function POST(request: NextRequest) {
     // values (and settings showed "Trial" dates to pending/expired
     // accounts). The trial clock starts at approval: no dates are seeded
     // here; business-verifications/[id] approval remains the single writer
-    // (14 days) and the settings display gates on subscriptionStatus.
+    // (15 days — product requirement, restored by the Batch 7 review) and
+    // the settings display gates on subscriptionStatus.
 
     // Create user with business account type
     let user;

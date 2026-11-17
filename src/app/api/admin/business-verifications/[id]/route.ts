@@ -61,7 +61,7 @@ export async function PUT(
       // F-19: a trial is granted ONCE per business. The subscription status
       // can only reach 'trial' (via a previous approval), 'active' (admin
       // upgrade) or 'expired' (the trial consumed it) THROUGH a consumed
-      // approval — re-approval would otherwise restart the 14-day clock
+      // approval — re-approval would otherwise restart the 15-day clock
       // indefinitely, since the user can resubmit documents at any time.
       if (verification.user.subscriptionStatus !== 'pending_verification') {
         return NextResponse.json(
@@ -87,7 +87,12 @@ export async function PUT(
           data: {
             subscriptionStatus: 'trial',
             trialStart: now,
-            trialEnd: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), // 14-day trial
+            // Batch 7 review correction: the product requirement is a 15-day
+            // trial. The pre-Batch-7 register stamped 15d (on a pending
+            // account) while approval stamped 14d, silently shrinking every
+            // approved business's trial; F-64 made approval the single
+            // writer, so the requirement duration belongs HERE.
+            trialEnd: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000), // 15-day trial (product requirement)
           },
         }),
       ]);

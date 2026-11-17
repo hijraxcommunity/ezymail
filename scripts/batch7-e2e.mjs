@@ -331,6 +331,33 @@ async function main() {
     check('F67 approved row untouched by the attempt', row?.status === 'approved' && !!row?.reviewedAt, `status=${row?.status}`)
   }
 
+  // ══════════════════ F-64: trial clock starts at approval, 15 days ══════════════════
+  // Product requirement: a 15-day trial. The approval route is the SINGLE
+  // writer of trial dates (register seeds none — F-64), and the review
+  // corrected its duration from the legacy 14d to the required 15d.
+  {
+    const biz = await seedUser(`b7.f64.biz.${stamp}@ezy.af`, {
+      accountType: 'business', subscriptionStatus: 'pending_verification', businessName: 'B7 Trial Biz',
+    })
+    check('F64 register creates business WITHOUT trial dates (clock not started)',
+      biz.trialStart === null && biz.trialEnd === null,
+      `start=${biz.trialStart} end=${biz.trialEnd}`)
+    await prisma.businessVerification.create({
+      data: { userId: biz.id, documentUrls: '[]', status: 'pending' },
+    })
+    const admin = await seedUser(`b7.f64.admin.${stamp}@ezy.af`, { role: 'admin' })
+    const { cj } = await login(admin.email)
+    const ver = await prisma.businessVerification.findUnique({ where: { userId: biz.id } })
+    const res = await api(cj, 'PUT', `/api/admin/business-verifications/${ver.id}`, { action: 'approve' })
+    check('F64 approval grants the trial', res.status === 200, `status=${res.status}`)
+    const u = await prisma.user.findUnique({ where: { id: biz.id } })
+    const days = u.trialEnd && u.trialStart
+      ? Math.round((u.trialEnd.getTime() - u.trialStart.getTime()) / (24 * 60 * 60 * 1000))
+      : -1
+    check('F64 trial duration is 15 days (business requirement, not the legacy 14)', days === 15, `days=${days}`)
+    check('F64 subscriptionStatus set to trial', u.subscriptionStatus === 'trial', `sub=${u.subscriptionStatus}`)
+  }
+
   // ══════════════════ F-65: customer PUT live + P2002 → 409 ══════════════════
   {
     const biz = await seedUser(`b7.f65.biz.${stamp}@ezy.af`, {
