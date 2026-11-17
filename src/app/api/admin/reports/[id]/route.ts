@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import { z } from 'zod';
 
 const updateReportSchema = z.object({
@@ -43,7 +44,7 @@ export async function PUT(
       return NextResponse.json({ success: false, error: `Report is already ${report.status}` }, { status: 400 });
     }
 
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
 
     const updated = await db.report.update({
       where: { id },

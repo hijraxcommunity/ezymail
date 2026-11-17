@@ -683,12 +683,17 @@ export function EmailDetail() {
     updateEmail(email.id, { isStarred: v })
     setEmail({ ...email, isStarred: v })
     try {
-      await fetch(`/api/emails/${email.id}`, {
+      // F-58: HTTP failures used to leave the optimistic star in place
+      // (fetch only throws on network errors) — roll back like the catch.
+      const res = await fetch(`/api/emails/${email.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isStarred: v }),
       })
+      if (!res.ok) throw new Error('star failed')
     } catch {
+      updateEmail(email.id, { isStarred: !v })
+      setEmail({ ...email })
       toast.error('Failed to update')
     }
   }

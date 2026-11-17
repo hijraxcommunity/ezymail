@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { Mail, Star, Plus, Send, Menu } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
+import { useFolderCounts } from '@/hooks/use-folder-counts'
 
 type NavItemId = 'inbox' | 'starred' | 'compose' | 'sent' | 'more'
 
@@ -34,7 +35,11 @@ function Badge({ count }: { count: number }) {
 export function MobileNav() {
   const { currentFolder, setCurrentFolder, setComposeOpen, setSidebarOpen, emails } = useAppStore()
   const navRef = useRef<HTMLElement>(null)
-  const inboxCount = emails.filter(e => e.folder === 'inbox' && !e.isRead).length
+  // F-63: server-side unread total instead of the loaded-rows filter (the
+  // badge capped at the ~20 loaded rows). Row-derived fallback when the
+  // counts endpoint has not answered yet.
+  const folderCounts = useFolderCounts()
+  const inboxCount = folderCounts.inbox?.unread ?? emails.filter(e => e.folder === 'inbox' && !e.isRead).length
 
   const isActive = (id: NavItemId) => {
     if (id === 'compose') return false

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 
 // PUT /api/admin/business-verifications/[id] - Approve or reject verification
 export async function PUT(
@@ -53,7 +54,7 @@ export async function PUT(
       );
     }
 
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
     const now = new Date();
 
     if (action === 'approve') {

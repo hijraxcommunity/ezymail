@@ -51,15 +51,12 @@ export async function GET(
       return NextResponse.json({ error: 'Email not found' }, { status: 404 });
     }
 
-    // Mark as read if the user is the recipient and it hasn't been read
-    if (isRecipient && !email.isRead) {
-      await db.email.update({
-        where: { id },
-        data: { isRead: true, readAt: new Date() },
-      });
-      email.isRead = true;
-      email.readAt = new Date();
-    }
+    // F-52: GET no longer mutates state. The old side-effect (auto
+    // mark-as-read here) was the app's only state-changing GET — a residual
+    // CSRF surface under the no-token, SameSite=Lax posture (a forced
+    // top-level navigation could mark mail read). Clients mark read via the
+    // explicit PUT { isRead: true } (the web detail view already does; the
+    // Android notification actions always did).
 
     // Fetch full thread: find root threadId, then get all emails in that thread
     const threadId = email.threadId || email.id;

@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { db } from './db';
 
@@ -107,6 +107,26 @@ function sessionCookieOptions() {
  * threshold, sliding the 30-day window forward. Runs at most once per day
  * per session. Any failure leaves the current token untouched and valid.
  */
+/**
+ * F-53: request IP from the server context (same preference order as
+ * src/lib/ip.ts — x-real-ip first, first x-forwarded-for entry as fallback).
+ * Used when a session is ROTATED: the replacement row used to be created
+ * with ipAddress:'', so every rotated session showed 'Unknown Device' in
+ * the sessions list. Best-effort — outside a request scope it returns ''.
+ */
+async function currentRequestIp(): Promise<string> {
+  try {
+    const h = await headers();
+    return (
+      h.get('x-real-ip')?.trim() ||
+      h.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
+
 async function rotateSessionIfDue(
   cookieStore: Awaited<ReturnType<typeof cookies>>,
   currentToken: string,
@@ -131,7 +151,10 @@ async function rotateSessionIfDue(
       data: {
         userId: session.userId,
         token,
-        ipAddress: '',
+        // F-53: carry the request IP into the rotated row instead of
+        // blanking it (the sessions list showed 'Unknown Device' after the
+        // first daily renewal).
+        ipAddress: await currentRequestIp(),
         expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
       },
     });
@@ -192,7 +215,11 @@ export async function getSession(): Promise<SessionPayload | null> {
         isActive: true,
         expiresAt: { gt: new Date() },
       },
-      select: { user: { select: { status: true, softDeletedAt: true } } },
+      select: {
+        id: true,
+        lastActive: true,
+        user: { select: { status: true, softDeletedAt: true } },
+      },
     });
     if (!row) return null;
     if (row.user.status === 'suspended') return null;
@@ -201,6 +228,24 @@ export async function getSession(): Promise<SessionPayload | null> {
     // session row was missed — defense in depth on top of session revocation
     // and the login rejection.
     if (row.user.softDeletedAt) return null;
+
+    // F-53: keep lastActive fresh (throttled to one write per 2 minutes per
+    // active session — the Session row is already fetched for the F-07
+    // check, so this adds no query on the common path). The sessions list
+    // and the admin 'active now' figure read this field; without a writer
+    // both were permanently frozen at session creation. Best-effort: a
+    // failed touch must never block authentication.
+    const nowMs = Date.now();
+    if (!row.lastActive || nowMs - row.lastActive.getTime() > 2 * 60 * 1000) {
+      try {
+        await db.session.update({
+          where: { id: row.id },
+          data: { lastActive: new Date() },
+        });
+      } catch {
+        // Non-critical observability write.
+      }
+    }
 
     await rotateSessionIfDue(cookieStore, token, session);
     return session;

@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkRateLimitKey } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import { reservationExpired } from '@/lib/business-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    // F-46: same per-IP throttle as the personal check-email route — this
+    // was an unauthenticated, unthrottled .ezy-availability oracle.
+    const allowed = await checkRateLimitKey(
+      `check-email:${getClientIp(request)}`,
+      Number(process.env.CHECK_EMAIL_RATE_LIMIT_MAX) || 30,
+      15 * 60 * 1000
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const email = request.nextUrl.searchParams.get('email');
 
     if (!email) {

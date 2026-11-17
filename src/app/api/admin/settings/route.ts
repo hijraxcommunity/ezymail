@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { z } from 'zod';
 import { ENFORCED_SETTING_KEYS } from '@/lib/system-settings';
+import { getClientIp } from '@/lib/ip';
 
 const defaultSettings = [
   { key: 'app_name', value: 'EzyMail', category: 'general' },
@@ -130,7 +131,7 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
 
     // Upsert each setting
     const result = await db.$transaction(async (tx) => {

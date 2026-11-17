@@ -150,6 +150,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // F-19/F-67: the update branch used to unconditionally reset the record
+    // to pending, clearing reviewedAt/reviewedBy/adminNotes — an already
+    // APPROVED business could flip its displayed status back to 'Under
+    // Review' forever (and, combined with an admin reset of
+    // subscriptionStatus, feed the F-19 unlimited-trial loop whose approve
+    // side was closed in an earlier batch). Resubmission is now only valid
+    // while the record is NOT approved — a rejected business may re-submit
+    // (real-world fix-and-retry), an approved one may not.
+    const existingVerification = await db.businessVerification.findUnique({
+      where: { userId: user.id },
+      select: { status: true },
+    });
+    if (existingVerification?.status === 'approved') {
+      return NextResponse.json(
+        { error: 'Your verification has already been approved. No further submissions are needed.' },
+        { status: 409 }
+      );
+    }
+
     // Upsert verification record (documentUrls column stores the structured
     // list: file entries carry their content, URL entries the external link)
     const verification = await db.businessVerification.upsert({

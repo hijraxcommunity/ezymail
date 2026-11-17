@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 
 // Generate a random temporary password (8 characters).
 // F-42: this value grants account access, so every draw comes from a
@@ -64,7 +65,7 @@ export async function POST(
       );
     }
 
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
 
     // Generate temporary password
     const temporaryPassword = generateTemporaryPassword();

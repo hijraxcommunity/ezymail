@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
 import { db } from '@/lib/db';
+import { getClientIp } from '@/lib/ip';
 import { sendWhatsAppOTP, OpenWAError } from '@/lib/whatsapp/openwa';
 import {
   normalizePhoneE164,
@@ -42,9 +43,7 @@ function maskPhone(e164: string): string {
 }
 
 function clientIp(request: NextRequest): string {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || request.headers.get('x-real-ip')
-    || 'unknown';
+  return getClientIp(request);
 }
 
 export async function POST(request: NextRequest) {

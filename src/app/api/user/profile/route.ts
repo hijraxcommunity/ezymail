@@ -102,12 +102,41 @@ export async function PUT(request: NextRequest) {
       updateData.displayName = displayName ? displayName.trim() : null;
     }
     if (avatar !== undefined) {
+      // F-41: the avatar used to be any unbounded string straight into the
+      // DB (bloat vector; consumers are regex-gated so no XSS, but a multi-
+      // MB "avatar" would sit in the user row forever). Real uploads are
+      // either the server-rewritten /api/user/avatar/... URL or a small
+      // data: image — enforce both the shape and a sane ceiling.
+      const AVATAR_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
+      const AVATAR_URL = /^\/api\/user\/avatar\/[A-Za-z0-9._-]+$|^https?:\/\/[^\s"'<>]+$/;
+      const avatarOk =
+        typeof avatar === 'string' &&
+        avatar.length <= 200000 &&
+        (AVATAR_DATA_URL.test(avatar) || AVATAR_URL.test(avatar));
+      if (!avatarOk) {
+        return NextResponse.json(
+          { error: 'Invalid avatar: expected an image URL or a small image data URL' },
+          { status: 400 }
+        );
+      }
       updateData.avatar = avatar;
     }
     if (bio !== undefined) {
+      // F-41: bio.slice assumed a string — a non-string crashed with a
+      // TypeError and surfaced as a generic 500.
+      if (typeof bio !== 'string') {
+        return NextResponse.json({ error: 'Bio must be a string' }, { status: 400 });
+      }
       updateData.bio = bio.slice(0, 60);
     }
     if (phone !== undefined) {
+      // F-41 (residual, documented): register demands a signed WhatsApp OTP
+      // proof for the INITIAL phone; the profile path still accepts a
+      // plain change. Full parity needs a UI flow to mint a new proof for
+      // an already-registered number — deferred to the owner with F-13/F-57.
+      if (typeof phone !== 'string' || !/^\+?[0-9\s-]{6,20}$/.test(phone)) {
+        return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 });
+      }
       updateData.phone = phone;
     }
     if (dateOfBirth !== undefined) {

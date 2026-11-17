@@ -85,6 +85,10 @@ export function BusinessCustomers() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addName, setAddName] = useState('')
   const [addEmail, setAddEmail] = useState('')
+  // F-65: the pencil button used to just pre-fill the ADD form — submitting
+  // POSTed a duplicate (P2002 → generic 500) and the ownership-checked PUT
+  // endpoint stayed dead code. An id here switches the form to UPDATE mode.
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -130,6 +134,20 @@ export function BusinessCustomers() {
   const addedRecently = customers.filter((c) => new Date(c.createdAt) > sevenDaysAgo).length
   const totalCustomers = customers.length
 
+  function openEditCustomer(customer: { id: string; name: string | null; email: string }) {
+    setEditingCustomerId(customer.id)
+    setAddName(customer.name || '')
+    setAddEmail(customer.email)
+    setShowAddForm(true)
+  }
+
+  function closeCustomerForm() {
+    setShowAddForm(false)
+    setAddName('')
+    setAddEmail('')
+    setEditingCustomerId(null)
+  }
+
   async function handleAddCustomer() {
     if (!addEmail.trim()) {
       toast.error('Email is required')
@@ -144,25 +162,33 @@ export function BusinessCustomers() {
 
     setAdding(true)
     try {
-      const res = await fetch('/api/business/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: addEmail.trim(),
-          name: addName.trim() || null,
-        }),
-      })
+      // F-65: editing submits to the PUT endpoint that always existed; a
+      // fresh row still POSTs. Duplicates surface as 409 (P2002 mapped
+      // server-side) with a human message instead of a generic 500.
+      const res = await fetch(
+        editingCustomerId ? `/api/business/customers/${editingCustomerId}` : '/api/business/customers',
+        {
+          method: editingCustomerId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: addEmail.trim(),
+            name: addName.trim() || null,
+          }),
+        }
+      )
 
       if (res.ok) {
         const data = await res.json()
-        toast.success(`Customer "${data.customer.email}" added`)
-        setAddEmail('')
-        setAddName('')
-        setShowAddForm(false)
+        toast.success(
+          editingCustomerId
+            ? `Customer updated to "${data.customer.email}"`
+            : `Customer "${data.customer.email}" added`
+        )
+        closeCustomerForm()
         fetchCustomers()
       } else {
         const data = await res.json()
-        toast.error(data.error || 'Failed to add customer')
+        toast.error(data.error || (editingCustomerId ? 'Failed to update customer' : 'Failed to add customer'))
       }
     } catch (err) {
       console.error('Failed to add customer:', err)
@@ -442,11 +468,11 @@ export function BusinessCustomers() {
                     ) : (
                       <CheckCircle className="w-4 h-4" />
                     )}
-                    Add
+                    {editingCustomerId ? 'Save' : 'Add'}
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => { setShowAddForm(false); setAddName(''); setAddEmail('') }}
+                    onClick={closeCustomerForm}
                     className="rounded-xl"
                   >
                     <X className="w-4 h-4" />
@@ -557,11 +583,7 @@ export function BusinessCustomers() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              setAddName(customer.name || '')
-                              setAddEmail(customer.email)
-                              setShowAddForm(true)
-                            }}
+                            onClick={() => openEditCustomer(customer)}
                             className="h-7 text-[11px] rounded-lg"
                           >
                             <Edit3 className="w-3 h-3" />

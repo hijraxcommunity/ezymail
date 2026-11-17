@@ -404,23 +404,32 @@ const run = async () => {
     `status=${b3Approve.status} sub=${b3After.subscriptionStatus}`)
   const trialEndBefore = b3After.trialEnd
 
+  // Batch 7 (F-67/F-19r): the business-side resubmission no longer resets an
+  // APPROVED record — the old reset fed the unlimited-trial loop. T3/T4 now
+  // assert the new guard; T5/T6 seed the row back to pending via prisma so
+  // the ADMIN-side subscription guards stay covered in isolation.
   const b3Resubmit = await api(b3Cj, 'POST', '/api/business/verification', {
     documents: [{ name: 'license2.png', type: 'image/png', size: 70, data: `data:image/png;base64,${PNG_B64}` }],
   })
-  check('F-19 T3: resubmission resets the row to pending', b3Resubmit.status === 201, `status=${b3Resubmit.status}`)
+  check('F-19 T3: resubmission after approval refused 409 (F-67 fix)', b3Resubmit.status === 409, `status=${b3Resubmit.status}`)
+  const b3RowAfterResubmit = await prisma.businessVerification.findUnique({ where: { userId: b3.id } })
+  check('F-19 T3b: approved row untouched by the resubmit attempt',
+    b3RowAfterResubmit?.status === 'approved' && b3RowAfterResubmit?.reviewedAt !== null,
+    `status=${b3RowAfterResubmit?.status}`)
   const b3Approve2 = await api(adminCj, 'PUT', `/api/admin/business-verifications/${b3Submit.json.id}`, { action: 'approve' })
   const b3After2 = await prisma.user.findUnique({ where: { email: b3Email } })
-  check('F-19 T4: second approval refused 409 — trial never restarts',
-    b3Approve2.status === 409 && b3After2.trialEnd.getTime() === trialEndBefore.getTime() && b3After2.subscriptionStatus === 'trial',
+  check('F-19 T4: second approval refused — trial never restarts',
+    b3Approve2.status === 400 && b3After2.trialEnd.getTime() === trialEndBefore.getTime() && b3After2.subscriptionStatus === 'trial',
     `status=${b3Approve2.status} trialEndUnchanged=${b3After2.trialEnd.getTime() === trialEndBefore.getTime()}`)
 
-  // approve on 'active' and 'expired' businesses (resubmit makes the row pending again)
+  // approve on 'active' and 'expired' businesses (row re-seeded to pending
+  // via prisma — resubmission is no longer the way to get there)
   await prisma.user.update({ where: { id: b3.id }, data: { subscriptionStatus: 'active' } })
-  await api(b3Cj, 'POST', '/api/business/verification', { documentUrls: ['https://example.com/again.pdf'] })
+  await prisma.businessVerification.update({ where: { userId: b3.id }, data: { status: 'pending', reviewedAt: null } })
   const approveActive = await api(adminCj, 'PUT', `/api/admin/business-verifications/${b3Submit.json.id}`, { action: 'approve' })
   check('F-19 T5: approval refused on an ACTIVE subscription (409)', approveActive.status === 409, `status=${approveActive.status}`)
   await prisma.user.update({ where: { id: b3.id }, data: { subscriptionStatus: 'expired' } })
-  await api(b3Cj, 'POST', '/api/business/verification', { documentUrls: ['https://example.com/again2.pdf'] })
+  await prisma.businessVerification.update({ where: { userId: b3.id }, data: { status: 'pending', reviewedAt: null } })
   const approveExpired = await api(adminCj, 'PUT', `/api/admin/business-verifications/${b3Submit.json.id}`, { action: 'approve' })
   check('F-19 T6: approval refused on an EXPIRED (trial-consumed) business (409)', approveExpired.status === 409, `status=${approveExpired.status}`)
 

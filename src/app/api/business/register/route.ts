@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, hashPassword } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import {
   getEnforcedSystemSettings,
   isRegistrationOpen,
@@ -156,9 +157,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate trial dates
-    const now = new Date();
-    const trialEnd = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
+    // F-64: trial dates used to be stamped HERE with a 15-day window while
+    // the account was still pending_verification — and admin approval then
+    // granted a 14-day window from ITS own now, overwriting the register
+    // values (and settings showed "Trial" dates to pending/expired
+    // accounts). The trial clock starts at approval: no dates are seeded
+    // here; business-verifications/[id] approval remains the single writer
+    // (14 days) and the settings display gates on subscriptionStatus.
 
     // Create user with business account type
     let user;
@@ -176,8 +181,6 @@ export async function POST(request: NextRequest) {
           businessName: businessName.trim(),
           employeeCount: employeeCount || null,
           subscriptionStatus: 'pending_verification',
-          trialStart: now,
-          trialEnd,
         },
       });
     } catch (err) {
@@ -196,7 +199,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '';
+    const ip = getClientIp(request);
     await createSession(
       { id: user.id, email: user.email, role: user.role },
       typeof ip === 'string' ? ip.split(',')[0]?.trim() || '' : ''

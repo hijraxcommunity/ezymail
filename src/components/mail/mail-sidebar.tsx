@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore, type MailView } from '@/store/use-app-store'
+import { useFolderCounts } from '@/hooks/use-folder-counts'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -41,9 +42,14 @@ export function MailSidebar() {
     isAuthenticated,
   } = useAppStore()
 
-  // Subscribe to emails for real-time counts
+  // Subscribe to emails for real-time counts. F-63: the Inbox unread badge
+  // now comes from the server-side folder counts (the loaded-rows filter
+  // capped at the ~20 loaded rows and visibly disagreed with reality);
+  // drafts/archive stay row-derived — /api/folders cannot count them
+  // correctly (drafts are sender-scoped, archive is a flag not a folder).
   const emailList = useAppStore((s) => s.emails)
-  const inboxCount = emailList.filter((e) => e.folder === 'inbox' && !e.isRead).length
+  const folderCounts = useFolderCounts()
+  const inboxCount = folderCounts.inbox?.unread ?? emailList.filter((e) => e.folder === 'inbox' && !e.isRead).length
   const draftsCount = emailList.filter((e) => e.folder === 'drafts').length
   const archiveCount = emailList.filter((e) => e.isArchived).length
 

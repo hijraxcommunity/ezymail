@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { db } from '@/lib/db';
 import { createSession, hashPassword, checkRateLimitKey } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import {
   getEnforcedSystemSettings,
   isRegistrationOpen,
@@ -17,11 +19,8 @@ export async function POST(request: NextRequest) {
     // app (bcrypt cost 12 per attempt + WhatsApp OTP work upstream). Throttle
     // per IP before doing any work. Default 5 registrations / 15 min;
     // env-overridable for tests/ops. Residual: in-memory per-instance — see
-    // auth.ts note; the IP derives from client-controllable headers (F-43).
-    const ipHeader =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      request.headers.get('x-real-ip') ||
-      'unknown';
+    // auth.ts note. F-43: shared platform-aware IP derivation.
+    const ipHeader = getClientIp(request);
     const REGISTER_RATE_LIMIT_MAX = Number(process.env.REGISTER_RATE_LIMIT_MAX) || 5;
     const registerAllowed = await checkRateLimitKey(
       `register:${ipHeader}`,
@@ -240,10 +239,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '';
+    const ip = getClientIp(request);
     await createSession(
       { id: user.id, email: user.email, role: user.role },
-      typeof ip === 'string' ? ip.split(',')[0]?.trim() || '' : ''
+      ip === 'unknown' ? '' : ip
     );
 
     // Send welcome email
@@ -257,7 +256,12 @@ export async function POST(request: NextRequest) {
         welcomeUser = await db.user.create({
           data: {
             email: 'welcome@ezy.af',
-            passwordHash: await hashPassword('system-welcome-' + Date.now()),
+            // F-49: the sender pseudo-account must never be loginable — the
+            // old timestamp-derived password ('system-welcome-' + Date.now(),
+            // ~2^41 entropy at best) was replaced by 32 random bytes. Login
+            // additionally refuses role='system' outright, so this hash is
+            // defense in depth rather than the only barrier.
+            passwordHash: await hashPassword(randomBytes(32).toString('hex')),
             firstName: 'EzyMail',
             lastName: 'Team',
             dateOfBirth: '2000-01-01',

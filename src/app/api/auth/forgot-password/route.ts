@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { createHash, randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { hashPassword, getJwtSecret } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import { sendWhatsAppOTP, OpenWAError } from '@/lib/whatsapp/openwa';
 
 
@@ -134,9 +135,7 @@ function phoneMatches(registered: string, submitted: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || request.headers.get('x-real-ip')
-      || 'unknown';
+    const ip = getClientIp(request);
     if (!checkForgotLimit(ip)) {
       return NextResponse.json({ error: 'Too many attempts. Please try again in a few minutes.' }, { status: 429 });
     }

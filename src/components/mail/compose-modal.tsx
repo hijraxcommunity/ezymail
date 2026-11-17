@@ -126,7 +126,7 @@ function ToolbarButton({
 }
 
 export function ComposeModal() {
-  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, setCurrentFolder, requestComposeClose } = useAppStore()
+  const { composeOpen, setComposeOpen, replyToEmail, replyMode, editDraftEmail, removeEmail, templates, setTemplates, addTemplate, setCurrentFolder, requestComposeClose } = useAppStore()
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof globalThis === 'undefined') return false
@@ -1167,7 +1167,12 @@ export function ComposeModal() {
         }),
       })
       const data = await res.json()
-      if (data.success) {
+      if (data.success && data.data) {
+        // F-56: the created template used to be fetched-and-discarded, so it
+        // was invisible in the picker until a full reload reset the store
+        // (the fetch effect skips a refetch while the store is non-empty).
+        // Upsert it into the store immediately.
+        addTemplate(data.data)
         toast.success('Template saved')
       } else {
         toast.error(data.error || 'Failed to save template')

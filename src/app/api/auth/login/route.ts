@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createSession, verifyPassword, checkRateLimit, writeLoginLog } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import { verifyTOTPSingleUse } from '@/lib/totp';
 import {
   getEnforcedSystemSettings,
@@ -21,11 +22,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
 
-    // Rate limiting
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      request.headers.get('x-real-ip') ||
-      'unknown';
+    // Rate limiting (F-43: shared platform-aware IP derivation instead of
+    // trusting the raw client-controlled x-forwarded-for header).
+    const ip = getClientIp(request);
     const rateLimitResult = await checkRateLimit(ip);
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
@@ -40,6 +39,27 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // F-09: LoginLog.userId is a required FK — attempts against unknown
       // addresses cannot be recorded (no migration in this batch).
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // F-49: the welcome sender is a role='system' pseudo-account, not a
+    // loginable user. It is rejected here (after lookup, with a log row —
+    // its userId satisfies the FK) with the SAME generic message as an
+    // unknown address, so it neither authenticates nor leaks that the
+    // account exists.
+    if (user.role === 'system') {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // F-49: the password is verified BEFORE any account-state branch. The
+    // old order ran the suspended/soft-deleted/maintenance checks first, so
+    // a distinct 403 for a suspended address confirmed its existence with no
+    // valid password (account-enumeration oracle). Wrong password now wins:
+    // 401 identical to unknown-address, for every state.
+    const isValid = await verifyPassword(password, user.passwordHash);
+    if (!isValid) {
+      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
@@ -63,13 +83,6 @@ export async function POST(request: NextRequest) {
     if (user.status === 'suspended') {
       await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
       return NextResponse.json({ error: 'Your account has been suspended' }, { status: 403 });
-    }
-
-    // Verify password
-    const isValid = await verifyPassword(password, user.passwordHash);
-    if (!isValid) {
-      await writeLoginLog({ userId: user.id, email: user.email, ipAddress: ip, userAgent, success: false });
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
     // F-06: two-factor authentication is now ENFORCED at login when the user

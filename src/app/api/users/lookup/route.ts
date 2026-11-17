@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, checkRateLimitKey } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 // GET /api/users/lookup?email=xxx — Look up any registered user by email (returns name + avatar)
@@ -8,6 +8,14 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // F-46: directory-scrape throttle. The route stays session-gated and
+    // deliberately answers contacts-style lookups, but an authenticated
+    // script can no longer walk the whole user base unchecked.
+    const allowed = await checkRateLimitKey(`user-lookup:${session.userId}`, Number(process.env.USER_LOOKUP_RATE_LIMIT_MAX) || 60, 15 * 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
     }
 
     const email = request.nextUrl.searchParams.get('email');

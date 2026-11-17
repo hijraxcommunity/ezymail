@@ -413,7 +413,11 @@ export function EmailList() {
   const handleBulkArchive = async () => {
     const archived = archiveSelected()
     try {
-      await Promise.all(
+      // F-58: fetch resolves on 4xx/5xx — HTTP failures used to be counted
+      // as success (optimistic archive stuck, totals drifted). Any failed
+      // response re-fetches so the list converges to server truth, and the
+      // total is only decremented when everything succeeded.
+      const results = await Promise.all(
         archived.map((e) =>
           fetch(`/api/emails/${e.id}`, {
             method: 'PUT',
@@ -422,11 +426,15 @@ export function EmailList() {
           })
         )
       )
+      if (results.some((r) => !r.ok)) {
+        throw new Error('archive failed')
+      }
       toast.success(`${archived.length} email${archived.length > 1 ? 's' : ''} archived`)
+      setTotalEmails(totalEmails - archived.length)
     } catch {
+      fetchEmails()
       toast.error('Failed to archive some emails')
     }
-    setTotalEmails(totalEmails - archived.length)
   }
 
   const handleBulkUnarchive = async () => {

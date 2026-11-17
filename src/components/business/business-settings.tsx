@@ -605,7 +605,9 @@ export function BusinessSettings() {
           <SubscriptionStatusBadge status={profile?.subscriptionStatus || null} />
         </div>
 
-        {profile?.trialStart && profile?.trialEnd && (
+        {/* F-64: trial dates are only meaningful for an ACTIVE trial —
+            pending/expired accounts no longer render the block. */}
+        {profile?.subscriptionStatus === 'trial' && profile?.trialStart && profile?.trialEnd && (
           <div className="space-y-3 mt-4 p-4 rounded-xl bg-gray-50/50 dark:bg-gray-800/50 ring-1 ring-gray-200 dark:ring-gray-700">
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-gray-500 dark:text-gray-400">Trial Start:</span>

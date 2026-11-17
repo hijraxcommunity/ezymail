@@ -109,6 +109,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
     }
 
+    // F-40: the color used to be persisted verbatim and rendered into
+    // inline styles downstream. Enforce the same hex discipline labels use
+    // (a stray value would either break rendering or inject arbitrary CSS
+    // into a style attribute).
+    const FOLDER_COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
+    if (color !== undefined && color !== null && color !== '' && !FOLDER_COLOR_HEX.test(String(color))) {
+      return NextResponse.json(
+        { error: 'Color must be a hex value like #4285F4' },
+        { status: 400 }
+      );
+    }
+
     // Check for reserved names
     const reservedNames = ['inbox', 'sent', 'drafts', 'starred', 'trash', 'spam', 'archive'];
     if (reservedNames.includes(name.trim().toLowerCase())) {

@@ -65,8 +65,17 @@ function UndoSnackbar() {
         })
         if (!res.ok) throw new Error('undo failed')
         clearRemovedGuards([action.id])
-        if (currentFolder === 'archive') removeEmail(action.id)
-        else addEmail(action.email)
+        if (currentFolder === 'archive') {
+          removeEmail(action.id)
+        } else if (currentFolder === (action.email.folder || 'inbox')) {
+          // F-59: the un-archived row used to be inserted into WHATEVER
+          // folder was open (Sent/Starred/Trash included), leaving a ghost
+          // row until the next page-1 replace. Gate on the row's real
+          // folder — same discipline the delete-undo branch below applies.
+          addEmail(action.email)
+        }
+        // Any other folder: local state untouched — the next fetch/poll
+        // converges to the server truth.
       } else if (action.type === 'delete') {
         const res = await fetch(`/api/emails/${action.id}`, {
           method: 'PUT',

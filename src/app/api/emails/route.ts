@@ -11,6 +11,31 @@ import { buildConversationPage, resolveReplyThreadId } from '@/lib/mail/conversa
 // the cap only bounds how deep history pages can go).
 const FOLD_SLIM_CAP = 5000;
 
+/**
+ * F-39: thrown inside the send transaction when replyToId points at an
+ * email the caller neither sent nor received — aborts the transaction (no
+ * partial writes) and surfaces as a 403 in the POST catch block.
+ */
+class ReplyOwnershipError extends Error {
+  constructor() {
+    super('Not authorized to reply to this email');
+    this.name = 'ReplyOwnershipError';
+  }
+}
+
+/**
+ * F-39: replyToId that does not match ANY email. The old code fell through
+ * to a legacy branch that stored the dead id into the parentEmailId FOREIGN
+ * KEY column — every such send crashed with an FK violation (500). A
+ * nonexistent parent is malformed input: 400, like F-38/F-66.
+ */
+class ReplyTargetInvalidError extends Error {
+  constructor() {
+    super('replyToId does not reference an existing email');
+    this.name = 'ReplyTargetInvalidError';
+  }
+}
+
 // GET /api/emails - List emails
 export async function GET(request: NextRequest) {
   try {
@@ -21,8 +46,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const folder = searchParams.get('folder') || 'inbox';
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const search = searchParams.get('search') || '';
 
     // Build where clause
@@ -42,6 +67,11 @@ export async function GET(request: NextRequest) {
       delete where.folder;
       where.isStarred = true;
       where.recipientEmail = session.email;
+      // S-09: the starred query used to permit folder='trash' rows through
+      // (isStarred=true survives a trash move), so trashed mail kept
+      // resurfacing in Starred via the 15s poll. Same exclusion the
+      // neighboring archive branch applies.
+      where.folder = { not: 'trash' };
     }
 
     if (folder === 'archive') {
@@ -445,7 +475,25 @@ export async function POST(request: NextRequest) {
             folder: true,
           },
         });
-        threadId = parentEmail ? await resolveReplyThreadId(tx, parentEmail) : replyToId;
+        // F-39: same ownership rule as the dedicated reply route — the
+        // caller must be the parent's sender or its recipient. Without this
+        // check any authenticated user could pass a FOREIGN email id and
+        // graft a reply (parentEmailId + inherited threadId) onto a
+        // conversation they are not part of.
+        if (
+          parentEmail &&
+          parentEmail.senderId !== session.userId &&
+          parentEmail.recipientEmail !== session.email
+        ) {
+          throw new ReplyOwnershipError();
+        }
+        if (!parentEmail) {
+          // F-39: the legacy fallback (threadId = replyToId, store the dead
+          // id) always died on the parentEmailId FK — every send with a
+          // bogus id was a 500. Malformed input now fails loudly with 400.
+          throw new ReplyTargetInvalidError();
+        }
+        threadId = await resolveReplyThreadId(tx, parentEmail);
       }
 
       const baseRow = {
@@ -566,6 +614,20 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: unknown) {
+    // F-39: a foreign replyToId aborts the send transaction with this
+    // sentinel — surface it as the reply route's 403, not a generic 500.
+    if (error instanceof ReplyOwnershipError) {
+      return NextResponse.json(
+        { error: 'Not authorized to reply to this email' },
+        { status: 403 }
+      );
+    }
+    if (error instanceof ReplyTargetInvalidError) {
+      return NextResponse.json(
+        { error: 'Invalid replyToId: referenced email does not exist' },
+        { status: 400 }
+      );
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Send email error:', message);
     return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });

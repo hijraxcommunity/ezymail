@@ -54,45 +54,43 @@ export async function GET() {
     });
 
     // --- Chart data: emails per day (last 7 days) ---
+    // F-44: the old loop ran one db.email.count per day (7 sequential
+    // round-trips), and users-per-day ran 30 more — 37+ queries on EVERY
+    // dashboard mount. Two date-truncated GROUP BY queries (raw SQL; both
+    // the production Neon database and every embedded-PG harness are
+    // Postgres — no test harness exercises this route on SQLite) produce
+    // the same series in one round-trip each; JS zero-fills empty days.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const emailWindowStart = new Date(today.getTime() - 6 * dayMs);
+    const userWindowStart = new Date(today.getTime() - 29 * dayMs);
+
+    const emailDayRows = await db.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::bigint AS count
+      FROM "Email"
+      WHERE "createdAt" >= ${emailWindowStart}
+      GROUP BY 1 ORDER BY 1
+    `;
+    const userDayRows = await db.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::bigint AS count
+      FROM "User"
+      WHERE "createdAt" >= ${userWindowStart}
+      GROUP BY 1 ORDER BY 1
+    `;
+
+    const emailDayCounts = new Map(emailDayRows.map((r) => [formatDate(new Date(r.day)), Number(r.count)]));
+    const userDayCounts = new Map(userDayRows.map((r) => [formatDate(new Date(r.day)), Number(r.count)]));
+
     const emailsPerDay: { date: string; count: number }[] = [];
     for (let i = 6; i >= 0; i--) {
-      const day = new Date();
-      day.setDate(day.getDate() - i);
-      day.setHours(0, 0, 0, 0);
-      const nextDay = new Date(day);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      const count = await db.email.count({
-        where: {
-          createdAt: { gte: day, lt: nextDay },
-        },
-      });
-
-      emailsPerDay.push({
-        date: formatDate(day),
-        count,
-      });
+      const day = new Date(today.getTime() - i * dayMs);
+      emailsPerDay.push({ date: formatDate(day), count: emailDayCounts.get(formatDate(day)) || 0 });
     }
 
     // --- Chart data: users per day (last 30 days) ---
     const usersPerDay: { date: string; count: number }[] = [];
     for (let i = 29; i >= 0; i--) {
-      const day = new Date();
-      day.setDate(day.getDate() - i);
-      day.setHours(0, 0, 0, 0);
-      const nextDay = new Date(day);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      const count = await db.user.count({
-        where: {
-          createdAt: { gte: day, lt: nextDay },
-        },
-      });
-
-      usersPerDay.push({
-        date: formatDate(day),
-        count,
-      });
+      const day = new Date(today.getTime() - i * dayMs);
+      usersPerDay.push({ date: formatDate(day), count: userDayCounts.get(formatDate(day)) || 0 });
     }
 
     // --- Chart data: folder distribution (count emails per folder for all users) ---

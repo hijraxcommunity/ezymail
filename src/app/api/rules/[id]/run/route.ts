@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, checkRateLimitKey } from '@/lib/auth';
 
 interface Condition {
   field: string;
@@ -150,6 +150,18 @@ export async function POST(
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // F-32 residue: the run path scans up to 500 rows and bulk-updates per
+    // click — the last expensive mail operation with no limiter (register,
+    // upload and send were throttled earlier). 10 runs / 15 min per user:
+    // far above any interactive use, well below scan-flood territory.
+    const runAllowed = await checkRateLimitKey(`rule-run:${session.userId}`, Number(process.env.RULE_RUN_RATE_LIMIT_MAX) || 10, 15 * 60 * 1000);
+    if (!runAllowed) {
+      return NextResponse.json(
+        { success: false, error: 'Too many rule runs. Please try again later.' },
+        { status: 429 }
+      );
     }
 
     const { id } = await params;

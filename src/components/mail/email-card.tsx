@@ -248,11 +248,15 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     const newValue = !email.isStarred
     updateEmail(email.id, { isStarred: newValue })
     try {
-      await fetch(`/api/emails/${email.id}`, {
+      // F-58: fetch resolves on 4xx/5xx too — the optimistic state used to
+      // stick even when the server rejected the star, drifting counts until
+      // the next replace. HTTP failures now roll back like network errors.
+      const res = await fetch(`/api/emails/${email.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isStarred: newValue }),
       })
+      if (!res.ok) throw new Error('star failed')
       toast.success(newValue ? 'Starred' : 'Unstarred')
     } catch {
       updateEmail(email.id, { isStarred: !newValue })

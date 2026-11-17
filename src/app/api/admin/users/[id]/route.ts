@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 
 // GET /api/admin/users/[id] - Get user details
 export async function GET(
@@ -131,7 +132,7 @@ export async function PUT(
     ]);
 
     // Log admin action
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
     await db.adminLog.create({
       data: {
         adminId: session.userId,
@@ -212,7 +213,7 @@ export async function DELETE(
         db.session.deleteMany({ where: { userId: id } }),
       ]);
 
-      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+      const ip = getClientIp(request);
       await db.adminLog.create({
         data: {
           adminId: session.userId,
@@ -236,7 +237,7 @@ export async function DELETE(
     }
 
     // Log admin action before deletion
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
     await db.adminLog.create({
       data: {
         adminId: session.userId,

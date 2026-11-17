@@ -78,6 +78,13 @@ export async function PUT(
 
     return NextResponse.json({ customer: updated });
   } catch (error: unknown) {
+    // F-65: duplicate email on update maps to a human 409.
+    if (
+      error && typeof error === 'object' && 'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    ) {
+      return NextResponse.json({ error: 'A customer with this email already exists' }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Update customer error:', message);
     return NextResponse.json({ error: 'Failed to update customer' }, { status: 500 });

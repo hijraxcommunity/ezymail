@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
 import { getSession, getJwtSecret, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { getClientIp } from '@/lib/ip';
 import { SignJWT, jwtVerify } from 'jose';
 
 // F-08: impersonation used to be a client-side illusion — the route minted a
@@ -93,7 +94,7 @@ export async function POST(
       );
     }
 
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+    const ip = getClientIp(request);
 
     // Short-lived victim JWT, tagged with the impersonating admin (`imp`).
     const token = await new SignJWT({
@@ -229,7 +230,7 @@ export async function DELETE(
           exitedEmail: session.email,
           restoredAdminSession: restored,
         }),
-        ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '',
+        ipAddress: getClientIp(request),
       },
     });
 

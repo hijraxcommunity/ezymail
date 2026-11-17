@@ -182,6 +182,14 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: unknown) {
+    // F-65: a duplicate email is a conflict, not a crash — map P2002 to a
+    // human 409 (the UI shows the message directly).
+    if (
+      error && typeof error === 'object' && 'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    ) {
+      return NextResponse.json({ error: 'A customer with this email already exists' }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Add customer error:', message);
     return NextResponse.json({ error: 'Failed to add customer' }, { status: 500 });

@@ -67,11 +67,14 @@ export async function GET(request: NextRequest) {
     // Get the current token from the cookie
     const token = request.cookies.get('ezymail-session')?.value || '';
 
-    // Find all active sessions for the user
+    // Find all active sessions for the user. F-53: expired rows used to be
+    // listed until some other flow happened to delete them — the 30-day
+    // window is enforced by getSession, so the list must mirror it.
     const sessions = await db.session.findMany({
       where: {
         userId: session.userId,
         isActive: true,
+        expiresAt: { gt: new Date() },
       },
       orderBy: { lastActive: 'desc' },
     });

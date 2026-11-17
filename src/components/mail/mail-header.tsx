@@ -391,7 +391,11 @@ export function MailHeader() {
           </Button>
           <div className="flex items-center gap-1.5">
             <img src="/logo.png" alt="EzyMail" className="w-7 h-7 shrink-0" />
-            <span className="text-base sm:text-lg font-bold hidden xs:block whitespace-nowrap">
+            {/* F-60: the old `xs:block` referenced an undefined Tailwind
+                breakpoint, so the rule never compiled and `hidden` won at
+                every width — the wordmark was permanently invisible. `sm`
+                is the defined breakpoint with the same intent. */}
+            <span className="text-base sm:text-lg font-bold hidden sm:block whitespace-nowrap">
               <span className="text-[#4285F4]">Ezy</span>
               <span className="text-[#1F1F1F] dark:text-white">Mail</span>
             </span>
