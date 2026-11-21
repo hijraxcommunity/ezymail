@@ -30,7 +30,7 @@ PATTERNS = [
     ("PRIVATEKEY-ASSIGN", re.compile(rb"(private[_-]?key|privateKey)\s*[:=]\s*['\"][^'\"]{20,}['\"]", re.I)),
     ("PASSWORD-ASSIGN", re.compile(rb"(password|passwd|secret|api[_-]?key)\s*[:=]\s*['\"][^'\"]{12,}['\"]", re.I)),
     ("DB-URL-CREDS", re.compile(rb"(postgres|mysql|mongodb)(\+srv)?://[^:\s'\"\]]+:[^@\s'\"\]]+@", re.I)),
-    ("HEROKU-VERCEL-TOKEN", re.compile(rb"(hrv_|vercel_tok_|v1:[A-Za-z0-9]{20,})")),
+    ("HEROKU-VERCEL-TOKEN", re.compile(rb"(hrv_[A-Za-z0-9_-]{8,}|vercel_tok_[A-Za-z0-9_-]{8,}|v1:[A-Za-z0-9]{20,})")),
 ]
 
 def run(args):
