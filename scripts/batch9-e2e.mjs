@@ -316,7 +316,12 @@ async function main() {
     return row ? Number(row.value) : null
   }
   const storedBeforeBurst = await storedStepNum()
-  const t5Deadline = Date.now() + 45000
+  // The stored step is often ONE window ahead of wall-clock (T4/T5 claim the
+  // +1 drift step), so "wait for a strictly newer step" can span TWO window
+  // boundaries (~60 s worst case) — a 45 s deadline expired mid-wait and made
+  // the burst/progress steps degenerate to equal-or-stale submissions. 90 s
+  // covers any two-window wait with margin.
+  const t5Deadline = Date.now() + 90000
   while (currentStep() <= (storedBeforeBurst ?? step + 1) && Date.now() < t5Deadline) await sleep(500)
   const burstStep = currentStep() + 1
   const burstCode = totpAt(totpSecret, burstStep)
@@ -336,33 +341,47 @@ async function main() {
   // strictly NEWER than the ACTUAL stored step (read from KvState — the
   // forward-only claim refuses anything older; that refusal is R6's
   // proof, not a failure) and prove the guard blocks replays, not
-  // progress. If the whole window is burned, wait one boundary (45 s).
+  // progress. The stored step is often one window AHEAD of wall-clock
+  // (T4/T5 claimed the +1 drift step), so a fresh step can need TWO
+  // boundary crossings — bounded at 90 s.
   const consumedSteps = new Set([step, step + 1, burstStep])
   const newestStored = (await storedStepNum()) ?? Math.max(step + 1, burstStep)
   const t7Now = currentStep()
   let t7Step = [t7Now + 1, t7Now, t7Now - 1].find((s) => !consumedSteps.has(s) && s > newestStored)
   if (t7Step === undefined) {
-    const t7Deadline = Date.now() + 45000
+    // Two-window worst case (see the T5 note): 90 s. After the wait, never
+    // submit a step that is not strictly newer than the stored one — the
+    // forward-only guard would (correctly) refuse it and the FAIL would
+    // misread as a product defect.
+    const t7Deadline = Date.now() + 90000
     let c = currentStep()
     while (c <= newestStored && Date.now() < t7Deadline) { await sleep(500); c = currentStep() }
-    t7Step = c
+    t7Step = c > newestStored ? c : undefined
   }
-  const afterBurst = totpAt(totpSecret, t7Step)
-  const afterBurstLogin = await api(jar(), 'POST', '/api/auth/login', { email: other.email, password: TEST_PASS, twoFactorCode: afterBurst })
-  check('D4 T7: a NEWER step still verifies after the burst (guard blocks replays, not progress)', afterBurstLogin.status === 200, `status ${afterBurstLogin.status}, step ${t7Step}, stored ${newestStored}`)
+  let afterBurst = null
+  if (t7Step === undefined) {
+    check('D4 T7: a NEWER step still verifies after the burst (guard blocks replays, not progress)', false,
+      `no fresh step claimable within 90 s (stored ${newestStored}, wall ${currentStep()}) — clock-skew anomaly, harness aborts instead of submitting a stale step`)
+  } else {
+    afterBurst = totpAt(totpSecret, t7Step)
+    const afterBurstLogin = await api(jar(), 'POST', '/api/auth/login', { email: other.email, password: TEST_PASS, twoFactorCode: afterBurst })
+    check('D4 T7: a NEWER step still verifies after the burst (guard blocks replays, not progress)', afterBurstLogin.status === 200, `status ${afterBurstLogin.status}, step ${t7Step}, stored ${newestStored}`)
+  }
 
   // Hand the restart / cross-instance phase the exact consumed step + code.
   // run-batch9-e2e.sh phase 2 restarts the app and boots a SECOND instance
   // on :3008 against the same database, then batch9-e2e-phase2.mjs proves
   // the consumed step survives BOTH.
-  writeFileSync('/tmp/b9-totp-state.json', JSON.stringify({
-    email: other.email,
-    password: TEST_PASS,
-    secret: totpSecret,
-    lastUsedStep: t7Step,
-    lastCode: afterBurst,
-    userId: other.id,
-  }))
+  if (afterBurst) {
+    writeFileSync('/tmp/b9-totp-state.json', JSON.stringify({
+      email: other.email,
+      password: TEST_PASS,
+      secret: totpSecret,
+      lastUsedStep: t7Step,
+      lastCode: afterBurst,
+      userId: other.id,
+    }))
+  }
 
   // ═══ F-41: profile phone change requires + consumes the proof ═══
   const noToken = await api(personalCj, 'PUT', '/api/user/profile', { phone: '+93700123456' })

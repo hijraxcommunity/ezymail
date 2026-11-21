@@ -99,7 +99,11 @@ async function storedStep() {
   const row = await prisma.kvState.findUnique({ where: { key: kvKey } })
   return row ? Number(row.value) : null
 }
-async function waitFreshStep(afterStep, deadlineMs = 40000) {
+async function waitFreshStep(afterStep, deadlineMs = 90000) {
+  // 90 s: the stored step can be one window AHEAD of wall-clock (the +1
+  // drift steps the forward-only contract consumes), so a strictly newer
+  // step can take two 30 s boundaries — the old 40 s default could expire
+  // mid-wait and submit a stale step (refused correctly, misread as FAIL).
   const deadline = Date.now() + deadlineMs
   let c = currentStep()
   while (c <= afterStep && Date.now() < deadline) { await sleep(500); c = currentStep() }
