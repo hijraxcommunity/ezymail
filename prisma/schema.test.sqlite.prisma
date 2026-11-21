@@ -384,6 +384,9 @@ model Campaign {
   subject      String
   body         String   @default("")
   bodyHtml     String   @default("")
+  // D1 (Batch 9): mirrors prisma/schema.prisma — honest campaign lifecycle.
+  status       String   @default("draft") // "draft" | "scheduled" | "sent"
+  scheduledFor DateTime?
   sentAt       DateTime?
   opens        Int       @default(0)
   clicks       Int       @default(0)
@@ -394,6 +397,7 @@ model Campaign {
 
   @@index([businessId])
   @@index([createdAt])
+  @@index([status])
 }
 
 model CampaignRecipient {
@@ -409,4 +413,46 @@ model CampaignRecipient {
   @@unique([campaignId, customerId])
   @@index([campaignId])
   @@index([customerId])
+}
+
+// ─── Shared server state (D4, Batch 9) — mirrors prisma/schema.prisma ────────
+// Every operation above them is Prisma-only (conditional updateMany/upsert),
+// so the same code paths run on PostgreSQL (production + e2e harnesses) and
+// on SQLite (this lifecycle suite).
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  purpose    String
+  subject    String
+  codeHash   String
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@unique([purpose, subject])
+  @@index([expiresAt])
+}
+
+model RateBucket {
+  key       String   @id
+  count     Int      @default(0)
+  windowEnd DateTime
+
+  @@index([windowEnd])
+}
+
+model UsedTokenGuard {
+  tokenHash String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model KvState {
+  key       String    @id
+  value     String
+  expiresAt DateTime?
+
+  @@index([expiresAt])
 }

@@ -241,6 +241,9 @@ interface AppState {
   // Labels
   labels: Label[];
   emailLabelsMap: Record<string, Label[]>;
+  // D2 (Batch 9): when set, the inbox list is filtered to mail carrying
+  // this (own) label; the sidebar and mail header surface it.
+  labelFilter: string | null;
 
   // Templates
   templates: Template[];
@@ -346,6 +349,7 @@ interface AppState {
   removeLabel: (id: string) => void;
   setEmailLabels: (emailId: string, labels: Label[]) => void;
   removeLabelFromEmail: (emailId: string, labelId: string) => void;
+  setLabelFilter: (labelId: string | null) => void;
 
   // Actions - Templates
   setTemplates: (templates: Template[]) => void;
@@ -424,6 +428,7 @@ export const useAppStore = create<AppState>()(
       // Labels
       labels: [],
       emailLabelsMap: {},
+      labelFilter: null,
 
       // Templates
       templates: [],
@@ -757,6 +762,9 @@ export const useAppStore = create<AppState>()(
           },
         }
       }),
+
+      // D2 (Batch 9): filter the inbox list to one label (or clear it).
+      setLabelFilter: (labelId) => set({ labelFilter: labelId }),
 
       // Actions - Templates
       setTemplates: (templates) => set({ templates }),

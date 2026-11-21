@@ -48,6 +48,11 @@ interface Campaign {
   subject: string
   body: string
   bodyHtml: string
+  // D1 (Batch 9): honest lifecycle — "draft" | "scheduled" ("sent" is
+  // reserved for when a real outbound provider exists; the API never
+  // writes it today).
+  status: string
+  scheduledFor: string | null
   sentAt: string | null
   opens: number
   clicks: number
@@ -113,8 +118,16 @@ export function BusinessCampaigns() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  // D1 (Batch 9): when set, the compose dialog edits this DRAFT instead of
+  // creating a new campaign (content + recipient set, via PUT).
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
+  // D1 (Batch 9): honest scheduling — a datetime-local stamp the owner can
+  // set on a draft. Nothing is delivered until a real provider ships; the
+  // UI keeps saying so.
+  const [scheduleWhen, setScheduleWhen] = useState('')
+  const [schedulingBusy, setSchedulingBusy] = useState(false)
 
-  // Create form state
+  // Compose form state (create AND edit)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set())
@@ -157,7 +170,7 @@ export function BusinessCampaigns() {
     })
   }, [fetchCampaigns, fetchCustomers])
 
-  async function handleCreateCampaign() {
+  async function handleSaveCampaign() {
     if (!subject.trim()) {
       toast.error('Subject is required')
       return
@@ -173,33 +186,135 @@ export function BusinessCampaigns() {
 
     setCreating(true)
     try {
-      const res = await fetch('/api/business/campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: subject.trim(),
-          body: body.trim(),
-          recipientCustomerIds: Array.from(selectedRecipients),
-        }),
-      })
+      // D1 (Batch 9): same dialog, two verbs. Editing runs through the
+      // draft-only PUT (content + full recipient replacement, transactional
+      // server-side); creating stays the original POST.
+      const editing = editingCampaignId
+      const res = editing
+        ? await fetch(`/api/business/campaigns/${editing}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subject: subject.trim(),
+              body: body.trim(),
+              bodyHtml: campaigns.find((c) => c.id === editing)?.bodyHtml ?? '',
+              recipientCustomerIds: Array.from(selectedRecipients),
+            }),
+          })
+        : await fetch('/api/business/campaigns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subject: subject.trim(),
+              body: body.trim(),
+              recipientCustomerIds: Array.from(selectedRecipients),
+            }),
+          })
 
       if (res.ok) {
         const data = await res.json()
-        toast.success(`Campaign "${data.campaign.subject}" created`)
+        toast.success(`Campaign "${data.campaign.subject}" ${editing ? 'updated' : 'created'}`)
         setSubject('')
         setBody('')
         setSelectedRecipients(new Set())
         setShowCreateForm(false)
+        setEditingCampaignId(null)
         fetchCampaigns()
+        if (editing && selectedCampaign?.id === editing) {
+          handleViewCampaign(editing)
+        }
       } else {
         const data = await res.json()
-        toast.error(data.error || 'Failed to create campaign')
+        toast.error(data.error || (editing ? 'Failed to update campaign' : 'Failed to create campaign'))
       }
     } catch (err) {
-      console.error('Failed to create campaign:', err)
-      toast.error('Failed to create campaign')
+      console.error('Failed to save campaign:', err)
+      toast.error(editingCampaignId ? 'Failed to update campaign' : 'Failed to create campaign')
     } finally {
       setCreating(false)
+    }
+  }
+
+  // D1 (Batch 9): open the compose dialog pre-filled with a DRAFT campaign.
+  function openEditCampaign(campaign: Campaign) {
+    if (campaign.status !== 'draft') {
+      toast.error('Only draft campaigns can be edited')
+      return
+    }
+    setEditingCampaignId(campaign.id)
+    setSubject(campaign.subject)
+    setBody(campaign.body)
+    // Recipients are managed through the detail view's list; the dialog
+    // starts from the campaign's known recipient count via the detail
+    // fetch — simplest correct source is the detail endpoint.
+    setSelectedRecipients(new Set())
+    void (async () => {
+      try {
+        const res = await fetch(`/api/business/campaigns/${campaign.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          setSelectedRecipients(new Set((data.campaign?.recipients || []).map((r: { customer: { id: string } }) => r.customer.id)))
+        }
+      } catch { /* the dialog still opens with an empty set — the owner can re-pick */ }
+    })()
+    setShowCreateForm(true)
+  }
+
+  // D1 (Batch 9): schedule a DRAFT — stamps intent only, delivery is not
+  // available until an outbound email provider is connected.
+  async function handleScheduleCampaign(id: string) {
+    if (!scheduleWhen) {
+      toast.error('Pick a date and time first')
+      return
+    }
+    const when = new Date(scheduleWhen)
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      toast.error('Pick a time in the future')
+      return
+    }
+    setSchedulingBusy(true)
+    try {
+      const res = await fetch(`/api/business/campaigns/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'schedule', scheduledFor: when.toISOString() }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        toast.success('Campaign scheduled — delivery starts once an email provider is connected')
+        setScheduleWhen('')
+        fetchCampaigns()
+        if (selectedCampaign?.id === id) handleViewCampaign(id)
+      } else {
+        toast.error(data?.error || 'Failed to schedule campaign')
+      }
+    } catch {
+      toast.error('Failed to schedule campaign')
+    } finally {
+      setSchedulingBusy(false)
+    }
+  }
+
+  async function handleUnscheduleCampaign(id: string) {
+    setSchedulingBusy(true)
+    try {
+      const res = await fetch(`/api/business/campaigns/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unschedule' }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        toast.success('Moved back to drafts')
+        fetchCampaigns()
+        if (selectedCampaign?.id === id) handleViewCampaign(id)
+      } else {
+        toast.error(data?.error || 'Failed to un-schedule campaign')
+      }
+    } catch {
+      toast.error('Failed to un-schedule campaign')
+    } finally {
+      setSchedulingBusy(false)
     }
   }
 
@@ -258,7 +373,8 @@ export function BusinessCampaigns() {
   // so the old opens/clicks aggregates — structurally zero forever while the
   // UI promised real-time engagement tracking — are replaced by honest counts.
   const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipientCount, 0)
-  const totalDrafts = campaigns.filter((c) => !c.sentAt).length
+  const totalDrafts = campaigns.filter((c) => c.status === 'draft').length
+  const totalScheduled = campaigns.filter((c) => c.status === 'scheduled').length
 
   if (loading) return <CampaignsSkeleton />
 
@@ -293,8 +409,14 @@ export function BusinessCampaigns() {
                 {selectedCampaign.recipientCount} recipients
               </p>
             </div>
-            <Badge className={selectedCampaign.sentAt ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-xs' : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-xs'}>
-              {selectedCampaign.sentAt ? 'Sent' : 'Draft'}
+            <Badge className={
+              selectedCampaign.status === 'scheduled'
+                ? 'bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/20 text-xs'
+                : selectedCampaign.sentAt
+                  ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-xs'
+                  : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-xs'
+            }>
+              {selectedCampaign.status === 'scheduled' ? 'Scheduled' : selectedCampaign.sentAt ? 'Sent' : 'Draft'}
             </Badge>
           </div>
 
@@ -312,11 +434,57 @@ export function BusinessCampaigns() {
                 <Clock className="w-4 h-4 text-[#FBBC04]" />
                 <span className="text-[11px] text-gray-400 uppercase tracking-wider">Delivery &amp; Tracking</span>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Not available yet — campaigns are saved as drafts. Open/click tracking will appear here once delivery ships.
-              </p>
+              {selectedCampaign.status === 'scheduled' ? (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Scheduled for {new Date(selectedCampaign.scheduledFor || '').toLocaleString()} — waiting for delivery. Nothing is sent until an email provider is connected; open/click tracking ships with it.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Not available yet — campaigns are saved as drafts. Open/click tracking will appear here once delivery ships.
+                </p>
+              )}
             </div>
           </div>
+
+          {/* D1 (Batch 9): honest scheduling controls */}
+          {selectedCampaign.status === 'draft' && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <label htmlFor="campaign-schedule-when" className="text-[13px] text-gray-500 dark:text-gray-400 shrink-0">
+                Schedule for (intent only — delivery needs a provider):
+              </label>
+              <Input
+                id="campaign-schedule-when"
+                name="campaign-schedule-when"
+                type="datetime-local"
+                value={scheduleWhen}
+                onChange={(e) => setScheduleWhen(e.target.value)}
+                className="rounded-xl dark:bg-gray-800 h-9 max-w-[240px]"
+              />
+              <Button
+                size="sm"
+                disabled={schedulingBusy || !scheduleWhen}
+                onClick={() => handleScheduleCampaign(selectedCampaign.id)}
+                className="rounded-lg bg-[#4285F4] hover:bg-[#4285F4]/90 text-white h-9"
+              >
+                {schedulingBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                Schedule
+              </Button>
+            </div>
+          )}
+          {selectedCampaign.status === 'scheduled' && (
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={schedulingBusy}
+                onClick={() => handleUnscheduleCampaign(selectedCampaign.id)}
+                className="rounded-lg h-9"
+              >
+                {schedulingBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                Un-schedule (back to draft)
+              </Button>
+            </div>
+          )}
         </motion.div>
 
         {/* Recipients Table */}
@@ -439,7 +607,7 @@ export function BusinessCampaigns() {
             </div>
           </div>
           <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1.5">{totalDrafts}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">Delivery not available yet</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">{totalScheduled > 0 ? `${totalScheduled} scheduled · delivery needs a provider` : 'Delivery not available yet'}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -466,11 +634,12 @@ export function BusinessCampaigns() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4285F4]/10 to-[#4285F4]/5 flex items-center justify-center">
                 <FileEdit className="w-4 h-4 text-[#4285F4]" />
               </div>
-              Create New Campaign
+              {editingCampaignId ? 'Edit Campaign Draft' : 'Create New Campaign'}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-gray-500">
-              Compose your campaign email and select recipients. Campaigns are saved as drafts —
-              email delivery and engagement tracking are not available yet.
+              {editingCampaignId
+                ? 'Update your draft campaign and its recipient list. Scheduling is done from the campaign detail view.'
+                : 'Compose your campaign email and select recipients. Campaigns are saved as drafts — email delivery and engagement tracking are not available yet.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -564,13 +733,14 @@ export function BusinessCampaigns() {
                 setSubject('')
                 setBody('')
                 setSelectedRecipients(new Set())
+                setEditingCampaignId(null)
               }}
               className="rounded-xl"
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateCampaign}
+              onClick={handleSaveCampaign}
               disabled={creating || selectedRecipients.size === 0}
               className="rounded-xl bg-[#4285F4] hover:bg-[#4285F4]/90 text-white"
             >
@@ -579,7 +749,7 @@ export function BusinessCampaigns() {
               ) : (
                 <FileEdit className="w-4 h-4" />
               )}
-              Save as Draft
+              {editingCampaignId ? 'Save Changes' : 'Save as Draft'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -622,12 +792,14 @@ export function BusinessCampaigns() {
                     </TableCell>
                     <TableCell>
                       <Badge className={
-                        campaign.sentAt
-                          ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-[10px] px-2 py-0.5'
-                          : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-[10px] px-2 py-0.5'
+                        campaign.status === 'scheduled'
+                          ? 'bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/20 text-[10px] px-2 py-0.5'
+                          : campaign.sentAt
+                            ? 'bg-[#34A853]/10 text-[#34A853] border-[#34A853]/20 text-[10px] px-2 py-0.5'
+                            : 'bg-[#FBBC04]/10 text-[#FBBC04] border-[#FBBC04]/20 text-[10px] px-2 py-0.5'
                       }>
                         <Megaphone className="w-3 h-3 mr-1" />
-                        {campaign.sentAt ? 'Sent' : 'Draft'}
+                        {campaign.status === 'scheduled' ? 'Scheduled' : campaign.sentAt ? 'Sent' : 'Draft'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -640,6 +812,16 @@ export function BusinessCampaigns() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {campaign.status === 'draft' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEditCampaign(campaign)}
+                            className="h-8 text-[11px] rounded-lg hover:bg-[#4285F4]/5"
+                          >
+                            <FileEdit className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

@@ -1,4 +1,5 @@
 import { createHmac, randomFillSync, randomInt } from 'crypto';
+import { kvClaimValue } from '@/lib/server-state';
 
 const TIME_STEP = 30; // seconds
 const DIGITS = 6;
@@ -122,16 +123,26 @@ export function verifyTOTP(secret: string, code: string): boolean {
  * is still valid. This wrapper records the time-step each user last consumed
  * and refuses to accept the same step twice.
  *
- * Storage is in-memory, so on serverless each instance tracks independently
- * (the same accepted limitation as the other in-memory limiter state in this
- * codebase, see audit S-02). It still closes the same-instance replay, which
- * is the realistic case: the phished code is replayed within seconds.
- * Backup codes are unaffected — they are single-use by construction (the
- * login route consumes them from the stored list).
+ * D4 (Batch 9): the last-consumed step is stored in the shared PostgreSQL
+ * server-state store ("totp-step:<userId>") instead of a per-instance Map,
+ * so the replay guard is enforced across all serverless instances — the
+ * realistic replay case (the phished code is reused seconds later, often
+ * from a different session hitting a different instance) is now closed
+ * fleet-wide, not just within one warm instance. Backup codes are
+ * unaffected — they are single-use by construction (the login route
+ * consumes them from the stored list).
+ *
+ * Batch 9 REMEDIATION (owner-approved): the first shared-store version
+ * compared the stored step with a read-then-write (kvGet → kvSet), which
+ * two perfectly concurrent same-code logins could both slip through.
+ * The guard is now the atomic compare-and-set claim `kvClaimValue`: the
+ * request whose single conditional statement moves the stored step to `c`
+ * wins; every other request — same instance, other instance, or after a
+ * restart — finds the step already claimed and is refused. Exactly one
+ * concurrent same-code login can succeed, by construction of the store
+ * (see src/lib/server-state.ts).
  */
-const lastUsedStepByUser = new Map<string, number>();
-
-export function verifyTOTPSingleUse(userId: string, secret: string, code: string): boolean {
+export async function verifyTOTPSingleUse(userId: string, secret: string, code: string): Promise<boolean> {
   if (!code || code.length !== DIGITS) return false;
 
   const key = base32Decode(secret);
@@ -157,18 +168,12 @@ export function verifyTOTPSingleUse(userId: string, secret: string, code: string
 
     const expected = (num % Math.pow(10, DIGITS)).toString().padStart(DIGITS, '0');
     if (expected === code) {
-      // The code matches time-step c. If that step was already consumed by a
-      // successful login, it is a replay — reject it.
-      if (lastUsedStepByUser.get(userId) === c) return false;
-      lastUsedStepByUser.set(userId, c);
-      // Keep the map bounded: entries older than a few windows are useless.
-      if (lastUsedStepByUser.size > 10000) {
-        const cutoff = counter - 10;
-        for (const [uid, step] of lastUsedStepByUser) {
-          if (step < cutoff) lastUsedStepByUser.delete(uid);
-        }
-      }
-      return true;
+      // The code matches time-step c. Atomic single-use claim: exactly one
+      // caller per step can transition the stored step to c — a concurrent
+      // or later same-step submission finds it already claimed and is a
+      // replay (false). No TTL: one small row per 2FA user; the value is
+      // semantically "the newest step consumed" and moves forward forever.
+      return kvClaimValue(`totp-step:${userId}`, String(c));
     }
   }
 

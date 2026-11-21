@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
       // F-48: single-use verification — the same TOTP code cannot be
       // replayed within its ±1 time-step window after a successful login.
-      let twoFactorOk = verifyTOTPSingleUse(user.id, twoFactor.secret, code);
+      let twoFactorOk = await verifyTOTPSingleUse(user.id, twoFactor.secret, code);
       if (!twoFactorOk) {
         // Backup codes are stored as a JSON array of codes; a used code is
         // consumed so it can never log in twice.

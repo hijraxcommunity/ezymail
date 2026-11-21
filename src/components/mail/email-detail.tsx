@@ -7,9 +7,10 @@ import {
   Paperclip, Forward, FileText, Download, Check, Pencil,
   Plus, X, Clock, CalendarDays, AlarmClockOff, ChevronRight, ChevronUp,
   ChevronDown, Lock, Copy, Mail, MoreVertical, Flag, Sun, Sunset, Briefcase,
-  UserPlus, Send, CalendarClock, Image as ImageIcon
+  UserPlus, Send, CalendarClock, Image as ImageIcon, Tag
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
+import { useMailPreferences } from '@/hooks/use-mail-preferences'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -604,6 +605,14 @@ export function EmailDetail() {
     user,
   } = useAppStore()
 
+  // D2 (Batch 9): label palette (the caller's own labels) + the opened
+  // row's labels for the chips and the assign menu.
+  const labelPalette = useAppStore((s) => s.labels)
+  const currentLabels = useAppStore((s) => (selectedEmailId ? s.emailLabelsMap[selectedEmailId] : undefined)) || []
+
+  // F-57 (Batch 9): conversation view OFF = read one message at a time.
+  const mailPrefs = useMailPreferences()
+
   const [email, setEmail] = useState<EmailWithSender | null>(null)
   const [thread, setThread] = useState<EmailWithSender[]>([])
   const [loading, setLoading] = useState(false)
@@ -621,6 +630,9 @@ export function EmailDetail() {
       if (res.ok) {
         setEmail(data.email)
         setThread(data.thread || [])
+        // D2 (Batch 9): the detail response carries the caller's own
+        // labels for this row — keep the map in sync for the chips.
+        useAppStore.getState().setEmailLabels(data.email.id, data.email.labels || [])
         if (!data.email.isRead) {
           updateEmail(data.email.id, { isRead: true })
           fetch(`/api/emails/${selectedEmailId}`, {
@@ -679,6 +691,34 @@ export function EmailDetail() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [selectedEmailId, handleBack])
+
+  /* ─── D2 (Batch 9): label assign / unassign ─── */
+  const handleToggleLabel = async (labelId: string) => {
+    if (!selectedEmailId) return
+    const store = useAppStore.getState()
+    const owned = currentLabels.some((l) => l.id === labelId)
+    const previous = currentLabels
+    // Optimistic store update, then the secured endpoint is the authority.
+    if (owned) {
+      store.removeLabelFromEmail(selectedEmailId, labelId)
+    } else {
+      const label = store.labels.find((l) => l.id === labelId)
+      if (!label) return
+      store.setEmailLabels(selectedEmailId, [...previous, label])
+    }
+    try {
+      const res = await fetch(`/api/emails/${selectedEmailId}/labels`, {
+        method: owned ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labelIds: [labelId] }),
+      })
+      if (!res.ok) throw new Error('label update failed')
+    } catch {
+      // Roll the optimistic change back on any failure.
+      useAppStore.getState().setEmailLabels(selectedEmailId, previous)
+      toast.error(owned ? 'Failed to remove label' : 'Failed to apply label')
+    }
+  }
 
   /* ─── Star toggle ─── */
   const handleStar = async () => {
@@ -967,8 +1007,13 @@ export function EmailDetail() {
 
   const replies = email.replies || []
 
-  // Use thread array if available (full conversation), otherwise fall back to email + replies
-  const threadMessages = thread.length > 0 ? thread : [email, ...replies]
+  // Use thread array if available (full conversation), otherwise fall back to email + replies.
+  // F-57 (Batch 9): conversation view OFF renders the opened message only —
+  // the "one message at a time" reading mode. The list still pages
+  // conversations server-side (documented limitation).
+  const threadMessages = mailPrefs.conversationView
+    ? (thread.length > 0 ? thread : [email, ...replies])
+    : [email]
   const selectedId = email?.id
 
   return (
@@ -1148,6 +1193,37 @@ export function EmailDetail() {
                     <DropdownMenuItem onClick={handleArchive} className="gap-2.5 cursor-pointer">
                       <Archive className="w-4 h-4" /> Archive
                     </DropdownMenuItem>
+                    {/* D2 (Batch 9): assign the caller's own labels */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2.5 cursor-pointer">
+                        <Tag className="w-4 h-4" /> Label as
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-52 max-h-64 overflow-y-auto">
+                        {labelPalette.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-gray-400">
+                            No labels yet — create them in Settings → Labels
+                          </div>
+                        ) : (
+                          labelPalette.map((label) => {
+                            const has = currentLabels.some((l) => l.id === label.id)
+                            return (
+                              <DropdownMenuItem
+                                key={label.id}
+                                className="gap-2 cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  void handleToggleLabel(label.id)
+                                }}
+                              >
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
+                                <span className="flex-1 truncate">{label.name}</span>
+                                {has && <Check className="w-3.5 h-3.5 text-[#4285F4] shrink-0" />}
+                              </DropdownMenuItem>
+                            )
+                          })
+                        )}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuItem onClick={handleReportSpam} className="gap-2.5 cursor-pointer">
                       <Flag className="w-4 h-4" /> Report
                     </DropdownMenuItem>
@@ -1168,6 +1244,22 @@ export function EmailDetail() {
           <h1 className="email-body text-base sm:text-lg font-semibold text-[#1F1F1F] dark:text-white mb-1 leading-tight">
             {email.subject || '(No subject)'}
           </h1>
+
+          {/* D2 (Batch 9): label chips on the opened message */}
+          {currentLabels.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              {currentLabels.map((label) => (
+                <span
+                  key={label.id}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5"
+                  style={{ backgroundColor: `${label.color}1A`, color: label.color }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
+                  {label.name}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* ─── Thread: Full conversation (Gmail-style, flat) ─── */}
           <div className="mb-4">

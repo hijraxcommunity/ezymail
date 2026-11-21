@@ -8,6 +8,7 @@ import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAppStore, type EmailWithSender } from '@/store/use-app-store'
+import { useMailPreferences } from '@/hooks/use-mail-preferences'
 
 const SNAP_OPEN_PX = 100
 const ELASTIC_FACTOR = 0.35 // Resistance beyond snap point — feels like rubber band
@@ -57,6 +58,8 @@ interface EmailCardProps {
 
 export function EmailCard({ email, isSelected, onSelect, index, currentFolder }: EmailCardProps) {
   const { updateEmail, removeEmail, multiSelectMode, selectedEmailIds, toggleSelectEmail, setUndoAction, setEditDraftEmail, setSelectedEmailId, setEmailDetailOpen } = useAppStore()
+  // D2 (Batch 9): the row's own labels — chips render next to the subject.
+  const emailLabels = useAppStore((s) => s.emailLabelsMap[email.id]) || []
   const isArchive = currentFolder === 'archive'
   const isDrafts = currentFolder === 'drafts'
 
@@ -236,10 +239,20 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     ? `${contactPerson.firstName?.charAt(0) || ''}${contactPerson.lastName?.charAt(0) || ''}`.toUpperCase()
     : 'U'
   const timeAgo = formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })
-  const snippet = email.body
-    ?.substring(0, 100)
-    .replace(/<[^>]*>/g, '')
-    .replace(/\n/g, ' ') || ''
+  // F-57 (Batch 9): the display preferences now actually reach the card —
+  // density drives row padding, previewLines drives the snippet (clamped
+  // lines instead of a hard single-line truncate), dateFormat drives the
+  // clock on scheduled/snoozed stamps.
+  const mailPrefs = useMailPreferences()
+  const snippetChars = mailPrefs.previewLines === '1' ? 100 : 240
+  const snippet = mailPrefs.previewLines === 'none'
+    ? ''
+    : email.body
+      ?.substring(0, snippetChars)
+      .replace(/<[^>]*>/g, '')
+      .replace(/\n/g, ' ') || ''
+  const stampFormat = mailPrefs.dateFormat === '24h' ? "MMM d, HH:mm" : 'MMM d, h:mm a'
+  const densityPad = mailPrefs.emailDensity === 'compact' ? 'py-1.5' : mailPrefs.emailDensity === 'cozy' ? 'py-2.5' : 'py-3'
 
   const isChecked = selectedEmailIds.has(email.id)
 
@@ -262,6 +275,28 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
       updateEmail(email.id, { isStarred: !newValue })
     }
   }
+
+  // D2 (Batch 9): compact label chips (max 3 + overflow counter) in the
+  // same badge language as the reply-count pill.
+  const visibleLabels = emailLabels.slice(0, 3)
+  const overflowCount = emailLabels.length - visibleLabels.length
+  const labelChips = emailLabels.length > 0 && (
+    <span className="inline-flex items-center gap-1 shrink-0">
+      {visibleLabels.map((label) => (
+        <span
+          key={label.id}
+          className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 leading-none max-w-[90px]"
+          style={{ backgroundColor: `${label.color}1A`, color: label.color }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
+          <span className="truncate">{label.name}</span>
+        </span>
+      ))}
+      {overflowCount > 0 && (
+        <span className="text-[10px] text-gray-400 shrink-0">+{overflowCount}</span>
+      )}
+    </span>
+  )
 
   return (
     <motion.div
@@ -324,7 +359,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                 handleCardClick()
               }
             }}
-            className={`group w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
+            className={`group w-full flex items-center gap-3 px-3 sm:px-4 ${densityPad} text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
               isSelected
                 ? 'bg-blue-50 dark:bg-blue-950/30'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-900'
@@ -399,32 +434,37 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
                   {contactName}
                 </span>
                 <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
+                  {email.scheduledAt ? format(new Date(email.scheduledAt), stampFormat) : timeAgo}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mb-0.5">
                 <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
                   {email.subject || '(No subject)'}
                 </p>
-                {(email.replyCount ?? 0) > 0 && (
+                {labelChips}
+                {mailPrefs.conversationView && (email.replyCount ?? 0) > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
                     <MessageSquare className="w-2.5 h-2.5" />
                     {email.replyCount}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
-                  {snippet}
-                </p>
-                {email.attachments && (
-                  <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                )}
-              </div>
+              {snippet && (
+                <div className="flex items-center gap-2">
+                  <p className={`text-[13px] text-gray-500 dark:text-gray-400 flex-1 ${
+                    mailPrefs.previewLines === '2' ? 'line-clamp-2' : mailPrefs.previewLines === '3' ? 'line-clamp-3' : 'truncate'
+                  }`}>
+                    {snippet}
+                  </p>
+                  {email.attachments && (
+                    <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  )}
+                </div>
+              )}
               {email.snoozedUntil && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mt-0.5">
                   <CalendarDays className="w-2.5 h-2.5" />
-                  {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+                  {format(new Date(email.snoozedUntil), stampFormat)}
                 </Badge>
               )}
             </div>
@@ -457,7 +497,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
             onSelect()
           }
         }}
-        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
+        className={`hidden md:flex group w-full items-center gap-3 px-3 sm:px-4 ${densityPad} text-left transition-all duration-150 cursor-pointer relative active:scale-[0.97] select-none ${
           isSelected
             ? 'bg-blue-50 dark:bg-blue-950/30'
             : 'hover:bg-gray-50 dark:hover:bg-gray-900'
@@ -530,32 +570,37 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
               {contactName}
             </span>
             <span className={`text-xs whitespace-nowrap shrink-0 ${email.scheduledAt ? 'text-[#4285F4] font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
-              {email.scheduledAt ? format(new Date(email.scheduledAt), 'MMM d, h:mm a') : timeAgo}
+              {email.scheduledAt ? format(new Date(email.scheduledAt), stampFormat) : timeAgo}
             </span>
           </div>
           <div className="flex items-center gap-1.5 mb-0.5">
             <p className={`text-[13px] truncate flex-1 ${!email.isRead ? 'font-semibold text-[#1F1F1F] dark:text-white' : 'text-[#444746] dark:text-gray-300'}`}>
               {email.subject || '(No subject)'}
             </p>
-            {(email.replyCount ?? 0) > 0 && (
+            {labelChips}
+            {mailPrefs.conversationView && (email.replyCount ?? 0) > 0 && (
               <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#4285F4] bg-[#D3E3FD] dark:bg-[#4285F4]/15 dark:text-[#60a5fa] rounded-full px-1.5 py-0.5 leading-none">
                 <MessageSquare className="w-2.5 h-2.5" />
                 {email.replyCount}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate flex-1">
-              {snippet}
-            </p>
-            {email.attachments && (
-              <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-            )}
-          </div>
+          {snippet && (
+            <div className="flex items-center gap-2">
+              <p className={`text-[13px] text-gray-500 dark:text-gray-400 flex-1 ${
+                mailPrefs.previewLines === '2' ? 'line-clamp-2' : mailPrefs.previewLines === '3' ? 'line-clamp-3' : 'truncate'
+              }`}>
+                {snippet}
+              </p>
+              {email.attachments && (
+                <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              )}
+            </div>
+          )}
           {email.snoozedUntil && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 gap-1 mt-0.5">
               <CalendarDays className="w-2.5 h-2.5" />
-              {format(new Date(email.snoozedUntil), 'MMM d, h:mm a')}
+              {format(new Date(email.snoozedUntil), stampFormat)}
             </Badge>
           )}
         </div>

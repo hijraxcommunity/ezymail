@@ -165,7 +165,22 @@ export async function GET(
       attachments: slimAttachments(msg.attachments),
     }));
 
-    return NextResponse.json({ email, thread: slimThread });
+    // D2 (Batch 9): the caller's OWN labels on the opened row — chips and
+    // the label menu in the detail view render from these. Scoped to the
+    // session user exactly like the dedicated /api/emails/[id]/labels
+    // endpoints, so pre-fix foreign rows are never surfaced.
+    const myLabels = await db.emailLabel.findMany({
+      where: { emailId: email.id, label: { userId: session.userId } },
+      include: { label: { select: { id: true, name: true, color: true } } },
+    });
+
+    return NextResponse.json({
+      email: {
+        ...email,
+        labels: myLabels.map((el) => el.label),
+      },
+      thread: slimThread,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Get email error:', message);

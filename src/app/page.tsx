@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useAppStore } from '@/store/use-app-store'
+import { useAppStore, type Label } from '@/store/use-app-store'
 import { toast } from 'sonner'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { MailHeader } from '@/components/mail/mail-header'
@@ -200,6 +200,15 @@ export default function HomePage() {
             // impersonation session; the banner reads the same store field.
             if (!cancelled) setImpersonating(Boolean(data.impersonating))
             if (!cancelled) setIsCheckingAuth(false)
+            // D2 (Batch 9): the caller's label palette for the sidebar,
+            // the card chips and the label filter — fetched once per
+            // session; label mutations refetch it where they happen.
+            fetch('/api/labels')
+              .then((r) => (r.ok ? r.json() : null))
+              .then((d) => {
+                if (!cancelled && d?.data) useAppStore.getState().setLabels(d.data)
+              })
+              .catch(() => {})
             return
           }
           if (res.status !== 401 && tryNo < 2) {
@@ -299,10 +308,20 @@ export default function HomePage() {
       params.set('folder', currentFolder)
       params.set('page', '1')
       params.set('limit', '20')
+      // D2 (Batch 9): honor the sidebar label filter (inbox view only)
+      const activeLabel = useAppStore.getState().labelFilter
+      if (activeLabel && currentFolder === 'inbox') params.set('label', activeLabel)
       const res = await fetch(`/api/emails?${params}`)
       const data = await res.json()
       if (res.ok) {
-        setEmails(data.emails || [])
+        const rows = data.emails || []
+        setEmails(rows)
+        // D2 (Batch 9): refresh the label map for the visible rows
+        const mapBatch = useAppStore.getState().emailLabelsMap
+        for (const row of rows as Array<{ id: string; labels?: Label[] }>) {
+          mapBatch[row.id] = row.labels || []
+        }
+        useAppStore.setState({ emailLabelsMap: { ...mapBatch } })
         setTotalEmails(data.total || 0)
       }
     } catch {

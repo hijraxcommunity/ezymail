@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies, headers } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { db } from './db';
+import { checkRateLimitWindow } from './server-state';
 
 /**
  * Thrown when the deployment is missing JWT_SECRET. Authentication fails
@@ -359,40 +360,19 @@ export async function checkRateLimit(ip: string): Promise<{ allowed: boolean; re
 }
 
 /**
- * F-32: generic fixed-window in-memory rate limiter (shared Map with the
- * login limiter). Residual limitation, documented in the audit: the window
- * state lives per server instance and resets on cold start, and callers
- * derive the key from client-controlled headers where noted. A
- * Redis/Upstash shared store or platform WAF is the complete fix and is
- * tracked separately — these per-route limits still stop single-instance
- * flooding and expensive-path abuse (bcrypt registrations, base64 uploads,
- * send spam).
+ * F-32: generic fixed-window rate limiter. D4 (Batch 9): the window state
+ * lives in the shared PostgreSQL store (src/lib/server-state.ts) instead of
+ * a per-instance Map, so the cap is real across serverless instances and
+ * cold starts instead of per-instance (audit S-02). Every caller that used
+ * the Map gets the shared store through this function unchanged. Callers
+ * derive the key from client-controlled headers where noted — a platform
+ * WAF on top of this remains the complete fix for IP-spoofing, but the cap
+ * itself no longer resets on every deploy.
  */
 export async function checkRateLimitKey(
   key: string,
   maxAttempts: number,
   windowMs: number
 ): Promise<boolean> {
-  const globalForRateLimit = globalThis as unknown as {
-    rateLimits: Map<string, { count: number; resetTime: number }>;
-  };
-
-  if (!globalForRateLimit.rateLimits) {
-    globalForRateLimit.rateLimits = new Map();
-  }
-
-  const now = Date.now();
-  const record = globalForRateLimit.rateLimits.get(key);
-
-  if (!record || now > record.resetTime) {
-    globalForRateLimit.rateLimits.set(key, { count: 1, resetTime: now + windowMs });
-    return true;
-  }
-
-  if (record.count >= maxAttempts) {
-    return false;
-  }
-
-  record.count++;
-  return true;
+  return checkRateLimitWindow(key, maxAttempts, windowMs);
 }

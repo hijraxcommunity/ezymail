@@ -65,14 +65,14 @@ export async function POST(request: NextRequest) {
     // ── Send a fresh OTP to the number ──
     if (action === 'send') {
       const ip = clientIp(request);
-      if (!checkVerifyIpRate(ip)) {
+      if (!(await checkVerifyIpRate(ip))) {
         return NextResponse.json(
           { error: 'Too many verification requests. Please try again in a few minutes.' },
           { status: 429 }
         );
       }
 
-      const resendWait = phoneResendWaitSeconds(e164);
+      const resendWait = await phoneResendWaitSeconds(e164);
       if (resendWait > 0) {
         return NextResponse.json(
           { error: `Please wait ${resendWait}s before requesting a new code.`, retryAfter: resendWait },
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!checkPhoneSendRate(e164)) {
+      if (!(await checkPhoneSendRate(e164))) {
         return NextResponse.json(
           { error: 'Too many codes requested for this number. Please try again in a few minutes.' },
           { status: 429 }
@@ -103,13 +103,13 @@ export async function POST(request: NextRequest) {
 
       // Cryptographically secure 6-digit code, stored as a salted hash only.
       const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
-      storePhoneOtp(e164, otp);
+      await storePhoneOtp(e164, otp);
 
       try {
         await sendWhatsAppOTP(e164, otp, { purpose: 'registration', expiryMinutes: 5 });
       } catch (error: unknown) {
         // Nothing verifiable exists for this number until a code is delivered.
-        clearPhoneOtp(e164);
+        await clearPhoneOtp(e164);
         console.error(
           'WhatsApp OTP delivery failed (registration):',
           error instanceof Error ? error.message : 'unknown error'
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: OTP_SEND_FAILURE, reason }, { status: 503 });
       }
 
-      markPhoneOtpSent(e164);
+      await markPhoneOtpSent(e164);
 
       return NextResponse.json({
         sent: true,
@@ -138,12 +138,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result = checkPhoneOtp(e164, otp);
+      const result = await checkPhoneOtp(e164, otp);
       if (result === 'invalid') {
         return NextResponse.json(
           {
             error: 'Incorrect code. Please try again.',
-            attemptsLeft: phoneOtpAttemptsLeft(e164),
+            attemptsLeft: await phoneOtpAttemptsLeft(e164),
           },
           { status: 400 }
         );

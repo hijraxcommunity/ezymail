@@ -1,7 +1,7 @@
 'use client'
 
 import type React from 'react'
-import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Users, Clock, CalendarClock, ShieldAlert } from 'lucide-react'
+import { Mail, Star, Send, FileText, Trash2, Archive, Plus, Users, Clock, CalendarClock, ShieldAlert, Tag } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -40,6 +40,9 @@ export function MailSidebar() {
     setComposeOpen,
     setContactsView,
     isAuthenticated,
+    labels,
+    labelFilter,
+    setLabelFilter,
   } = useAppStore()
 
   // Subscribe to emails for real-time counts. F-63: the Inbox unread badge
@@ -147,6 +150,39 @@ export function MailSidebar() {
           <Users className="w-5 h-5 shrink-0 text-[#1F1F1F] dark:text-gray-300" />
           <span className="flex-1 text-left">Contacts</span>
         </motion.button>
+
+        {/* ─── D2 (Batch 9): Labels — filter the inbox by one of the user's own labels ─── */}
+        {labels.length > 0 && (
+          <div className="mt-3 px-3 pb-1">
+            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+              Labels
+            </span>
+          </div>
+        )}
+        {labels.slice(0, 8).map((label) => {
+          const isActive = labelFilter === label.id && currentFolder === 'inbox'
+          return (
+            <motion.button
+              key={label.id}
+              variants={itemVariants}
+              onClick={() => {
+                useAppStore.getState().setSearchQuery('')
+                useAppStore.getState().setSearchResults([])
+                setLabelFilter(isActive ? null : label.id)
+                setCurrentFolder('inbox')
+                setSidebarOpen(false)
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-150 min-h-[40px] active:scale-[0.97] ${
+                isActive
+                  ? 'bg-[#D3E3FD] dark:bg-[#4285F4]/20 text-[#4285F4]'
+                  : 'text-[#1F1F1F] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
+              <span className="flex-1 text-left truncate">{label.name}</span>
+            </motion.button>
+          )
+        })}
 
 
       </ScrollArea>

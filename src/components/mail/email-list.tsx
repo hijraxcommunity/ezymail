@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useAppStore } from '@/store/use-app-store'
+import { useAppStore, type Label } from '@/store/use-app-store'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +54,9 @@ export function EmailList() {
     setSelectedEmailId,
     setEmails,
     appendEmails,
+    labelFilter,
+    labels,
+    setLabelFilter,
     setIsLoading,
     setCurrentPage,
     setTotalEmails,
@@ -118,9 +121,19 @@ export function EmailList() {
       params.set('folder', currentFolder === 'folder' ? 'custom' : currentFolder)
       params.set('page', String(currentPage))
       params.set('limit', '20')
+      // D2 (Batch 9): honor the sidebar label filter (inbox view only)
+      const activeLabel = useAppStore.getState().labelFilter
+      if (activeLabel && currentFolder === 'inbox') params.set('label', activeLabel)
       const res = await fetch(`/api/emails?${params}`)
       const data = await res.json()
       if (res.ok) {
+        // D2 (Batch 9): refresh the label map for every fetched row so the
+        // card chips (and the detail chips) render from one source.
+        const mapBatch = { ...useAppStore.getState().emailLabelsMap }
+        for (const row of (data.emails || []) as Array<{ id: string; labels?: Label[] }>) {
+          mapBatch[row.id] = row.labels || []
+        }
+        useAppStore.setState({ emailLabelsMap: mapBatch })
         if (append) {
           const added = appendEmails(data.emails || [])
           if (currentPage > maxPageLoadedRef.current) {
@@ -545,6 +558,30 @@ export function EmailList() {
               {isSearch ? searchTotal : displayEmails.length}
             </span>
           )}
+          {/* D2 (Batch 9): active label filter — same pill language, dismissible */}
+          {labelFilter && currentFolder === 'inbox' && (() => {
+            const active = labels.find((l) => l.id === labelFilter)
+            if (!active) return null
+            return (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 shrink-0"
+                style={{ backgroundColor: `${active.color}1A`, color: active.color }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: active.color }} />
+                {active.name}
+                <button
+                  onClick={() => {
+                    setLabelFilter(null)
+                    refreshFromTop()
+                  }}
+                  className="ml-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 p-0.5"
+                  aria-label="Clear label filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )
+          })()}
         </div>
         {!isSearch ? (
           <Button

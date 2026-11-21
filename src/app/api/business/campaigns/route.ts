@@ -30,6 +30,11 @@ export async function GET() {
       subject: c.subject,
       body: c.body,
       bodyHtml: c.bodyHtml,
+      // D1 (Batch 9): honest lifecycle states. status/scheduledFor ride
+      // alongside the legacy fields; sentAt stays null until a real
+      // outbound provider ships.
+      status: c.status,
+      scheduledFor: c.scheduledFor,
       sentAt: c.sentAt,
       opens: c.opens,
       clicks: c.clicks,
@@ -133,6 +138,8 @@ export async function POST(request: NextRequest) {
           subject: campaign.subject,
           body: campaign.body,
           bodyHtml: campaign.bodyHtml,
+          status: campaign.status,
+          scheduledFor: campaign.scheduledFor,
           sentAt: campaign.sentAt,
           opens: campaign.opens,
           clicks: campaign.clicks,

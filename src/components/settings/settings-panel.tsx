@@ -12,7 +12,7 @@ import {
   Trash2, AlertTriangle, CheckCircle2, XCircle, Copy, Key,
   Bold, Italic, Link as LinkIcon, List, ChevronRight,
   RefreshCw, LogOut, CalendarDays, Filter, ArrowLeft, User, Palette,
-  BellRing, FileText, ShieldCheck, Settings as SettingsIcon
+  BellRing, FileText, ShieldCheck, Settings as SettingsIcon, Tag
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -37,6 +37,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { FiltersTab } from '@/components/settings/filters-tab'
+import { LabelsTabContent } from '@/components/settings/labels-tab'
+import { WhatsAppOtpVerify } from '@/components/auth/whatsapp-otp-verify'
+import { splitPhone } from '@/lib/countries'
+import { writeMailPreferences } from '@/hooks/use-mail-preferences'
 import { useAppStore } from '@/store/use-app-store'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -154,6 +158,10 @@ export function SettingsPanel() {
 
   // ─── Profile state ──────────────────────────────────────────────────────
   const [profile, setProfile] = useState<ProfileData | null>(null)
+  // F-41 (Batch 9): the phone as the SERVER has it. The verify-phone flow
+  // compares the editable number against this to decide whether a change
+  // (and therefore an OTP proof) is actually required.
+  const [originalPhone, setOriginalPhone] = useState<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -228,6 +236,7 @@ export function SettingsPanel() {
         const data = await res.json()
         const u = data.user as ProfileData
         setProfile(u)
+        setOriginalPhone(u.phone ?? '')
         // Load preferences
         if (u.preferences) {
           try {
@@ -238,6 +247,15 @@ export function SettingsPanel() {
             if (prefs.desktopNotif !== undefined) setDesktopNotif(prefs.desktopNotif)
             if (prefs.soundNotif !== undefined) setSoundNotif(prefs.soundNotif)
             if (prefs.dateFormat) setDateFormat(prefs.dateFormat)
+            // F-57 (Batch 9): publish the four display preferences to the
+            // live cache the mail list/detail consume (same pattern as the
+            // notification switches).
+            writeMailPreferences({
+              emailDensity: prefs.emailDensity || 'comfortable',
+              previewLines: prefs.previewLines || '2',
+              conversationView: typeof prefs.conversationView === 'boolean' ? prefs.conversationView : true,
+              dateFormat: prefs.dateFormat || '12h',
+            })
           } catch {
             // ignore parse errors
           }
@@ -260,7 +278,7 @@ export function SettingsPanel() {
   }, [loadProfile])
 
   // ─── Profile handlers ──────────────────────────────────────────────────
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = async (overridePhone?: string, phoneVerificationToken?: string | null) => {
     if (!profile) return
     if (!profile.firstName.trim() || !profile.lastName.trim()) {
       toast.error('Name fields are required')
@@ -276,7 +294,13 @@ export function SettingsPanel() {
           lastName: profile.lastName,
           displayName: profile.displayName,
           bio: profile.bio,
-          phone: profile.phone,
+          // F-41 (Batch 9): when the number changed, the verified E.164 from
+          // the WhatsApp OTP flow is submitted — the server only accepts a
+          // changed phone together with a matching, unconsumed proof token
+          // (see PUT /api/user/profile). An unchanged number is sent as-is
+          // and needs no proof.
+          phone: overridePhone ?? profile.phone,
+          ...(phoneVerificationToken ? { phoneVerificationToken } : {}),
           dateOfBirth: profile.dateOfBirth,
         }),
       })
@@ -284,6 +308,7 @@ export function SettingsPanel() {
         const data = await res.json()
         const updated = data.user as ProfileData
         setProfile(updated)
+        setOriginalPhone(updated.phone ?? '')
         // Also update Zustand store user
         const store = useAppStore.getState()
         store.setUser({
@@ -574,6 +599,9 @@ export function SettingsPanel() {
         try {
           sessionStorage.setItem('ezymail-notif-prefs', JSON.stringify({ desktopNotif, soundNotif }))
         } catch { /* ignore */ }
+        // F-57 (Batch 9): publish the four display preferences so density,
+        // preview lines, conversation view and the clock format apply live.
+        writeMailPreferences({ emailDensity, previewLines, conversationView, dateFormat })
         toast.success('Preferences saved')
       } else {
         toast.error('Failed to save preferences')
@@ -702,6 +730,7 @@ export function SettingsPanel() {
     { key: 'security', label: 'Security', description: 'Password, sessions, login history, and two-factor authentication', icon: ShieldCheck, color: 'bg-[#34A853]/10 text-[#34A853]', badge: 'Protected' },
     { key: 'preferences', label: 'Appearance & Preferences', description: 'Theme, density, notifications, date format, and signature', icon: Palette, color: 'bg-[#FBBC05]/10 text-[#E37400]', preview: theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'System' },
     { key: 'filters', label: 'Filters & Rules', description: 'Email filters, auto-labeling, and automated rules', icon: Filter, color: 'bg-[#EA4335]/10 text-[#EA4335]' },
+    { key: 'labels', label: 'Labels', description: 'Create, rename, recolor, and delete your mail labels', icon: Tag, color: 'bg-[#6366F1]/10 text-[#6366F1]' },
     { key: 'account', label: 'Account', description: 'Export data and manage your account', icon: SettingsIcon, color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
   ]
 
@@ -855,6 +884,7 @@ export function SettingsPanel() {
                   <ProfileTabContent
                     profile={profile}
                     setProfile={setProfile}
+                    originalPhone={originalPhone}
                     initials={initials}
                     avatarUploading={avatarUploading}
                     avatarUploadProgress={avatarUploadProgress}
@@ -940,6 +970,11 @@ export function SettingsPanel() {
                   <FiltersTab />
                 </motion.div>
               )}
+              {activeSection === 'labels' && (
+                <motion.div key="detail-labels" {...tabVariants} initial="initial" animate="animate" exit="exit">
+                  <LabelsTabContent />
+                </motion.div>
+              )}
               {activeSection === 'account' && (
                 <motion.div key="detail-account" {...tabVariants} initial="initial" animate="animate" exit="exit">
                   <AccountTabContent
@@ -961,7 +996,7 @@ export function SettingsPanel() {
 
 function ProfileTabContent({
   profile, setProfile, initials, avatarUploading, avatarUploadProgress, savingProfile,
-  avatarInputRef, handleAvatarUpload, handleSaveProfile,
+  avatarInputRef, handleAvatarUpload, handleSaveProfile, originalPhone,
 }: {
   profile: ProfileData | null
   setProfile: React.Dispatch<React.SetStateAction<ProfileData | null>>
@@ -971,8 +1006,46 @@ function ProfileTabContent({
   savingProfile: boolean
   avatarInputRef: React.RefObject<HTMLInputElement | null>
   handleAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
-  handleSaveProfile: () => void
+  handleSaveProfile: (overridePhone?: string, phoneVerificationToken?: string | null) => void
+  originalPhone: string | null
 }) {
+  // ─── F-41 (Batch 9): WhatsApp-verified phone change ───────────────────
+  // The picker states live here; they sync from the STORED phone whenever
+  // the server copy changes (initial load, post-save), never on unrelated
+  // renders. While the editable number differs from the stored one, the
+  // plain input is replaced by the same WhatsAppOtpVerify component the
+  // registration forms use, and Save stays disabled until the server-
+  // issued proof token exists.
+  const [phoneDial, setPhoneDial] = useState('')
+  const [phoneNational, setPhoneNational] = useState('')
+  const [phoneToken, setPhoneToken] = useState<string | null>(null)
+  const lastSyncedPhone = useRef<string | null>(null)
+  const storedPhone = profile?.phone || ''
+  useEffect(() => {
+    if (profile && lastSyncedPhone.current !== storedPhone) {
+      lastSyncedPhone.current = storedPhone
+      const sp = splitPhone(storedPhone)
+      setPhoneDial(sp.dial)
+      setPhoneNational(sp.national)
+      setPhoneToken(null)
+    }
+  }, [storedPhone, profile])
+
+  // Mirror of the server's sameStoredPhone tolerance (digits-only, trunk
+  // zero stripped, shared national-number suffix): decides whether the
+  // editable number is actually a CHANGE. The server re-checks this — the
+  // client gate is UX, never the security boundary.
+  const digitsOf = (s: string) => (s || '').replace(/\D/g, '').replace(/^0+/, '')
+  const clientSamePhone = (a: string, b: string): boolean => {
+    const x = digitsOf(a)
+    const y = digitsOf(b)
+    if (!x || !y) return x === y
+    if (x === y) return true
+    return x.length >= 7 && y.length >= 7 && (x.endsWith(y) || y.endsWith(x))
+  }
+  const phoneChanged = !clientSamePhone(`${phoneDial}${phoneNational}`, originalPhone || '')
+  const phoneVerified = phoneChanged && Boolean(phoneToken)
+
   if (!profile) return null
 
   const update = (field: keyof ProfileData, value: string) => {
@@ -1081,13 +1154,31 @@ function ProfileTabContent({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="phone" className="text-sm text-gray-600 dark:text-gray-400">Phone</Label>
-                <Input
-                  id="phone"
-                  value={profile.phone || ''}
-                  onChange={(e) => update('phone', e.target.value)}
-                  placeholder="93700000000"
-                  className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
-                />
+                {phoneChanged ? (
+                  <>
+                    <WhatsAppOtpVerify
+                      accent="blue"
+                      phoneCode={phoneDial}
+                      onPhoneCodeChange={setPhoneDial}
+                      phoneNumber={phoneNational}
+                      onPhoneNumberChange={setPhoneNational}
+                      verifiedToken={phoneToken}
+                      onVerified={(t) => setPhoneToken(t)}
+                      onCleared={() => setPhoneToken(null)}
+                    />
+                    <p className="text-[11px] text-gray-400">
+                      Saving a new number requires WhatsApp verification. Save Profile stays disabled until the code is confirmed.
+                    </p>
+                  </>
+                ) : (
+                  <Input
+                    id="phone"
+                    value={profile.phone || ''}
+                    onChange={(e) => update('phone', e.target.value)}
+                    placeholder="93700000000"
+                    className="h-10 rounded-xl border-gray-200 dark:border-gray-700"
+                  />
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dob" className="text-sm text-gray-600 dark:text-gray-400">Date of Birth</Label>
@@ -1139,8 +1230,11 @@ function ProfileTabContent({
 
       <motion.div {...fadeInUp}>
         <Button
-          onClick={handleSaveProfile}
-          disabled={savingProfile}
+          onClick={() => handleSaveProfile(
+            phoneChanged ? `+${phoneDial}${phoneNational.replace(/\D/g, '')}` : undefined,
+            phoneChanged ? phoneToken : null
+          )}
+          disabled={savingProfile || (phoneChanged && !phoneToken)}
           className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#1a73e8] text-white font-medium shadow-sm shadow-[#4285F4]/20 active:scale-[0.98] transition-transform"
         >
           {savingProfile ? (
@@ -1936,7 +2030,7 @@ function PreferencesTabContent({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#1F1F1F] dark:text-white">Conversation View</p>
-                  <p className="text-[11px] text-gray-500">Group emails as threads</p>
+                  <p className="text-[11px] text-gray-500">Group emails as threads — off, mail opens one message at a time</p>
                 </div>
               </div>
               <Switch checked={conversationView} onCheckedChange={setConversationView} className="data-[state=checked]:bg-[#4285F4]" />

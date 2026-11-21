@@ -378,6 +378,16 @@ model Campaign {
   subject      String
   body         String   @default("")
   bodyHtml     String   @default("")
+  // D1 (Batch 9): honest campaign lifecycle without a delivery provider.
+  // "draft"    — being composed; fully editable (content + recipients).
+  // "scheduled"— the owner recorded a dispatch intent (scheduledFor).
+  //              Nothing is delivered: no outbound transport exists yet, so
+  //              a scheduled campaign waits (and says so in the UI) instead
+  //              of pretending to run. "sent" is intentionally NOT a state
+  //              this schema can produce today; sentAt stays null until a
+  //              real provider ships and writes it.
+  status       String   @default("draft") // "draft" | "scheduled" | "sent"
+  scheduledFor DateTime?
   sentAt       DateTime?
   opens        Int       @default(0)
   clicks       Int       @default(0)
@@ -388,6 +398,7 @@ model Campaign {
 
   @@index([businessId])
   @@index([createdAt])
+  @@index([status])
 }
 
 model CampaignRecipient {
@@ -403,4 +414,71 @@ model CampaignRecipient {
   @@unique([campaignId, customerId])
   @@index([campaignId])
   @@index([customerId])
+}
+
+// ─── Shared server state (D4, Batch 9) ───────────────────────────────────────
+// The OTP challenges, rate-limit windows, single-use token guards and small
+// key/value states that used to live in per-instance in-memory Maps now live
+// in PostgreSQL (via Prisma). On serverless the old maps were per Lambda
+// instance: an OTP minted on instance A could be unverifiable on instance B
+// (audit S-02) and every brute-force cap reset on cold start or scaled out
+// to a per-instance cap. These tables are the shared, crash-safe source of
+// truth; every operation below them is an atomic conditional write (see
+// src/lib/server-state.ts). Additive-only migration; cleanup deletes expired
+// rows opportunistically.
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  // Purpose-scoped so a code minted for one flow can never verify in another:
+  // "phone-verify" (registration + profile phone change) | "password-recovery".
+  purpose    String
+  // The challenge subject: the E.164 phone number or the user id.
+  subject    String
+  // sha256(salt) of the 6-digit code — the plaintext code is never stored.
+  codeHash   String
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  // One active challenge per (purpose, subject): a fresh send REPLACES the
+  // previous one (upsert), so old codes die the moment a new one is minted.
+  @@unique([purpose, subject])
+  @@index([expiresAt])
+}
+
+model RateBucket {
+  // Fixed-window counter, e.g. "login:1.2.3.4", "rule-run:<userId>",
+  // "phone-send:+93700123456", "verify-ip:5.6.7.8", "forgot:9.9.9.9".
+  key       String   @id
+  count     Int      @default(0)
+  // End of the current window. A request past windowEnd resets the bucket.
+  windowEnd DateTime
+
+  @@index([windowEnd])
+}
+
+model UsedTokenGuard {
+  // sha256 of a single-use bearer artifact (phone-verification proof token,
+  // password-reset token). First insert wins — the unique primary key is the
+  // concurrency-safe replay guard; a second consume is a P2002 and rejected.
+  tokenHash String   @id
+  // Kept at most as long as the artifact's own TTL (+ margin); expired rows
+  // are garbage the cleanup removes — they can never verify again anyway
+  // because the underlying JWT is expired by then.
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model KvState {
+  // Small durable key/value states: phone resend cooldown ("phone-cooldown:
+  // <e164>" → last-send epoch ms) and the TOTP single-use last-consumed
+  // time-step per user ("totp-step:<userId>").
+  key       String    @id
+  value     String
+  // Null = no TTL (TOTP steps); set = lazy-cleanup deadline.
+  expiresAt DateTime?
+
+  @@index([expiresAt])
 }

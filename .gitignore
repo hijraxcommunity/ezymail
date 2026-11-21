@@ -103,3 +103,9 @@ key.properties
 generated/
 prisma/.env.test
 *.db-journal
+
+# Deploy credentials (Batch 9 remediation): the Batch 8 deploy key pair must
+# never be tracked again — a sandbox snapshot commit (aac7396) once captured
+# it. The credential itself is being revoked/replaced by the owner via the
+# hosting provider; this line only prevents a recurrence in Git.
+.keys-batch8/

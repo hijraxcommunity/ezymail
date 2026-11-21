@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const search = searchParams.get('search') || '';
+    // D2 (Batch 9): optional label filter — only the CALLER'S OWN label can
+    // ever match (the nested label.userId guard makes a foreign label id
+    // behave exactly like an unknown one: an empty result, never a leak).
+    const labelParam = searchParams.get('label') || '';
 
     // Build where clause
     const where: Record<string, unknown> = {
@@ -139,6 +143,17 @@ export async function GET(request: NextRequest) {
         { sender: { firstName: { contains: search, mode: 'insensitive' } } },
         { sender: { lastName: { contains: search, mode: 'insensitive' } } },
       ];
+    }
+
+    // D2 (Batch 9): label filter — an equality-style key that composes with
+    // the folder branches and the search OR-group without interfering. The
+    // thread fold still runs over the filtered slim rows, so a conversation
+    // page stays whole; sibling replies without the label simply do not
+    // widen the result.
+    if (labelParam) {
+      where.emailLabels = {
+        some: { labelId: labelParam, label: { userId: session.userId } },
+      };
     }
 
     // F-03: a scheduled email's INBOX copy is created immediately (folder=
@@ -236,6 +251,12 @@ export async function GET(request: NextRequest) {
             replies: {
               select: { id: true },
             },
+            // D2 (Batch 9): the caller's own labels on this row (id/name/
+            // color only — no extra payload) drive the list chips and the
+            // store's emailLabelsMap.
+            emailLabels: {
+              select: { label: { select: { id: true, name: true, color: true } } },
+            },
           },
         })
       : [];
@@ -289,6 +310,8 @@ export async function GET(request: NextRequest) {
        // conversations showed no count at all.
       replyCount: (threadCounts[email.threadId || email.id] || 0) + 1,
       threadCount: (threadCounts[email.threadId || email.id] || 0) + 1,
+      // D2 (Batch 9): the row's own labels (already scoped to the caller).
+      labels: (email.emailLabels || []).map((el) => el.label),
     }));
 
     return NextResponse.json({

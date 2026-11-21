@@ -1,9 +1,10 @@
 /**
- * Server-only phone verification for REGISTRATION (WhatsApp OTP).
+ * Server-only phone verification for REGISTRATION and PROFILE PHONE CHANGES
+ * (WhatsApp OTP).
  *
  * Reuses the single OpenWA sender in @/lib/whatsapp/openwa.ts — this module
  * only owns the secure OTP lifecycle and the short-lived proof token that
- * the register APIs require:
+ * the register/profile APIs require:
  *
  *   send:   normalize to E.164 -> rate/cooldown checks -> generate OTP with
  *           crypto.randomInt -> store ONLY its sha256 hash -> deliver via
@@ -12,19 +13,32 @@
  *           5-minute expiry -> on success issue a signed, purpose-scoped JWT
  *           bound to the exact E.164 number (10-minute validity, single use).
  *
- * The register APIs later re-verify that JWT against the submitted phone and
- * consume it, so the frontend's "verified" state is never trusted.
+ * The register/profile APIs later re-verify that JWT against the submitted
+ * phone and consume it, so the frontend's "verified" state is never trusted.
  *
- * Storage is in-memory (same pattern as the password-recovery OTP store in
- * the forgot-password route): TTL-bounded, lazily cleaned, no OTP or phone
- * value is ever logged. On serverless the per-instance map still bounds the
- * worst case; the database-level unique constraint on User.phone is the hard
- * guarantee against two accounts sharing one number.
+ * Storage is the shared PostgreSQL server-state store (D4, Batch 9 — see
+ * src/lib/server-state.ts): TTL-bounded, hash-only, atomically consumed.
+ * Before Batch 9 the OTP lives in a per-instance Map, which on serverless
+ * meant a code minted on instance A could be unverifiable on instance B
+ * (audit S-02) and the brute-force caps reset on every cold start. The
+ * database-level unique constraint on User.phone remains the hard guarantee
+ * against two accounts sharing one number. No OTP or phone value is ever
+ * logged.
  */
 
 import { createHash, randomInt } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { getJwtSecret } from '@/lib/auth';
+import {
+  storeOtpChallenge,
+  clearOtpChallenge,
+  checkOtpChallenge,
+  otpAttemptsLeft,
+  checkRateLimitWindow,
+  consumeSingleUseToken,
+  kvGet,
+  kvSet,
+} from '@/lib/server-state';
 
 // ── Policy (registration OTP) ────────────────────────────────────────────────
 export const PHONE_OTP_TTL_SECONDS = 5 * 60; // 5-minute OTP expiry
@@ -57,6 +71,21 @@ export function normalizePhoneE164(countryCode: string, national: string): strin
   return `+${cc}${nat}`;
 }
 
+/**
+ * Normalize a phone STRING that already carries its country code (the shape
+ * the profile-change flow submits: "+93 700 123 456" or "+93700123456").
+ * Accepts a single leading '+' plus 8..15 digits (ITU minimum is 8: 1-4 CC +
+ * 6-14 national, with the shortest real ranges at 7-8 digits; we require the
+ * same >=7-digit floor the candidate set applies). Returns null otherwise.
+ */
+export function normalizePhoneStringE164(raw: string): string | null {
+  const s = (raw || '').trim();
+  if (!/^\+[0-9\s-]{7,19}$/.test(s)) return null;
+  const digits = s.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return null;
+  return `+${digits}`;
+}
+
 /** "93" + "700123456" variants of a stored phone — legacy rows may be local. */
 export function phoneCandidateSet(countryCode: string, national: string): string[] {
   const cc = (countryCode || '').replace(/\D/g, '');
@@ -74,28 +103,31 @@ export function phoneCandidateSet(countryCode: string, national: string): string
   return Array.from(set).filter((s) => s.replace(/\D/g, '').length >= 7);
 }
 
-// ── OTP store (in-memory, TTL-bounded, hash-only) ────────────────────────────
-
-interface PendingOtp {
-  hash: string;
-  expiresAt: number;
-  attempts: number;
-  consumed: boolean;
+/**
+ * Tolerant equality between a phone the client submits and the one stored
+ * on a legacy row: digits-only comparison, ignoring the leading '+' / trunk
+ * zero and accepting a shared-suffix match for local vs international forms
+ * (same normalization family as phoneMatches() in the forgot-password route,
+ * which has matched legacy shapes in production since F-03). Used ONLY to
+ * decide "the user did not actually change their phone" — a genuinely new
+ * number always goes through the full OTP proof path.
+ */
+export function sameStoredPhone(a: string, b: string): boolean {
+  const digitsOf = (s: string) => {
+    let d = (s || '').replace(/\D/g, '');
+    d = d.replace(/^0+/, ''); // trunk zero(s)
+    return d;
+  };
+  const x = digitsOf(a);
+  const y = digitsOf(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  // Local vs international forms share the national-number suffix
+  // ("700123456" vs "93700123456") — the same tolerance phoneMatches uses.
+  return x.length >= 7 && y.length >= 7 && (x.endsWith(y) || y.endsWith(x));
 }
 
-const globalForPhoneOtp = globalThis as unknown as {
-  phoneVerifyOtps: Map<string, PendingOtp>;
-  phoneVerifyCooldowns: Map<string, number>; // phone -> last send epoch ms
-  phoneSendCounts: Map<string, { count: number; resetAt: number }>; // phone
-  phoneIpCounts: Map<string, { count: number; resetAt: number }>; // ip
-  usedPhoneVerifyTokens: Map<string, number>; // sha256(token) -> exp epoch ms
-};
-
-for (const key of ['phoneVerifyOtps', 'phoneVerifyCooldowns', 'phoneSendCounts', 'phoneIpCounts', 'usedPhoneVerifyTokens']) {
-  if (!(globalForPhoneOtp as Record<string, unknown>)[key]) {
-    (globalForPhoneOtp as Record<string, unknown>)[key] = new Map();
-  }
-}
+// ── OTP challenge store (shared PostgreSQL; hash-only) ───────────────────────
 
 function otpHash(phoneE164: string, otp: string): string {
   // Salted with purpose + phone so a hash leaked from one context is useless
@@ -103,25 +135,13 @@ function otpHash(phoneE164: string, otp: string): string {
   return createHash('sha256').update(`${otp}:${PURPOSE}:${phoneE164}`).digest('hex');
 }
 
-function cleanExpired<V>(map: Map<string, V>, now: number, pick: (v: V) => number): void {
-  if (map.size < 500) return;
-  for (const [k, v] of map) if (pick(v) < now) map.delete(k);
-}
-
 /** Store a fresh OTP for the number — replaces (invalidates) any previous one. */
-export function storePhoneOtp(phoneE164: string, otp: string): void {
-  const otps = globalForPhoneOtp.phoneVerifyOtps;
-  otps.set(phoneE164, {
-    hash: otpHash(phoneE164, otp),
-    expiresAt: Date.now() + PHONE_OTP_TTL_SECONDS * 1000,
-    attempts: 0,
-    consumed: false,
-  });
-  cleanExpired(otps, Date.now(), (v) => v.expiresAt);
+export function storePhoneOtp(phoneE164: string, otp: string): Promise<void> {
+  return storeOtpChallenge(PURPOSE, phoneE164, otpHash(phoneE164, otp), PHONE_OTP_TTL_SECONDS);
 }
 
-export function clearPhoneOtp(phoneE164: string): void {
-  globalForPhoneOtp.phoneVerifyOtps.delete(phoneE164);
+export function clearPhoneOtp(phoneE164: string): Promise<void> {
+  return clearOtpChallenge(PURPOSE, phoneE164);
 }
 
 export type PhoneOtpCheckResult = 'ok' | 'missing' | 'expired' | 'locked' | 'invalid';
@@ -129,78 +149,50 @@ export type PhoneOtpCheckResult = 'ok' | 'missing' | 'expired' | 'locked' | 'inv
 /**
  * Check a submitted code. 'ok' consumes the OTP (one-time use). Wrong codes
  * increment the attempt counter; the OTP is dropped once the cap is reached.
+ * All branches are atomic conditional writes on the shared store, so a
+ * replay of a correct code can never verify twice (see server-state).
  */
-export function checkPhoneOtp(phoneE164: string, otp: string): PhoneOtpCheckResult {
-  const rec = globalForPhoneOtp.phoneVerifyOtps.get(phoneE164);
-  if (!rec || rec.consumed) return 'missing';
-  if (Date.now() > rec.expiresAt) {
-    clearPhoneOtp(phoneE164);
-    return 'expired';
-  }
-  if (rec.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
-    clearPhoneOtp(phoneE164);
-    return 'locked';
-  }
-  if (otpHash(phoneE164, otp) !== rec.hash) {
-    rec.attempts++;
-    return 'invalid';
-  }
-  rec.consumed = true;
-  return 'ok';
+export function checkPhoneOtp(phoneE164: string, otp: string): Promise<PhoneOtpCheckResult> {
+  return checkOtpChallenge(PURPOSE, phoneE164, otpHash(phoneE164, otp), PHONE_OTP_MAX_ATTEMPTS);
 }
 
 /** Attempts left before the pending OTP is dropped (for client messaging). */
-export function phoneOtpAttemptsLeft(phoneE164: string): number {
-  const rec = globalForPhoneOtp.phoneVerifyOtps.get(phoneE164);
-  if (!rec || rec.consumed) return 0;
-  return Math.max(PHONE_OTP_MAX_ATTEMPTS - rec.attempts, 0);
+export function phoneOtpAttemptsLeft(phoneE164: string): Promise<number> {
+  return otpAttemptsLeft(PURPOSE, phoneE164, PHONE_OTP_MAX_ATTEMPTS);
 }
 
-// ── Rate limits / cooldowns ──────────────────────────────────────────────────
+// ── Rate limits / cooldowns (shared) ─────────────────────────────────────────
 
 /** Seconds until the same number may be sent another code (0 = allowed now). */
-export function phoneResendWaitSeconds(phoneE164: string): number {
-  const last = globalForPhoneOtp.phoneVerifyCooldowns.get(phoneE164) || 0;
-  const elapsed = (Date.now() - last) / 1000;
+export async function phoneResendWaitSeconds(phoneE164: string): Promise<number> {
+  const last = await kvGet(`phone-cooldown:${phoneE164}`);
+  if (!last) return 0;
+  const lastMs = Number(last);
+  if (!Number.isFinite(lastMs)) return 0;
+  const elapsed = (Date.now() - lastMs) / 1000;
   return Math.max(Math.ceil(PHONE_OTP_RESEND_COOLDOWN_SECONDS - elapsed), 0);
 }
 
 /** Per-phone sliding-window send cap. True when the send is allowed. */
-export function checkPhoneSendRate(phoneE164: string): boolean {
-  const counts = globalForPhoneOtp.phoneSendCounts;
-  const now = Date.now();
-  const rec = counts.get(phoneE164);
-  if (!rec || now > rec.resetAt) {
-    counts.set(phoneE164, { count: 1, resetAt: now + PHONE_SEND_WINDOW_MS });
-    return true;
-  }
-  if (rec.count >= PHONE_SEND_MAX_PER_WINDOW) return false;
-  rec.count++;
-  return true;
+export function checkPhoneSendRate(phoneE164: string): Promise<boolean> {
+  return checkRateLimitWindow(`phone-send:${phoneE164}`, PHONE_SEND_MAX_PER_WINDOW, PHONE_SEND_WINDOW_MS);
 }
 
 /** Per-IP sliding-window cap across all numbers. True when allowed. */
-export function checkVerifyIpRate(ip: string): boolean {
-  const counts = globalForPhoneOtp.phoneIpCounts;
-  const now = Date.now();
-  const rec = counts.get(ip);
-  if (!rec || now > rec.resetAt) {
-    counts.set(ip, { count: 1, resetAt: now + VERIFY_IP_WINDOW_MS });
-    return true;
-  }
-  if (rec.count >= VERIFY_IP_MAX_PER_WINDOW) return false;
-  rec.count++;
-  return true;
+export function checkVerifyIpRate(ip: string): Promise<boolean> {
+  return checkRateLimitWindow(`verify-ip:${ip}`, VERIFY_IP_MAX_PER_WINDOW, VERIFY_IP_WINDOW_MS);
 }
 
 /** Record a successful send: starts the resend cooldown. */
-export function markPhoneOtpSent(phoneE164: string): void {
-  globalForPhoneOtp.phoneVerifyCooldowns.set(phoneE164, Date.now());
-  cleanExpired(globalForPhoneOtp.phoneSendCounts, Date.now(), (v) => v.resetAt);
-  cleanExpired(globalForPhoneOtp.phoneIpCounts, Date.now(), (v) => v.resetAt);
+export function markPhoneOtpSent(phoneE164: string): Promise<void> {
+  return kvSet(
+    `phone-cooldown:${phoneE164}`,
+    String(Date.now()),
+    PHONE_OTP_RESEND_COOLDOWN_SECONDS * 1000
+  );
 }
 
-// ── Proof token (signed; the register APIs re-verify and consume it) ─────────
+// ── Proof token (signed; the register/profile APIs re-verify and consume it) ──
 
 /** Issue the short-lived, purpose-scoped proof for a verified number. */
 export async function signPhoneVerificationToken(phoneE164: string): Promise<string> {
@@ -213,7 +205,8 @@ export async function signPhoneVerificationToken(phoneE164: string): Promise<str
 
 /**
  * Verify the proof token binds to the exact E.164 number the registration
- * is submitting. Never trusts any frontend state — only this signature.
+ * or profile change is submitting. Never trusts any frontend state — only
+ * this signature.
  */
 export async function verifyPhoneVerificationToken(
   token: string,
@@ -228,16 +221,10 @@ export async function verifyPhoneVerificationToken(
 }
 
 /**
- * Single-use enforcement for proof tokens (best-effort across serverless
- * instances; strict within one). Entries live at most as long as the token
- * TTL, then are dropped.
+ * Single-use enforcement for proof tokens. D4 (Batch 9): the guard is now a
+ * unique row in the shared store (first consume wins, exact under
+ * concurrency), closing the old best-effort per-instance map.
  */
-export function consumePhoneVerificationToken(token: string): boolean {
-  const used = globalForPhoneOtp.usedPhoneVerifyTokens;
-  const key = createHash('sha256').update(token).digest('hex');
-  const now = Date.now();
-  if (used.has(key)) return false;
-  used.set(key, now + (PHONE_VERIFY_TOKEN_TTL_SECONDS + 60) * 1000);
-  cleanExpired(used, now, (v) => v);
-  return true;
+export function consumePhoneVerificationToken(token: string): Promise<boolean> {
+  return consumeSingleUseToken(token, PHONE_VERIFY_TOKEN_TTL_SECONDS);
 }

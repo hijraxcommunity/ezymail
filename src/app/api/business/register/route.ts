@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // One-time proof consumption BEFORE create: a verification token can
     // create exactly one account, even under concurrent replays.
-    if (normalizedPhone && !consumePhoneVerificationToken(phoneVerifyToken)) {
+    if (normalizedPhone && !(await consumePhoneVerificationToken(phoneVerifyToken))) {
       return NextResponse.json(
         { error: 'This verification was already used. Please verify your WhatsApp number again' },
         { status: 400 }

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import {
+  verifyPhoneVerificationToken,
+  consumePhoneVerificationToken,
+  normalizePhoneStringE164,
+  sameStoredPhone,
+} from '@/lib/phone-verification';
 
 // GET /api/user/profile - Get current user profile
 export async function GET() {
@@ -80,6 +86,7 @@ export async function PUT(request: NextRequest) {
       avatar,
       bio,
       phone,
+      phoneVerificationToken,
       dateOfBirth,
       signature,
       preferences,
@@ -130,14 +137,66 @@ export async function PUT(request: NextRequest) {
       updateData.bio = bio.slice(0, 60);
     }
     if (phone !== undefined) {
-      // F-41 (residual, documented): register demands a signed WhatsApp OTP
-      // proof for the INITIAL phone; the profile path still accepts a
-      // plain change. Full parity needs a UI flow to mint a new proof for
-      // an already-registered number — deferred to the owner with F-13/F-57.
+      // F-41 parity (Batch 9): registration demands a signed WhatsApp OTP
+      // proof for the INITIAL phone; a profile phone CHANGE now demands the
+      // same proof. Three cases:
+      //
+      //   1. Same number as stored (tolerant digits comparison — a legacy
+      //      local row "0700…" matches its international form): no change,
+      //      no proof required, nothing written.
+      //   2. Genuinely new number: the client must have completed the
+      //      verify-phone WhatsApp flow for THAT number and submit the
+      //      server-issued proof token. The submitted phone must be the
+      //      exact E.164 the proof binds to; the token is verified AND
+      //      consumed (one proof = one stored change, replay fails).
+      //   3. No/unusable proof: 400 with the reason, the stored number
+      //      stays untouched.
       if (typeof phone !== 'string' || !/^\+?[0-9\s-]{6,20}$/.test(phone)) {
         return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 });
       }
-      updateData.phone = phone;
+
+      const current = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { phone: true },
+      });
+
+      const unchanged =
+        current?.phone ? sameStoredPhone(current.phone, phone) : false;
+
+      if (!unchanged) {
+        const e164 = normalizePhoneStringE164(phone);
+        if (!e164) {
+          return NextResponse.json(
+            {
+              error:
+                'Verify the new number on WhatsApp first — the change must be submitted as the verified international number (e.g. +93700123456)',
+            },
+            { status: 400 }
+          );
+        }
+        if (typeof phoneVerificationToken !== 'string' || !phoneVerificationToken) {
+          return NextResponse.json(
+            { error: 'Verify the new number on WhatsApp before saving it' },
+            { status: 400 }
+          );
+        }
+        // Signature + binding first, single-use consumption second — the
+        // same order and semantics the register APIs enforce (a token
+        // changes the phone exactly once, even under concurrent replays).
+        if (!(await verifyPhoneVerificationToken(phoneVerificationToken, e164))) {
+          return NextResponse.json(
+            { error: 'This verification does not match the submitted number or has expired — verify the number again' },
+            { status: 400 }
+          );
+        }
+        if (!(await consumePhoneVerificationToken(phoneVerificationToken))) {
+          return NextResponse.json(
+            { error: 'This verification was already used — verify the number again' },
+            { status: 400 }
+          );
+        }
+        updateData.phone = e164;
+      }
     }
     if (dateOfBirth !== undefined) {
       updateData.dateOfBirth = dateOfBirth;

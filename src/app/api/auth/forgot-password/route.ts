@@ -5,6 +5,13 @@ import { db } from '@/lib/db';
 import { hashPassword, getJwtSecret } from '@/lib/auth';
 import { getClientIp } from '@/lib/ip';
 import { sendWhatsAppOTP, OpenWAError } from '@/lib/whatsapp/openwa';
+import {
+  storeOtpChallenge,
+  clearOtpChallenge,
+  checkOtpChallenge,
+  checkRateLimitWindow,
+  consumeSingleUseToken,
+} from '@/lib/server-state';
 
 
 // Verification is only valid for 10 minutes after the number is confirmed
@@ -15,45 +22,23 @@ const OTP_TTL_SECONDS = 10 * 60;
 // Brute-force protection: after this many wrong codes a pending OTP is dropped
 const OTP_MAX_ATTEMPTS = 5;
 
-// Simple in-memory rate limit for recovery attempts (per IP)
-const globalForForgot = globalThis as unknown as {
-  forgotPasswordLimits: Map<string, { count: number; resetTime: number }>;
-};
-if (!globalForForgot.forgotPasswordLimits) {
-  globalForForgot.forgotPasswordLimits = new Map();
-}
-function checkForgotLimit(ip: string): boolean {
-  const limits = globalForForgot.forgotPasswordLimits;
-  const now = Date.now();
-  const record = limits.get(ip);
-  if (!record || now > record.resetTime) {
-    limits.set(ip, { count: 1, resetTime: now + 15 * 60 * 1000 });
-    return true;
-  }
-  if (record.count >= 8) return false;
-  record.count++;
-  return true;
+// Recovery attempt cap per IP (D4, Batch 9): was a per-instance Map, now the
+// shared fixed-window store — the cap survives cold starts and is enforced
+// across all serverless instances. Env-overridable per the convention every
+// other limiter in this codebase follows, so load tests and E2E harnesses
+// (which share one egress IP) can raise it without code changes.
+const RECOVERY_MAX_PER_WINDOW = Number(process.env.RECOVERY_RATE_LIMIT_MAX) || 8;
+const RECOVERY_WINDOW_MS = 15 * 60 * 1000;
+async function checkForgotLimit(ip: string): Promise<boolean> {
+  return checkRateLimitWindow(`forgot:${ip}`, RECOVERY_MAX_PER_WINDOW, RECOVERY_WINDOW_MS);
 }
 
-// Single-use enforcement: tokens already consumed cannot reset again.
-// Entries live at most as long as the token TTL, then are dropped.
-const globalForUsedTokens = globalThis as unknown as {
-  usedResetTokens: Map<string, number>;
-};
-if (!globalForUsedTokens.usedResetTokens) {
-  globalForUsedTokens.usedResetTokens = new Map();
-}
-function markTokenUsed(token: string): boolean {
-  const used = globalForUsedTokens.usedResetTokens;
-  const key = createHash('sha256').update(token).digest('hex');
-  if (used.has(key)) return false;
-  used.set(key, Date.now() + (RESET_TOKEN_TTL_SECONDS + 60) * 1000);
-  // Lazy cleanup of expired entries
-  if (used.size > 500) {
-    const now = Date.now();
-    for (const [k, exp] of used) if (exp < now) used.delete(k);
-  }
-  return true;
+// Single-use enforcement: tokens already consumed cannot reset again
+// (D4, Batch 9): the guard is now a unique row in the shared store — first
+// consume wins under any concurrency, closing the old best-effort
+// per-instance Map. Entries live at most as long as the token TTL (+margin).
+async function markTokenUsed(token: string): Promise<boolean> {
+  return consumeSingleUseToken(token, RESET_TOKEN_TTL_SECONDS);
 }
 
 // Never reveal which detail was wrong — one generic message for every failure
@@ -61,52 +46,25 @@ const GENERIC_ERROR = 'We could not verify your details. Check your email and Wh
 
 const OTP_SEND_FAILURE = 'Unable to send the verification code. Please try again later.';
 
-// Pending password-recovery OTPs keyed by user id, stored with the same
-// mechanism/pattern as the used-token set below: in-memory, TTL-bounded,
-// only the sha256 hash of the code is kept — never the code itself.
-const globalForRecoveryOtps = globalThis as unknown as {
-  recoveryOtps: Map<string, { hash: string; expiresAt: number; attempts: number; consumed: boolean }>;
-};
-if (!globalForRecoveryOtps.recoveryOtps) {
-  globalForRecoveryOtps.recoveryOtps = new Map();
+// Pending password-recovery OTPs keyed by user id (D4, Batch 9): stored in
+// the shared PostgreSQL server-state store — TTL-bounded, only the sha256
+// hash of the code is kept, never the code itself, and the consume/attempt
+// counters are atomic across instances. The salt keeps the hash bound to
+// this user id exactly as before.
+function recoveryOtpHash(userId: string, otp: string): string {
+  return createHash('sha256').update(`${otp}:${userId}`).digest('hex');
 }
-function storeOtp(userId: string, otp: string): void {
-  const otps = globalForRecoveryOtps.recoveryOtps;
-  // A new request replaces any previous code for the same account
-  otps.set(userId, {
-    hash: createHash('sha256').update(`${otp}:${userId}`).digest('hex'),
-    expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
-    attempts: 0,
-    consumed: false,
-  });
-  if (otps.size > 500) {
-    const now = Date.now();
-    for (const [k, rec] of otps) if (rec.expiresAt < now) otps.delete(k);
-  }
+function storeOtp(userId: string, otp: string): Promise<void> {
+  // A new request replaces any previous code for the same account (the
+  // composite-unique upsert inside the store).
+  return storeOtpChallenge('password-recovery', userId, recoveryOtpHash(userId, otp), OTP_TTL_SECONDS);
 }
-function clearOtp(userId: string): void {
-  globalForRecoveryOtps.recoveryOtps.delete(userId);
+function clearOtp(userId: string): Promise<void> {
+  return clearOtpChallenge('password-recovery', userId);
 }
 type OtpCheckResult = 'ok' | 'missing' | 'expired' | 'locked' | 'invalid';
-function checkOtp(userId: string, otp: string): OtpCheckResult {
-  const rec = globalForRecoveryOtps.recoveryOtps.get(userId);
-  if (!rec) return 'missing';
-  if (rec.consumed) return 'missing';
-  if (Date.now() > rec.expiresAt) {
-    clearOtp(userId);
-    return 'expired';
-  }
-  if (rec.attempts >= OTP_MAX_ATTEMPTS) {
-    clearOtp(userId);
-    return 'locked';
-  }
-  const submitted = createHash('sha256').update(`${otp}:${userId}`).digest('hex');
-  if (submitted !== rec.hash) {
-    rec.attempts++;
-    return 'invalid';
-  }
-  rec.consumed = true;
-  return 'ok';
+function checkOtp(userId: string, otp: string): Promise<OtpCheckResult> {
+  return checkOtpChallenge('password-recovery', userId, recoveryOtpHash(userId, otp), OTP_MAX_ATTEMPTS);
 }
 
 // Compare two phone numbers tolerantly: digits only, with or without the
@@ -136,7 +94,7 @@ function phoneMatches(registered: string, submitted: string): boolean {
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    if (!checkForgotLimit(ip)) {
+    if (!(await checkForgotLimit(ip))) {
       return NextResponse.json({ error: 'Too many attempts. Please try again in a few minutes.' }, { status: 429 });
     }
 
@@ -163,12 +121,12 @@ export async function POST(request: NextRequest) {
 
       // Generate a 6-digit code, store only its hash, deliver it via OpenWA
       const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
-      storeOtp(user.id, otp);
+      await storeOtp(user.id, otp);
       try {
         await sendWhatsAppOTP(user.phone, otp);
       } catch (error: unknown) {
         // Nothing verifiable exists for the user until a code is delivered
-        clearOtp(user.id);
+        await clearOtp(user.id);
         // Log the failure class only — never the OTP, the API key or internals
         console.error(
           'WhatsApp OTP delivery failed:',
@@ -202,7 +160,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
       }
 
-      const result = checkOtp(user.id, otp);
+      const result = await checkOtp(user.id, otp);
       if (result === 'expired' || result === 'missing') {
         return NextResponse.json({ error: 'This code has expired. Please request a new one.' }, { status: 400 });
       }
@@ -261,7 +219,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Enforce single use BEFORE applying the new password
-      if (!markTokenUsed(resetToken)) {
+      if (!(await markTokenUsed(resetToken))) {
         return NextResponse.json({ error: 'This verification was already used. Please verify your WhatsApp number again.' }, { status: 400 });
       }
 
