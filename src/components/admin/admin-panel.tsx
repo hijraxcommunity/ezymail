@@ -846,6 +846,7 @@ function UsersTab() {
           status: data.data.user.status,
           onboardingDone: data.data.user.onboardingDone,
         })
+        store.setImpersonating(true)
         store.setAdminView(null)
         toast.success(`Now impersonating ${data.data.user.firstName} ${data.data.user.lastName}`)
       } else {

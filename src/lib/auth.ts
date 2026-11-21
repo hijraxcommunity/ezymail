@@ -218,7 +218,7 @@ export async function getSession(): Promise<SessionPayload | null> {
       select: {
         id: true,
         lastActive: true,
-        user: { select: { status: true, softDeletedAt: true } },
+        user: { select: { status: true, softDeletedAt: true, role: true } },
       },
     });
     if (!row) return null;
@@ -228,6 +228,16 @@ export async function getSession(): Promise<SessionPayload | null> {
     // session row was missed — defense in depth on top of session revocation
     // and the login rejection.
     if (row.user.softDeletedAt) return null;
+
+    // S-04: the JWT role claim is up to 30 days stale by design — a demoted
+    // admin (or promoted user) would keep their OLD authority until token
+    // expiry because getSession never consulted the database. The row fetch
+    // above already carries the user, so authorization now reads the LIVE
+    // role: every session.role !== 'admin' check in the API sees DB truth.
+    // No code path changes roles today, so this is fail-safe hardening; the
+    // rotation below re-signs with the DB role as well, so the claim heals
+    // on the next daily renewal.
+    session.role = row.user.role;
 
     // F-53: keep lastActive fresh (throttled to one write per 2 minutes per
     // active session — the Session row is already fetched for the F-07

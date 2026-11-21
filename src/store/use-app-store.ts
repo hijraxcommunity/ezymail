@@ -177,6 +177,10 @@ interface AppState {
   user: UserSafe | null;
   isAuthenticated: boolean;
   authView: AuthView;
+  /** F-08: true while the current session is an admin impersonation session
+   *  (cookie carries a victim JWT with the signed `imp` claim). Drives the
+   *  fixed exit-impersonation banner in the victim-context shells. */
+  impersonating: boolean;
 
   // Mail
   currentFolder: MailView;
@@ -262,6 +266,7 @@ interface AppState {
 
   // Actions - Auth
   setUser: (user: UserSafe | null) => void;
+  setImpersonating: (v: boolean) => void;
   setAuthView: (view: AuthView) => void;
 
   // Actions - Mail
@@ -365,6 +370,7 @@ export const useAppStore = create<AppState>()(
       user: null,
       isAuthenticated: false,
       authView: 'login',
+      impersonating: false,
 
       // Mail
       currentFolder: 'inbox',
@@ -443,6 +449,7 @@ export const useAppStore = create<AppState>()(
 
       // Actions - Auth
       setUser: (user) => set({ user, isAuthenticated: !!user, authView: null, showOnboarding: false }),
+      setImpersonating: (v) => set({ impersonating: v }),
       setAuthView: (view) => set({ authView: view }),
 
       // Actions - Mail
@@ -778,6 +785,7 @@ export const useAppStore = create<AppState>()(
         user: null,
         isAuthenticated: false,
         authView: 'login',
+        impersonating: false,
         emails: [],
         selectedEmailId: null,
         composeOpen: false,

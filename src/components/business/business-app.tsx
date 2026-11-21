@@ -150,7 +150,7 @@ function MobileMessage() {
 /* ─── Main Business App ─── */
 
 export function BusinessApp() {
-  const { user } = useAppStore()
+  const { user, impersonating } = useAppStore()
   const [activeView, setActiveView] = useState<BusinessView>('dashboard')
   const [profile, setProfile] = useState<BusinessProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
@@ -197,7 +197,8 @@ export function BusinessApp() {
     <>
       <div className="lg:hidden"><MobileMessage /></div>
 
-      <div className="hidden lg:flex fixed inset-0 z-50">
+      {/* F-08: the exit-impersonation bar (fixed, h-11) overlays this fixed layer when active; pt-11 shifts the dashboard below it */}
+      <div className={`hidden lg:flex fixed inset-0 z-50 ${impersonating ? 'pt-11' : ''}`}>
         {/* ─── Sidebar ─── */}
         <aside className="w-[260px] bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 flex flex-col h-full shrink-0 border-r border-gray-800/50">
           {/* Accent line */}

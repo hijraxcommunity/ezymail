@@ -46,14 +46,37 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      await db.pushSubscription.create({
-        data: {
-          userId: session.userId,
-          fcmToken,
-          deviceInfo: deviceInfo || null,
-          platform: platform || null,
-        },
-      });
+      try {
+        await db.pushSubscription.create({
+          data: {
+            userId: session.userId,
+            fcmToken,
+            deviceInfo: deviceInfo || null,
+            platform: platform || null,
+          },
+        });
+      } catch (error) {
+        // Independent-review residual: two concurrent subscribes with a
+        // brand-new token can both pass the findUnique above and race the
+        // create — the loser hits the @unique P2002 and surfaced as a 500.
+        // Re-check ownership: same owner means the row now exists — refresh
+        // metadata and succeed; a foreign owner is the F-51 conflict → 409.
+        if ((error as { code?: string }).code !== 'P2002') throw error;
+        const raced = await db.pushSubscription.findUnique({ where: { fcmToken } });
+        if (!raced || raced.userId !== session.userId) {
+          return NextResponse.json(
+            { error: 'This device token is registered to another account.' },
+            { status: 409 }
+          );
+        }
+        await db.pushSubscription.update({
+          where: { fcmToken },
+          data: {
+            deviceInfo: deviceInfo || null,
+            platform: platform || null,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true })

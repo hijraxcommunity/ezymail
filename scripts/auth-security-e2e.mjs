@@ -309,6 +309,24 @@ const run = async () => {
   }
   check('M3 F-32: upload throttled after 3 uploads/user (4th → 429)', upload429)
 
+  // ─── S-04: admin authority must read the DB role, not the stale JWT claim ───
+  // The session JWT carries the role for up to 30 days; getSession now
+  // overrides it with the live database role on every request. A demoted
+  // admin must lose admin-API access on their NEXT request, while staying
+  // otherwise authenticated (role demotion is not a session revocation).
+  {
+    const S = await seedUser(`auth.s04.${stamp}@ezy.af`, 'admin')
+    const cjS = await login(S.email)
+    const ok1 = await api(cjS, 'GET', '/api/admin/users?limit=1')
+    check('S04 A: seeded admin passes admin API', ok1.status === 200, `status=${ok1.status}`)
+    await prisma.user.update({ where: { id: S.id }, data: { role: 'user' } })
+    const ok2 = await api(cjS, 'GET', '/api/admin/users?limit=1')
+    check('S04 B: demoted admin with stale JWT role=admin refused (403)', ok2.status === 403, `status=${ok2.status}`)
+    const me = await api(cjS, 'GET', '/api/auth/me')
+    check('S04 C: demoted admin still authenticated (demotion is not logout)', me.status === 200, `status=${me.status}`)
+    await prisma.user.update({ where: { id: S.id }, data: { role: 'admin' } })
+  }
+
   await prisma.$disconnect()
   console.log(results.join('\n'))
   console.log(`\n== auth-security-e2e: ${pass} passed, ${fail} failed ==`)

@@ -463,6 +463,22 @@ async function main() {
     check('F63 inbox unread/count are numeric', typeof inbox?.unread === 'number' && typeof inbox?.count === 'number', `unread=${inbox?.unread}`)
   }
 
+  // ══════════════════ S-08: announcement fan-out cap + bulk insert ══════════════════
+  {
+    const admin = await seedUser(`b7.s08.admin.${stamp}@ezy.af`, { role: 'admin' })
+    const { cj: s8Cj } = await login(admin.email)
+    const u1 = await seedUser(`b7.s08.u1.${stamp}@ezy.af`)
+    const u2 = await seedUser(`b7.s08.u2.${stamp}@ezy.af`)
+    const subject = `S-08 probe ${stamp}`
+    const send = await api(s8Cj, 'POST', '/api/admin/announcements', { subject, body: '<p>hello</p>', userIds: [u1.id, u2.id] })
+    check('S08 A: announcement to selected users 200', send.status === 200, `status=${send.status}`)
+    check('S08 B: sentCount reflects recipients (createMany count)', send.json?.data?.sentCount === 2, `sentCount=${send.json?.data?.sentCount}`)
+    const rows = await prisma.email.count({ where: { subject } })
+    check('S08 C: both inbox rows exist (bulk insert path)', rows === 2, `rows=${rows}`)
+    const tooMany = await api(s8Cj, 'POST', '/api/admin/announcements', { subject: 'S-08 cap', body: 'x', userIds: Array.from({ length: 1001 }, (_, i) => `race-${i}`) })
+    check('S08 D: userIds selection over 1000 rejected (400)', tooMany.status === 400, `status=${tooMany.status}`)
+  }
+
   prisma.disconnect?.()
   await prisma.$disconnect()
   console.log(results.join('\n'))

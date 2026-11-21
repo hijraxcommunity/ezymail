@@ -315,13 +315,17 @@ function ThreadMessage({
   const ccData: string[] = (() => { try { const cc = (message as unknown as Record<string, unknown>).cc; if (!cc) return []; if (Array.isArray(cc)) return cc; if (typeof cc === 'string') return cc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
   const bccData: string[] = (() => { try { const bcc = (message as unknown as Record<string, unknown>).bcc; if (!bcc) return []; if (Array.isArray(bcc)) return bcc; if (typeof bcc === 'string') return bcc.split(',').map((e: string) => e.trim()).filter(Boolean) } catch { return [] } return [] })()
 
-  // Sanitize untrusted email HTML first (XSS protection), then strip quoted
-  // text — both the visible body and the quoted fragment derive from
-  // sanitized content. See src/lib/sanitize-email-html.ts.
-  const rawHtml = sanitizeEmailHtml(
+  // S-01: strip quoted text from the RAW html FIRST, then sanitize each
+  // fragment independently. clean and quoted are now whole HTML documents
+  // for the sanitizer, so a strip boundary can never slice through
+  // sanitized markup and re-form something the sanitizer never saw as a
+  // whole (each side is re-sanitized in full). See
+  // src/lib/sanitize-email-html.ts.
+  const { clean: strippedClean, quoted: strippedQuoted } = stripQuotedHtml(
     message.bodyHtml || message.body?.replace(/\n/g, '<br>') || ''
   )
-  const { clean: cleanHtml, quoted: quotedHtml } = stripQuotedHtml(rawHtml)
+  const cleanHtml = sanitizeEmailHtml(strippedClean)
+  const quotedHtml = strippedQuoted === null ? null : sanitizeEmailHtml(strippedQuoted)
   const previewText = stripQuotedText(message.body?.replace(/<[^>]*>/g, '') || '').replace(/\n/g, ' ').substring(0, 120) || '...'
 
   return (
@@ -1352,10 +1356,14 @@ export function EmailDetail() {
 
                       <div>
                         {(() => {
-                          const rawHtml = sanitizeEmailHtml(
+                          // S-01: strip-then-sanitize, same contract as the
+                          // thread call site above — each fragment is
+                          // sanitized as a whole document.
+                          const { clean: strippedClean, quoted: strippedQuoted } = stripQuotedHtml(
                             msg.bodyHtml || msg.body?.replace(/\n/g, '<br>') || ''
                           )
-                          const { clean: selectedCleanHtml, quoted: selectedQuotedHtml } = stripQuotedHtml(rawHtml)
+                          const selectedCleanHtml = sanitizeEmailHtml(strippedClean)
+                          const selectedQuotedHtml = strippedQuoted === null ? null : sanitizeEmailHtml(strippedQuoted)
                           return (
                             <>
                               <div

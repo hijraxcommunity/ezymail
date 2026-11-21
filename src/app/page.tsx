@@ -13,6 +13,7 @@ import { EmailDetail } from '@/components/mail/email-detail'
 import { ComposeModal } from '@/components/mail/compose-modal'
 import { AttachmentViewer } from '@/components/mail/attachment-viewer'
 import { MobileNav } from '@/components/mail/mobile-nav'
+import { ImpersonationBanner } from '@/components/mail/impersonation-banner'
 import { SettingsPanel } from '@/components/settings/settings-panel'
 import { AdminPanel } from '@/components/admin/admin-panel'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
@@ -157,11 +158,13 @@ export default function HomePage() {
     currentFolder,
     emails,
     user,
+    impersonating,
     setSelectedEmailId,
     setCurrentFolder,
     setComposeOpen,
     setReplyToEmail,
     setUser,
+    setImpersonating,
     setEmails,
     setIsLoading,
     setTotalEmails,
@@ -193,6 +196,9 @@ export default function HomePage() {
           if (res.ok) {
             const data = await res.json()
             if (!cancelled && data.user) setUser(data.user)
+            // F-08: /api/auth/me reports whether this session is an admin
+            // impersonation session; the banner reads the same store field.
+            if (!cancelled) setImpersonating(Boolean(data.impersonating))
             if (!cancelled) setIsCheckingAuth(false)
             return
           }
@@ -216,7 +222,7 @@ export default function HomePage() {
       cancelled = true
       if (retryTimer) clearTimeout(retryTimer)
     }
-  }, [setUser])
+  }, [setUser, setImpersonating])
 
   // ─── Native splash dismissal — launch handover at first paint ───────────
   // The native shell keeps the branded splash visible while the remote site
@@ -475,7 +481,12 @@ export default function HomePage() {
 
   // ─── Business users get their own dashboard ───────────────────────────
   if (user?.accountType === 'business') {
-    return <BusinessApp />
+    return (
+      <>
+        <ImpersonationBanner />
+        <BusinessApp />
+      </>
+    )
   }
 
   // ─── Admin users go directly to admin panel (no personal inbox) ───────
@@ -490,7 +501,9 @@ export default function HomePage() {
 
   // ─── Main mail view (personal users) ─────────────────────────────────────
   return (
-    <div className="h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
+    <div className={`h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden ${impersonating ? 'pt-11' : ''}`}>
+      {/* F-08: fixed exit-impersonation bar; pt-11 above keeps it from overlaying content */}
+      <ImpersonationBanner />
       {/* Gmail-style: top header hidden on mobile while reading an email (list/detail panes unaffected on desktop) */}
       <div className={`shrink-0 ${selectedEmailId ? 'hidden md:block' : 'block'}`}>
         <MailHeader />
