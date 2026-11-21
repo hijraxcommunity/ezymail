@@ -276,16 +276,31 @@ const run = async () => {
   // Replay guard: first login with the live TOTP succeeds; the SAME code
   // replayed immediately is rejected even though the window is still open.
   const codeNow = generateTOTP(tfaSecret)
+  const g5Step = Math.floor(Date.now() / 1000 / 30)
   const login1 = await login(bob.email, tempPass, codeNow)
   check('F-48 G5: first login with TOTP succeeds', login1.res.status === 200, `status=${login1.res.status}`)
   const login2 = await login(bob.email, tempPass, codeNow)
   check('F-48 G6: SAME code replayed → rejected (TWO_FACTOR_INVALID)',
     login2.res.status === 401 && login2.res.json?.code === 'TWO_FACTOR_INVALID', `status=${login2.res.status}`)
-  // G7: a code from a DIFFERENT still-valid step (the previous 30s window,
-  // accepted for clock drift) logs in — the guard only blocks the SAME step.
+  // G7 (updated by the Batch 9 pre-push hardening): the step claim is now
+  // FORWARD-ONLY. The previous 30s window's code — still inside the ±1
+  // acceptance window but OLDER than (or equal to) the newest consumed
+  // step — is refused, so a captured older code can never log in again.
+  // A code for a NEWER unconsumed step still logs in: the guard blocks
+  // replays, not progress. (If the window rolled past the consumed step
+  // between G5 and here, the "previous" code is unconsumed AND newer than
+  // the stored step, so drift acceptance applies — the expectation is
+  // computed from the actual timing instead of assumed.)
   const prevWindowCode = generateTOTP(tfaSecret, -1)
   const login3 = await login(bob.email, tempPass, prevWindowCode)
-  check('F-48 G7: a different (current-window) code still logs in', login3.res.status === 200, `status=${login3.res.status}`)
+  const prevStep = Math.floor(Date.now() / 1000 / 30) - 1
+  const expectedPrev = prevStep <= g5Step ? 401 : 200
+  const target = Math.max(g5Step + 1, Math.floor(Date.now() / 1000 / 30))
+  const nextWindowCode = generateTOTP(tfaSecret, target - Math.floor(Date.now() / 1000 / 30))
+  const login4 = await login(bob.email, tempPass, nextWindowCode)
+  check('F-48 G7: forward-only claim — older captured code refused, a NEWER unconsumed step still logs in',
+    login3.res.status === expectedPrev && login4.res.status === 200,
+    `prev=${login3.res.status} (expected ${expectedPrev}), next=${login4.res.status}`)
 
   // Backup code single-use (pre-existing contract, must not regress).
   const tfa2 = await api(carolCj, 'GET', '/api/user/2fa')

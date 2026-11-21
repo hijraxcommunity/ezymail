@@ -1,5 +1,5 @@
 import { createHmac, randomFillSync, randomInt } from 'crypto';
-import { kvClaimValue } from '@/lib/server-state';
+import { kvClaimForward } from '@/lib/server-state';
 
 const TIME_STEP = 30; // seconds
 const DIGITS = 6;
@@ -135,11 +135,15 @@ export function verifyTOTP(secret: string, code: string): boolean {
  * Batch 9 REMEDIATION (owner-approved): the first shared-store version
  * compared the stored step with a read-then-write (kvGet → kvSet), which
  * two perfectly concurrent same-code logins could both slip through.
- * The guard is now the atomic compare-and-set claim `kvClaimValue`: the
- * request whose single conditional statement moves the stored step to `c`
- * wins; every other request — same instance, other instance, or after a
- * restart — finds the step already claimed and is refused. Exactly one
- * concurrent same-code login can succeed, by construction of the store
+ * The guard is now the atomic FORWARD-ONLY claim `kvClaimForward`: the
+ * request whose single conditional statement advances the stored step to
+ * `c` wins; every other request — same instance, other instance, or after
+ * a restart — finds the step already claimed or newer and is refused.
+ * Exactly one concurrent same-code login can succeed, and an
+ * already-consumed OLDER code (captured earlier, replayed inside the ±1
+ * drift window after a newer step was consumed) is refused too — the
+ * pre-push burst test R6 demonstrated that regression against the first
+ * compare-and-set version and the forward-only claim closes it
  * (see src/lib/server-state.ts).
  */
 export async function verifyTOTPSingleUse(userId: string, secret: string, code: string): Promise<boolean> {
@@ -168,12 +172,15 @@ export async function verifyTOTPSingleUse(userId: string, secret: string, code: 
 
     const expected = (num % Math.pow(10, DIGITS)).toString().padStart(DIGITS, '0');
     if (expected === code) {
-      // The code matches time-step c. Atomic single-use claim: exactly one
-      // caller per step can transition the stored step to c — a concurrent
-      // or later same-step submission finds it already claimed and is a
-      // replay (false). No TTL: one small row per 2FA user; the value is
-      // semantically "the newest step consumed" and moves forward forever.
-      return kvClaimValue(`totp-step:${userId}`, String(c));
+      // The code matches time-step c. Atomic FORWARD-ONLY single-use claim:
+      // exactly one caller per step can advance the stored step to c — a
+      // concurrent or later same-step submission finds it already claimed,
+      // and a submission for a step older than the newest consumed one is
+      // refused as well (no step regression). No TTL: one small row per
+      // 2FA user; the value is semantically "the newest step consumed" and
+      // only ever moves forward. Zero-padded to 12 digits so the store's
+      // string ordering equals numeric ordering.
+      return kvClaimForward(`totp-step:${userId}`, String(c).padStart(12, '0'));
     }
   }
 

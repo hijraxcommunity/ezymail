@@ -29,9 +29,10 @@
  *     P2002 and rejected. Rows are kept at most as long as the guarded
  *     artifact's own TTL — after that the underlying JWT is expired too.
  *   - KvState    : plain upsert for last-writer-wins values (resend
- *     cooldown); the TOTP step uses `kvClaimValue`, an atomic
- *     compare-and-set claim so exactly ONE concurrent request with the
- *     same code can ever succeed (see below).
+ *     cooldown); the TOTP step uses `kvClaimForward`, an atomic
+ *     FORWARD-ONLY claim so exactly ONE concurrent request with the same
+ *     code can ever succeed and the stored step can never move backwards
+ *     (see below).
  *
  * Expired rows are deleted opportunistically (throttled per process);
  * they are security-dead before cleanup runs because every read filters
@@ -285,42 +286,58 @@ function isP2002(error: unknown): boolean {
 }
 
 /**
- * Atomic compare-and-set CLAIM (Batch 9 remediation): returns true iff the
- * caller performed the transition "stored value != `value`" → "stored value
- * == `value`"; returns false iff the stored value was ALREADY exactly
- * `value` (i.e. someone else — possibly an entirely different instance —
- * claimed this exact value first).
+ * Atomic FORWARD-ONLY claim (Batch 9 remediation, pre-push hardening):
+ * returns true iff the caller performed the transition "stored value <
+ * `value`" (or no row) → "stored value == `value`"; returns false iff the
+ * stored value is ALREADY `value` (same-step replay) or NEWER than
+ * `value` (older-step regression). The stored value is semantically "the
+ * newest step consumed" and this primitive makes it move forward only.
  *
- * This is the TOTP replay primitive: `kvClaimValue('totp-step:<userId>',
- * String(step))` returns true exactly once per step, no matter how many
- * requests with the same code race across any number of instances or
- * process restarts, because the decision is made by ONE atomic conditional
+ * This is the TOTP replay primitive: `kvClaimForward('totp-step:<userId>',
+ * paddedStep)` returns true exactly once per step and never accepts a
+ * step older than the newest consumed one, no matter how many requests
+ * with captured codes race across any number of instances or process
+ * restarts, because the decision is made by ONE atomic conditional
  * statement against the shared row — never by a read-then-write across
  * round-trips.
  *
+ * `value` MUST be a zero-padded fixed-width decimal (totp.ts pads to 12
+ * digits): lexicographic and numeric order then coincide on every store
+ * (PostgreSQL TEXT and SQLite BINARY both order equal-length digit-only
+ * strings byte-wise), so a plain string comparison enforces the monotonic
+ * rule with NO schema change.
+ *
+ * Why forward-only: the first remediation version claimed with
+ * `where value: { not: value }`, which the live two-instance burst
+ * (phase-2 R6) proved insufficient — after step N was consumed, a
+ * captured, already-consumed code for the older step N-1 still verified
+ * inside the ±1 drift window and moved the stored step BACK to N-1 (a
+ * double-capture MITM replay). Refusing stored ≥ `value` closes it while
+ * keeping every legitimate case: a first login (no row), normal progress
+ * (a newer step), and drift acceptance (a code for a step newer than the
+ * newest consumed one, e.g. a client clock slightly behind).
+ *
  * Mechanics (no multi-statement transaction needed; every branch is a
  * single atomic statement):
- *   1. `updateMany({ where: { key, value: { not: value } } })` — the
- *      claimant statement. matched-count 1 = we moved some OTHER value
- *      (or the row appeared between statements) to `value` and we win.
- *      matched-count 0 = either the row holds `value` already (replay)
- *      or the row is missing.
- *   2. If 0 matched: re-read. Row present ⇒ its value is exactly `value`
- *      (the where clause excluded everything else) ⇒ replay, false.
- *      Row missing ⇒ try `create`; the primary key is the tiebreaker —
- *      the loser of a racing create gets P2002 and re-enters step 1,
- *      where the conditional statement now decides cleanly.
+ *   1. `updateMany({ where: { key, value: { lt: value } } })` — the
+ *      claimant statement. matched-count 1 = we advanced the stored step
+ *      to `value` and we win. matched-count 0 = the row holds `value` or
+ *      something newer (replay/stale), or the row is missing.
+ *   2. If 0 matched: re-read. Row present ⇒ its value is ≥ `value`
+ *      (the where clause excluded everything smaller) ⇒ replay or stale,
+ *      false. Row missing ⇒ try `create`; the primary key is the
+ *      tiebreaker — the loser of a racing create gets P2002 and re-enters
+ *      step 1, where the conditional statement now decides cleanly.
  *
- * Two requests claiming DIFFERENT values both succeed (each performs its
- * own transition) — which is the intended semantics: the guard rejects
- * the same STEP twice, not progress. Two requests claiming the SAME value:
- * exactly one true, every other caller false, in every interleaving.
- * Bounded loop (3) for the vanishing create-race; fail-closed afterwards.
+ * Two requests claiming the SAME value: exactly one true, every other
+ * caller false, in every interleaving. A request claiming an OLDER value
+ * than the stored one is always false. Bounded loop (3) for the vanishing
+ * create-race; fail-closed afterwards.
  */
-export async function kvClaimValue(key: string, value: string): Promise<boolean> {
+export async function kvClaimForward(key: string, value: string): Promise<boolean> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const claimed = await db.kvState.updateMany({
-      where: { key, value: { not: value } },
+      where: { key, value: { lt: value } },
       data: { value },
     });
     if (claimed.count === 1) return true;
@@ -329,7 +346,7 @@ export async function kvClaimValue(key: string, value: string): Promise<boolean>
       where: { key },
       select: { value: true },
     });
-    if (current) return false; // stored value is exactly `value` ⇒ replay
+    if (current) return false; // stored value ≥ `value` ⇒ replay or stale step
 
     try {
       await db.kvState.create({ data: { key, value, expiresAt: null } });

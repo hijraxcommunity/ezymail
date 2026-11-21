@@ -297,18 +297,28 @@ async function main() {
   const nextLogin = await api(jar(), 'POST', '/api/auth/login', { email: other.email, password: TEST_PASS, twoFactorCode: nextCode })
   check('D4 T4: the NEXT time-step still verifies', nextLogin.status === 200, `status ${nextLogin.status}`)
 
-  // ── Batch 9 REMEDIATION: the replay guard must be a genuine atomic
-  // compare-and-set. T5 fires 8 SIMULTANEOUS logins (same password, same
-  // code, independent sessions) and demands EXACTLY one success — the old
-  // read-then-write guard could let two through; the kvClaimValue CAS
-  // cannot, in any interleaving.
-  // T1/T4 consumed steps `step` and `step+1`. Pick a burst step that is
-  // UNCONSUMED and inside the app's ±1 acceptance window RIGHT NOW (no
-  // waiting, no boundary races): the previous step while still inside
-  // `step`'s window, the next step otherwise — every case lands on an
-  // unconsumed step because only `step`/`step+1` are burned.
-  const nowCounter0 = currentStep()
-  const burstStep = nowCounter0 === step ? step - 1 : nowCounter0 + 1
+  // ── Batch 9 REMEDIATION: the replay guard must be a genuine atomic,
+  // forward-only claim. T5 fires 8 SIMULTANEOUS logins (same password,
+  // same code, independent sessions) and demands EXACTLY one success —
+  // the old read-then-write guard could let two through; a single
+  // conditional `updateMany` cannot, in any interleaving. The claim is
+  // also FORWARD-ONLY: a step equal to or older than the newest consumed
+  // one is refused outright (phase-2 R6 demonstrates the step-regression
+  // replay this closes). Inside the ±1 window around the stored step
+  // there is NO claimable newer step, so T5 waits (bounded) until the
+  // counter passes the stored step — read from KvState, not guessed from
+  // local arithmetic — and bursts on the NEXT step: unconsumed, strictly
+  // newer, and still inside {c, c+1} at landing even if the boundary
+  // rolls mid-burst.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const storedStepNum = async () => {
+    const row = await prisma.kvState.findUnique({ where: { key: `totp-step:${other.id}` } })
+    return row ? Number(row.value) : null
+  }
+  const storedBeforeBurst = await storedStepNum()
+  const t5Deadline = Date.now() + 45000
+  while (currentStep() <= (storedBeforeBurst ?? step + 1) && Date.now() < t5Deadline) await sleep(500)
+  const burstStep = currentStep() + 1
   const burstCode = totpAt(totpSecret, burstStep)
   const BURST = 8
   const burst = await Promise.all(
@@ -319,25 +329,27 @@ async function main() {
   const burstOk = burst.filter((r) => r.status === 200).length
   const burstRejected = burst.filter((r) => r.status === 401).length
   check(`D4 T5: ${BURST} SIMULTANEOUS same-code logins yield EXACTLY 1 success`, burstOk === 1 && burstRejected === BURST - 1,
-    `${burstOk} ok / ${burstRejected} x 401 (statuses: ${burst.map((r) => r.status).join(',')})`)
+    `${burstOk} ok / ${burstRejected} x 401 (burstStep ${burstStep}, stored ${await storedStepNum()}, counter ${currentStep()}, statuses: ${burst.map((r) => r.status).join(',')})`)
   const burstReplay = await api(jar(), 'POST', '/api/auth/login', { email: other.email, password: TEST_PASS, twoFactorCode: burstCode })
   check('D4 T6: the same code is still refused after the concurrent burst', burstReplay.status === 401, `status ${burstReplay.status}`)
-  // T7: pick an unconsumed step within the CURRENT ±1 window and prove the
-  // guard blocks replays, not progress. If the burst took the previous step
-  // the whole window can be burned — then wait one boundary (bounded 45s).
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  // T7: pick an unconsumed step within the CURRENT ±1 window that is also
+  // strictly NEWER than the ACTUAL stored step (read from KvState — the
+  // forward-only claim refuses anything older; that refusal is R6's
+  // proof, not a failure) and prove the guard blocks replays, not
+  // progress. If the whole window is burned, wait one boundary (45 s).
   const consumedSteps = new Set([step, step + 1, burstStep])
+  const newestStored = (await storedStepNum()) ?? Math.max(step + 1, burstStep)
   const t7Now = currentStep()
-  let t7Step = [t7Now + 1, t7Now - 1, t7Now].find((s) => !consumedSteps.has(s))
+  let t7Step = [t7Now + 1, t7Now, t7Now - 1].find((s) => !consumedSteps.has(s) && s > newestStored)
   if (t7Step === undefined) {
     const t7Deadline = Date.now() + 45000
     let c = currentStep()
-    while (c <= Math.max(step + 1, burstStep) && Date.now() < t7Deadline) { await sleep(500); c = currentStep() }
+    while (c <= newestStored && Date.now() < t7Deadline) { await sleep(500); c = currentStep() }
     t7Step = c
   }
   const afterBurst = totpAt(totpSecret, t7Step)
   const afterBurstLogin = await api(jar(), 'POST', '/api/auth/login', { email: other.email, password: TEST_PASS, twoFactorCode: afterBurst })
-  check('D4 T7: a NEWER step still verifies after the burst (guard blocks replays, not progress)', afterBurstLogin.status === 200, `status ${afterBurstLogin.status}, step ${t7Step}`)
+  check('D4 T7: a NEWER step still verifies after the burst (guard blocks replays, not progress)', afterBurstLogin.status === 200, `status ${afterBurstLogin.status}, step ${t7Step}, stored ${newestStored}`)
 
   // Hand the restart / cross-instance phase the exact consumed step + code.
   // run-batch9-e2e.sh phase 2 restarts the app and boots a SECOND instance

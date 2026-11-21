@@ -143,6 +143,20 @@ async function main() {
   check('R5: progress continues on B and A refuses its replay (both directions)', r5a.status === 200 && r5b.status === 401 && s5 === freshB,
     `B fresh ${r5a.status}, A replay ${r5b.status}, stored step ${s5}`)
 
+  // R6 — FORWARD-ONLY: the older, already-consumed code (freshA) must be
+  // refused AFTER a NEWER step was consumed. A guard that only refuses the
+  // exact same step lets a captured older code log in again inside the ±1
+  // drift window once the stored step has moved past it (step regression /
+  // double-capture MITM): the claim would move the stored step BACK to
+  // freshA and return 200. With a forward-only guard this request is
+  // refused and the stored step stays at freshB.
+  const r6 = await api(BASE_A, jar(), { email: state.email, password: state.password, twoFactorCode: codeA })
+  const s6 = await storedStep()
+  const withinWindow6 = Math.abs(currentStep() - freshA) <= 1
+  check('R6: the OLDER consumed code (freshA) is refused after a NEWER step was consumed (forward-only guard, no step regression)',
+    r6.status === 401 && s6 === freshB && freshA < freshB,
+    `status ${r6.status}, stored step ${s6} (expected ${freshB}), freshA ${freshA} < freshB ${freshB}, freshA still in drift window ${withinWindow6}`)
+
   console.log('\n===== Batch 9 E2E phase 2 (restart + cross-instance TOTP) =====')
   for (const line of results) console.log(line)
   console.log(`\nTOTAL: ${pass} pass, ${fail} fail`)
