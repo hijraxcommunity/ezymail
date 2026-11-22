@@ -144,6 +144,37 @@ export async function GET(
       session.userId
     );
 
+    // Chronological thread order (owner report 2026-11-22: a conversation
+    // rendered its relative times as 23m / 1m / 26m / 3m mixed). Root cause:
+    // the raw fetch is createdAt-asc, but the viewer's own sent twins are
+    // resolved in a SEPARATE unordered query and appended to the array, and
+    // dedupeThreadForViewer PRESERVES INPUT ORDER while preferring the
+    // viewer's copy — so every outgoing message's kept row sat after all
+    // incoming rows, in arbitrary twin-fetch order. Sort ONCE here, after
+    // dedup: the detail view renders this array as-is (expanded and
+    // collapsed messages share it, refresh re-renders it) and the
+    // auto-expand "latest" pick reads thread[length-1], so this is the
+    // single ordering point. Authoritative instant: sentAt — stamped
+    // identically on every copy at delivery (null only until a scheduled
+    // row dispatches), falling back to createdAt for legacy/external rows.
+    // Equal timestamps resolve deterministically (createdAt, then id);
+    // missing or unparseable values fall back safely instead of NaN.
+    const orderKey = (m: { sentAt?: Date | string | null; createdAt?: Date | string | null }): number => {
+      const sent = m.sentAt ? new Date(m.sentAt).getTime() : NaN;
+      if (!Number.isNaN(sent)) return sent;
+      const created = m.createdAt ? new Date(m.createdAt).getTime() : NaN;
+      return Number.isNaN(created) ? 0 : created;
+    };
+    dedupedThread.sort((a, b) => {
+      const ta = orderKey(a);
+      const tb = orderKey(b);
+      if (ta !== tb) return ta - tb;
+      const ca = a.createdAt ? new Date(a.createdAt).getTime() : NaN;
+      const cb = b.createdAt ? new Date(b.createdAt).getTime() : NaN;
+      if (ca !== cb) return (Number.isNaN(ca) ? 0 : ca) - (Number.isNaN(cb) ? 0 : cb);
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+
     // Strip inline base64 `data` from attachments in the response - keep
     // {name, url, size, type}. Every client consumer falls back to `url`
     // (/api/attachments serves the bytes with a 24h immutable cache).
