@@ -320,6 +320,18 @@ export function ComposeModal() {
   const isSendingRef = useRef(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedDraftIdRef = useRef<string | null>(null)
+  // Ghost-draft guard (owner report 2026-11-26: a SENT message kept showing
+  // up in Drafts). The send's own cleanup reads the draft anchor AFTER the
+  // upload+send window, but the 3s debounced autosave keeps running during
+  // that window - a FIRST autosave (id=null) issued mid-upload can stall on
+  // a slow link and land after the cleanup already read a null anchor,
+  // creating a draft row nothing ever deletes. Two refs close the race:
+  // draftSendStartedRef freezes autosave the moment a send is committed (no
+  // draft POST can be issued after the cleanup decision), and
+  // autoSaveInFlightRef tracks the one possibly-in-flight autosave POST so
+  // the cleanup can await it and see its final anchor before deleting.
+  const draftSendStartedRef = useRef(false)
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null)
   // F-24: reply linkage restored by Undo — applies ONLY to the session that
   // restored it; cleared on every other open path, on send and on discard.
   const pendingReplyRef = useRef<{
@@ -396,6 +408,11 @@ export function ComposeModal() {
     // persisted. Editing a specific draft anchors to that draft; every
     // other open path starts clean.
     savedDraftIdRef.current = editDraftEmail?.id || null
+    // New compose session: autosave unfreezes (a previous session's send
+    // froze it) and no stale in-flight autosave POST from that session may
+    // re-anchor this one.
+    draftSendStartedRef.current = false
+    autoSaveInFlightRef.current = null
     // F-61: the forward attachment carry runs async (it fetches each source
     // file from /api/attachments); if compose closes/reopens before the
     // fetches finish, the stale loop must not write into the NEW session's
@@ -644,6 +661,10 @@ export function ComposeModal() {
 
   // ─── Gmail-style auto-draft save ──
   const saveDraftNow = useCallback(async () => {
+    // A committed send freezes autosave - see the ghost-draft guard note on
+    // draftSendStartedRef. A draft POST landing after the send's own
+    // cleanup is exactly the "sent message still in Drafts" bug.
+    if (draftSendStartedRef.current) return
     if (!editor) return
     const toStr = toChips.map(c => c.email).join(', ') || to
     const ccStr = ccChips.map(c => c.email).join(', ') || cc
@@ -652,23 +673,30 @@ export function ComposeModal() {
     const plainBody = html.replace(/<[^>]*>/g, '').trim()
     const hasContent = toStr.trim() || subject.trim() || plainBody
     if (!hasContent) return
-    try {
-      const res = await fetch('/api/drafts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editDraftEmail?.id || savedDraftIdRef.current || null,
-          to: toStr,
-          cc: ccStr || null,
-          bcc: bccStr || null,
-          subject: subject || '(No subject)',
-          body: plainBody,
-          bodyHtml: html,
-        }),
-      })
-      const data = await res.json()
-      if (data.draft?.id) savedDraftIdRef.current = data.draft.id
-    } catch { /* silent */ }
+    // Track the in-flight POST so the send cleanup can await it: the draft
+    // anchor lands in savedDraftIdRef only when the response arrives, and
+    // the cleanup must not read (and delete from) a stale anchor.
+    const flight = (async () => {
+      try {
+        const res = await fetch('/api/drafts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editDraftEmail?.id || savedDraftIdRef.current || null,
+            to: toStr,
+            cc: ccStr || null,
+            bcc: bccStr || null,
+            subject: subject || '(No subject)',
+            body: plainBody,
+            bodyHtml: html,
+          }),
+        })
+        const data = await res.json()
+        if (data.draft?.id) savedDraftIdRef.current = data.draft.id
+      } catch { /* silent */ }
+    })()
+    autoSaveInFlightRef.current = flight
+    await flight
   }, [to, toChips, cc, ccChips, bcc, bccChips, subject, editor, editDraftEmail])
 
   // Stable ref to saveDraftNow so the debounce effect doesn't reset when it recreates.
@@ -896,6 +924,11 @@ export function ComposeModal() {
       const html = editor?.getHTML() || ''
       const currentAttachments = attachments
 
+      // From here the send is committed. Freeze autosave for the whole
+      // (possibly long) attachment-upload + send window - a draft POST
+      // landing during or after it is the ghost-draft bug.
+      draftSendStartedRef.current = true
+
       // Upload attachments FIRST
       let uploadedFiles: Array<{ name: string; url: string; size: number; type: string }> | undefined
       if (currentAttachments.length > 0) {
@@ -941,6 +974,9 @@ export function ComposeModal() {
           toast.error(err instanceof Error ? err.message : 'Failed to upload attachments')
           setIsUploading(false)
           setUploadProgress(0)
+          // Upload failed: the user stays in compose to retry, so autosave
+          // must resume guarding the draft.
+          draftSendStartedRef.current = false
           return
         }
         setIsUploading(false)
@@ -976,6 +1012,13 @@ export function ComposeModal() {
         if (scheduledOk) {
           toast.success(`Email scheduled for ${format(scheduledAtDate, 'MMM d, yyyy h:mm a')}`)
           // F-23: send consumes the auto-saved draft (ghost draft cleanup).
+          // Await any in-flight autosave first: its response re-arms the
+          // anchor, and deleting before it settles would miss the draft it
+          // just created/updated (the exact ghost this cleanup exists for).
+          if (autoSaveInFlightRef.current) {
+            await autoSaveInFlightRef.current
+            autoSaveInFlightRef.current = null
+          }
           const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
           if (draftIdToDelete) {
             fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
@@ -991,12 +1034,25 @@ export function ComposeModal() {
           // F-23: send consumes the auto-saved draft — the compose UI used
           // to leave the ghost behind in Drafts, and the still-set ref made
           // the NEXT compose overwrite that phantom with new content.
+          // Await any in-flight autosave first: its response re-arms the
+          // anchor (and may have just CREATED the draft - a first autosave
+          // stalled behind this very send on a slow link), so the cleanup
+          // must see the settled anchor before it deletes.
+          if (autoSaveInFlightRef.current) {
+            await autoSaveInFlightRef.current
+            autoSaveInFlightRef.current = null
+          }
           const draftIdToDelete = editDraftEmail?.id || savedDraftIdRef.current
           if (draftIdToDelete) {
             fetch(`/api/emails/${draftIdToDelete}`, { method: 'DELETE' }).catch(() => {})
           }
           savedDraftIdRef.current = null
           pendingReplyRef.current = null
+        } else {
+          // Send failed: unfreeze autosave so a retried compose session
+          // keeps persisting the draft until the user reopens compose (the
+          // open effect resets it anyway - this keeps the state honest).
+          draftSendStartedRef.current = false
         }
 
         toast('Message sent.', {
