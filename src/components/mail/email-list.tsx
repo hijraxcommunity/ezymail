@@ -80,6 +80,7 @@ export function EmailList() {
   const [pullDistance, setPullDistance] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false)
   const touchStartY = useRef<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollSaveRafRef = useRef<number | null>(null)
@@ -395,7 +396,12 @@ export function EmailList() {
     try {
       await Promise.all(
         deleted.map(async (e) => {
-          const res = await fetch(`/api/emails/${e.id}`, { method: 'DELETE' })
+          // Global deletion contract: a DRAFT selected on the Drafts page
+          // moves to Trash with ?trash=1 (restorable as a draft) — plain
+          // DELETE would hard-discard it. Every other row uses the plain
+          // conversation move.
+          const draftTrashParam = e.folder === 'drafts' && e.isDraft ? '?trash=1' : ''
+          const res = await fetch(`/api/emails/${e.id}${draftTrashParam}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('delete failed')
           // Each server delete returns the exact rows it moved (its whole
           // resolved conversation). Collect them all: forked-key members
@@ -508,6 +514,35 @@ export function EmailList() {
     }
   }
 
+  // Empty Trash — permanent by definition (everything in the folder is
+  // already deleted), so it sits behind its own explicit confirm dialog and
+  // uses the dedicated endpoint whose scope is EXACTLY the rows the Trash
+  // view lists: the user's received copies in trash, their own trashed sent
+  // copies, and their own trashed drafts — never live mail, never rows
+  // another user trashed in their own mailbox. The per-row DELETE calls the
+  // other views rely on would also work, but only over the CURRENT page;
+  // the endpoint covers every page in one server-side delete.
+  const handleEmptyTrash = async () => {
+    setShowEmptyTrashConfirm(false)
+    try {
+      const res = await fetch('/api/emails/empty-trash', { method: 'POST' })
+      if (!res.ok) throw new Error('empty trash failed')
+      const data = await res.json().catch(() => null)
+      const deletedCount = typeof data?.deletedCount === 'number' ? data.deletedCount : 0
+      displayEmails.forEach((e) => removeEmail(e.id))
+      setTotalEmails(0)
+      toast.success(
+        deletedCount === 1
+          ? '1 email permanently deleted'
+          : `${deletedCount} emails permanently deleted`
+      )
+    } catch {
+      // On failure leave the list untouched — the next poll converges to the
+      // real backend state.
+      toast.error('Failed to empty trash')
+    }
+  }
+
   // Build operator badges for search header
   const operatorBadges = searchOperators
     ? Object.entries(searchOperators)
@@ -557,6 +592,20 @@ export function EmailList() {
             <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full shrink-0">
               {isSearch ? searchTotal : displayEmails.length}
             </span>
+          )}
+          {/* Empty Trash — same header pattern as Delete all spam, but behind
+              an explicit confirm: everything in this folder is already
+              deleted and Empty makes the removal permanent. */}
+          {currentFolder === 'trash' && !isLoading && displayEmails.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 h-8 px-3 shrink-0"
+              onClick={() => setShowEmptyTrashConfirm(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              Empty trash
+            </Button>
           )}
           {/* D2 (Batch 9): active label filter — same pill language, dismissible */}
           {labelFilter && currentFolder === 'inbox' && (() => {
@@ -910,6 +959,23 @@ export function EmailList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Empty Trash Confirmation Dialog — permanent deletion must be
+          explicit, never a stray click: this empties the whole folder. */}
+      <AlertDialog open={showEmptyTrashConfirm} onOpenChange={setShowEmptyTrashConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Empty Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes every email in Trash. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleEmptyTrash} className="bg-red-500 hover:bg-red-600">Empty Trash</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

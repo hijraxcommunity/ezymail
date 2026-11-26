@@ -294,7 +294,21 @@ export async function PUT(
     }
     if (folder && typeof folder === 'string') {
       const allowedFolders = ['inbox', 'sent', 'drafts', 'trash', 'spam'];
-      updateData.folder = allowedFolders.includes(folder) ? folder : email.folder;
+      if (allowedFolders.includes(folder)) {
+        updateData.folder = folder;
+        // Keep the trash provenance marker truthful (same invariant as the
+        // conversation lifecycle helpers): moving a row into trash through
+        // this legacy single-row path stamps where it came from, and moving
+        // it OUT of trash clears the marker so it can never describe a row
+        // that is no longer trashed.
+        if (folder === 'trash' && email.folder !== 'trash') {
+          updateData.trashedFrom = email.folder;
+        } else if (email.folder === 'trash' && folder !== 'trash') {
+          updateData.trashedFrom = null;
+        }
+      } else {
+        updateData.folder = email.folder;
+      }
     }
 
     const updatedEmail = await db.email.update({
@@ -364,22 +378,45 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not authorized to delete this email' }, { status: 403 });
     }
 
-    // F-23: drafts are DISCARDED, not trashed. A draft row is owned by its
-    // sender and often carries a REAL recipientEmail (the address being
-    // composed to), which places it outside the caller's mailbox — the
-    // conversation-scoped trash move below resolves members scoped to
-    // recipientEmail=session.email, so it found no members and the draft
-    // silently SURVIVED every delete (discarded drafts came back, and the
-    // send-path draft cleanup left ghosts in Drafts). A discarded draft is
-    // not trash material either — it never existed as mail. Sender-scoped
-    // hard delete, mirroring how every mail client treats Discard.
+    // F-23: drafts are DISCARDED, not trashed — by DEFAULT. A draft row is
+    // owned by its sender and often carries a REAL recipientEmail (the
+    // address being composed to), which places it outside the caller's
+    // mailbox — the conversation-scoped trash move below resolves members
+    // scoped to recipientEmail=session.email, so it found no members and the
+    // draft silently SURVIVED every delete (discarded drafts came back, and
+    // the send-path draft cleanup left ghosts in Drafts). A discarded draft
+    // is not trash material either — it never existed as mail. Sender-scoped
+    // hard delete, mirroring how every mail client treats Discard. The
+    // compose modal's Discard button and the send-path draft cleanup keep
+    // this default (the ghost-draft contract).
+    //
+    // Deleting a draft from the DRAFTS PAGE is a different action: the
+    // global deletion contract moves it to Trash like any other mailbox
+    // row. Callers pass ?trash=1 to opt in — the draft moves to trash as a
+    // SINGLE row (a draft is not mail; its conversation siblings, if any,
+    // stay put), keeps isDraft=true, its content and attachments untouched,
+    // and carries trashedFrom='drafts' so Trash shows it and restore returns
+    // it as a draft — never accidentally sent, never converted into a
+    // received email.
     if (email.folder === 'drafts' && email.isDraft && isSender) {
-      await db.email.delete({ where: { id } });
+      if (request.nextUrl.searchParams.get('trash') !== '1') {
+        await db.email.delete({ where: { id } });
+        return NextResponse.json({
+          success: true,
+          permanentlyDeleted: true,
+          deletedIds: [id],
+          deletedCount: 1,
+        });
+      }
+      const trashedDraft = await db.email.update({
+        where: { id, folder: 'drafts' },
+        data: { folder: 'trash', trashedFrom: 'drafts' },
+      });
       return NextResponse.json({
         success: true,
-        permanentlyDeleted: true,
-        deletedIds: [id],
-        deletedCount: 1,
+        email: trashedDraft,
+        movedIds: [id],
+        movedCount: 1,
       });
     }
 

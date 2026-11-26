@@ -89,6 +89,13 @@ model Email {
   isStarred       Boolean  @default(false)
   isArchived      Boolean  @default(false)
   folder          String   @default("inbox")
+  // Set when a row moves to Trash: the folder the row was moved FROM
+  // ("inbox"/"sent"/"drafts"/"spam"/a custom folder name). Restore returns
+  // the row to this folder (literal undo of the delete), and the Trash view
+  // + lifecycle scope use it to tell the user's OWN trashed sent copies and
+  // drafts apart from rows OTHER users trashed in their own mailboxes.
+  // Null = row is not in trash, or was trashed before the marker existed.
+  trashedFrom     String?
   threadId        String?
   parentEmailId   String?
   readAt          DateTime?

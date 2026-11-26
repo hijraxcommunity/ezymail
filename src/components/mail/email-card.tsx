@@ -123,7 +123,13 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
     setUndoAction({ id: email.id, type: 'delete', email, timestamp: Date.now() })
     removeEmail(email.id)
     animateOffScreen('right')
-    fetch(`/api/emails/${email.id}`, { method: 'DELETE' })
+    // Global deletion contract: deleting a draft from the DRAFTS PAGE moves
+    // it to Trash (restorable as a draft), like every other folder. The
+    // compose modal's Discard / send-path cleanup keep the plain DELETE
+    // (server-side hard discard) — this card is the Drafts page path, so it
+    // opts in with ?trash=1. The route applies the parameter to drafts only.
+    const draftTrashParam = isDrafts ? '?trash=1' : ''
+    fetch(`/api/emails/${email.id}${draftTrashParam}`, { method: 'DELETE' })
       .then(async (res) => {
         if (!res.ok) throw new Error('delete failed')
         // The server returns the exact rows it moved (the whole resolved
@@ -141,7 +147,7 @@ export function EmailCard({ email, isSelected, onSelect, index, currentFolder }:
         useAppStore.getState().addEmail(email)
         toast.error('Failed to delete email')
       })
-  }, [email, removeEmail, animateOffScreen, setUndoAction])
+  }, [email, removeEmail, animateOffScreen, setUndoAction, isDrafts])
 
   const doEditDraft = useCallback(() => {
     if (!email) return

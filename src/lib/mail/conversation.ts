@@ -47,6 +47,14 @@ export interface MemberRow {
   senderId: string;
   recipientEmail: string;
   folder: string;
+  // Trash provenance marker (Email.trashedFrom): the folder a row was moved
+  // to Trash FROM. Optional so plain test literals stay valid; rows selected
+  // through MEMBER_SELECT always carry it. It is what lets the mailbox scope
+  // admit the user's OWN trashed sent copies and drafts while still excluding
+  // rows OTHER users trashed in their own mailboxes (a sent copy or draft
+  // addressed to this user carries recipientEmail=userEmail but belongs to
+  // its author's mailbox).
+  trashedFrom?: string | null;
   threadId: string | null;
   parentEmailId: string | null;
   isRead: boolean;
@@ -60,6 +68,7 @@ const MEMBER_SELECT = {
   senderId: true,
   recipientEmail: true,
   folder: true,
+  trashedFrom: true,
   threadId: true,
   parentEmailId: true,
   isRead: true,
@@ -226,10 +235,28 @@ export async function resolveConversationMembers(
   // folder='sent') — a sent copy still collapses to the single row, and a
   // foreign anchor only seeds the resolution without ever entering the
   // returned set.
+  //
+  // Sender-side TRASH rows (the user's own sent copies and drafts that this
+  // same lifecycle moved to Trash) are mailbox rows too: the trashedFrom
+  // marker is what distinguishes them from rows OTHER users trashed in
+  // their own mailboxes — a sent copy or draft the AUTHOR trashed carries
+  // recipientEmail=userEmail (the compose target) and senderId=the author,
+  // and is stamped trashedFrom='sent'/'drafts' by the AUTHOR's move, never
+  // by this user's. Without the marker admission, a sent copy or draft
+  // deleted from the Sent/Drafts page became an orphan: invisible in the
+  // trash view, un-restorable, and un-purgeable (the trash-scoped
+  // operations resolved an empty member set and silently no-opped).
   return [...members.values()].filter(
     (m) =>
-      (m.recipientEmail === userEmail && m.folder !== 'sent') ||
-      (m.senderId === userId && m.folder === 'sent')
+      (m.recipientEmail === userEmail &&
+        m.folder !== 'sent' &&
+        // Author-side trash rows addressed to me are never mine (their
+        // author trashed them in their own mailbox).
+        m.trashedFrom !== 'sent' &&
+        m.trashedFrom !== 'drafts') ||
+      (m.senderId === userId &&
+        (m.folder === 'sent' ||
+          (m.folder === 'trash' && (m.trashedFrom === 'sent' || m.trashedFrom === 'drafts'))))
   );
 }
 
@@ -250,31 +277,42 @@ export async function moveConversationToTrash(
   userId: string
 ): Promise<string[]> {
   const members = await resolveConversationMembers(tx, anchorId, userEmail, userId);
-  const moveIds = members
-    .filter((m) => m.id === anchorId || !MOVE_EXCLUDED.has(m.folder))
-    .map((m) => m.id);
-  if (moveIds.length === 0) return [];
-  await tx.email.updateMany({
-    where: { id: { in: moveIds } },
-    // isArchived cleared with the move: the Archive view lists isArchived
-    // rows regardless of folder, so a trashed row that kept the flag kept
-    // showing in Archive — and deleting it there hit the trash branch and
-    // permanently deleted instead of going to Trash (owner report:
-    // "delete from Archive permanently deletes, does not go to Trash").
-    // Symmetric with restore, which also clears the flag.
-    //
-    // snoozedUntil cleared with the move (owner report 2026-11-13: "when I
-    // delete the Spam page email it does not go to Trash"): EVERY folder
-    // view except Snoozed filters snoozedUntil=null — including Trash — and
-    // the snooze endpoint stamps the anchor wherever it lives (the detail
-    // three-dot menu offers Snooze from the Spam page too, and rows are
-    // deleted from the Snoozed page as well). A snoozed row moved to Trash
-    // kept the flag and the trash query filtered it out: the mail WAS in
-    // Trash but invisible in the Trash view — the deleted mail looked like
-    // it never arrived. Deleting a snoozed email ends the snooze.
-    data: { folder: 'trash', isArchived: false, snoozedUntil: null },
-  });
-  return moveIds;
+  const moveRows = members.filter(
+    (m) => m.id === anchorId || !MOVE_EXCLUDED.has(m.folder)
+  );
+  if (moveRows.length === 0) return [];
+  // Per-row updates (same shape the restore path has always used) because
+  // each row records WHERE it was moved from: trashedFrom is the trash
+  // provenance marker the restore path returns the row to, and the trash
+  // view / lifecycle scope use it to tell the user's own trashed sent
+  // copies and drafts apart from rows other users trashed in their own
+  // mailboxes. The folder guard in the where clause guarantees the marker
+  // records the row's true pre-move folder (a row that raced to another
+  // folder between resolve and write is skipped, never mis-stamped).
+  //
+  // isArchived cleared with the move: the Archive view lists isArchived
+  // rows regardless of folder, so a trashed row that kept the flag kept
+  // showing in Archive — and deleting it there hit the trash branch and
+  // permanently deleted instead of going to Trash (owner report:
+  // "delete from Archive permanently deletes, does not go to Trash").
+  // Symmetric with restore, which also clears the flag.
+  //
+  // snoozedUntil cleared with the move (owner report 2026-11-13: "when I
+  // delete the Spam page email it does not go to Trash"): EVERY folder
+  // view except Snoozed filters snoozedUntil=null — including Trash — and
+  // the snooze endpoint stamps the anchor wherever it lives (the detail
+  // three-dot menu offers Snooze from the Spam page too, and rows are
+  // deleted from the Snoozed page as well). A snoozed row moved to Trash
+  // kept the flag and the trash query filtered it out: the mail WAS in
+  // Trash but invisible in the Trash view — the deleted mail looked like
+  // it never arrived. Deleting a snoozed email ends the snooze.
+  for (const row of moveRows) {
+    await tx.email.updateMany({
+      where: { id: row.id, folder: row.folder },
+      data: { folder: 'trash', trashedFrom: row.folder, isArchived: false, snoozedUntil: null },
+    });
+  }
+  return moveRows.map((m) => m.id);
 }
 
 /**
@@ -297,13 +335,32 @@ export async function permanentlyDeleteConversation(
 }
 
 /**
- * Where a trashed row goes back when the conversation is restored. Sent
- * copies (never stamped with threadId/parentEmailId, authored by this
- * user) return to Sent; every received copy returns to Inbox. Rows the
- * user has separately placed elsewhere (spam/drafts/already restored) are
- * not part of the restore set — the trash scope guarantees that.
+ * Where a trashed row goes back when the conversation is restored.
+ *
+ * Rows carry trashedFrom (the folder they were moved to Trash FROM — the
+ * stamp every trash move writes), so restore is a literal undo: received
+ * copies return to inbox (or spam, or the custom folder they were filed
+ * in), the user's own sent copies return to Sent, and drafts return to
+ * Drafts — never accidentally converted into received mail or sent mail.
+ *
+ * Legacy rows trashed before the marker existed have trashedFrom=null and
+ * keep the historical inference: sent copies (never stamped with
+ * threadId/parentEmailId, authored by this user) return to Sent, every
+ * received copy returns to Inbox. Rows the user has separately placed
+ * elsewhere (drafts/already restored) are not part of the restore set —
+ * the trash scope guarantees that. The marker carries ANY folder name
+ * (custom folders included), so restore is a literal undo for every view.
  */
-export function inferRestoreFolder(row: MemberRow, userId: string): 'inbox' | 'sent' {
+export function inferRestoreFolder(row: MemberRow, userId: string): string {
+  // The marker value is trusted with ONE guard: 'trash' is never a valid
+  // origin (no trash move ever stamps it — a row already in trash is
+  // excluded from every move), so a corrupted marker can never "restore" a
+  // row into Trash and strand it there. Every other value is a real folder
+  // name — including CUSTOM folders, which the historical inference could
+  // never handle (it only knows inbox/sent).
+  if (row.trashedFrom && row.trashedFrom !== 'trash') {
+    return row.trashedFrom;
+  }
   return row.senderId === userId && !row.threadId && !row.parentEmailId ? 'sent' : 'inbox';
 }
 
@@ -330,7 +387,16 @@ export async function restoreConversationFromTrash(
   for (const row of trashed) {
     await tx.email.updateMany({
       where: { id: row.id, folder: 'trash' },
-      data: { folder: inferRestoreFolder(row, userId), isArchived: false, snoozedUntil: null },
+      // trashedFrom cleared with the restore: the marker means "this row is
+      // in trash because it was moved here from X" — once the row leaves
+      // trash the marker must not lie about it (a second delete then stamps
+      // it fresh from the row's actual folder).
+      data: {
+        folder: inferRestoreFolder(row, userId),
+        trashedFrom: null,
+        isArchived: false,
+        snoozedUntil: null,
+      },
     });
   }
   return trashed.map((m) => m.id);

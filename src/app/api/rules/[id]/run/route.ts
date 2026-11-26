@@ -91,17 +91,59 @@ function isSafeRuleFolder(value: string): boolean {
   return Object.prototype.hasOwnProperty.call(SAFE_RULE_FOLDER_WRITES, value);
 }
 
+/**
+ * Move this user's rows to Trash WITH the trash provenance marker — the
+ * same contract every other trash move follows (conversation move, DELETE
+ * route, generic PUT): each row records the folder it was moved FROM, the
+ * Trash view counts it, restore returns it there, and isArchived /
+ * snoozedUntil are cleared so the row is actually visible in Trash.
+ * Grouped per distinct pre-move folder; rows already in trash are skipped
+ * so a rule re-run can never re-stamp a marker they no longer own.
+ */
+async function trashWithProvenance(emailIds: string[], userEmail: string): Promise<number> {
+  const rows = await db.email.findMany({
+    where: { id: { in: emailIds }, recipientEmail: userEmail, folder: { not: 'trash' } },
+    select: { id: true, folder: true },
+  });
+  const idsByFolder = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = idsByFolder.get(row.folder) || [];
+    list.push(row.id);
+    idsByFolder.set(row.folder, list);
+  }
+  let moved = 0;
+  for (const [fromFolder, ids] of idsByFolder) {
+    const result = await db.email.updateMany({
+      where: { id: { in: ids }, folder: fromFolder },
+      data: { folder: 'trash', trashedFrom: fromFolder, isArchived: false, snoozedUntil: null },
+    });
+    moved += result.count;
+  }
+  return moved;
+}
+
 async function executeAction(emailIds: string[], action: Action, userId: string): Promise<number> {
   if (emailIds.length === 0) return 0;
 
   switch (action.type) {
     case 'moveToFolder': {
       if (!action.value || !isSafeRuleFolder(action.value)) return 0;
-      const result = await db.email.updateMany({
-        where: { id: { in: emailIds }, recipientEmail: userId },
-        data: SAFE_RULE_FOLDER_WRITES[action.value],
-      });
-      return result.count;
+      if (action.value !== 'trash') {
+        const result = await db.email.updateMany({
+          where: { id: { in: emailIds }, recipientEmail: userId },
+          data: SAFE_RULE_FOLDER_WRITES[action.value],
+        });
+        return result.count;
+      }
+      // Trash is a provenance move like every other path into the folder:
+      // stamp trashedFrom with each row's pre-move folder so the Trash view
+      // counts it and restore returns it to where the rule found it. Rows
+      // matched by a rule can sit in DIFFERENT live folders (inbox, archive
+      // flag only, spam, custom folders), so group by the folder each row
+      // actually carries — one grouped update per distinct folder. Rows
+      // already in trash are left alone (a rule re-run must not re-stamp
+      // them with a folder they no longer have).
+      return trashWithProvenance(emailIds, userId);
     }
     case 'markAsRead': {
       const result = await db.email.updateMany({
@@ -118,11 +160,14 @@ async function executeAction(emailIds: string[], action: Action, userId: string)
       return result.count;
     }
     case 'delete': {
-      const result = await db.email.updateMany({
-        where: { id: { in: emailIds }, recipientEmail: userId },
-        data: { folder: 'trash' },
-      });
-      return result.count;
+      // Same provenance contract as the DELETE route's conversation move:
+      // stamp where each row came from AND clear isArchived/snoozedUntil so
+      // the row is actually VISIBLE in the Trash view (the old bare
+      // folder='trash' write kept the archive flag — a rule-trashed row
+      // stayed listed in Archive and kept the snooze flag, which every view
+      // except Snoozed filters out — the rule "deleted" mail that then
+      // showed up in the wrong folder or nowhere at all).
+      return trashWithProvenance(emailIds, userId);
     }
     case 'archive': {
       const result = await db.email.updateMany({

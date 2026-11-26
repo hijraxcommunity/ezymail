@@ -102,6 +102,66 @@ export async function GET(request: NextRequest) {
       where.isArchived = false;
     }
 
+    if (folder === 'trash') {
+      // The Trash view must show EVERY row the user deleted, and ONLY rows
+      // the user deleted. The old base clause (folder='trash' AND
+      // recipientEmail=session.email) failed on both ends:
+      //
+      //  1. SENT COPIES and DRAFTS the user trashed were INVISIBLE — both
+      //     carry recipientEmail=<compose target> (another user), so a mail
+      //     deleted from the Sent/Drafts page left its folder AND never
+      //     appeared in Trash: it vanished from the mailbox entirely (the
+      //     owner's "deletion is not consistently implemented across
+      //     Sent/Drafts" report). They also became orphans: the lifecycle
+      //     scope excluded them, so restore and permanent delete silently
+      //     no-opped.
+      //  2. FOREIGN rows leaked IN: a sent copy or draft that ANOTHER user
+      //     authored to this user and trashed in their own mailbox carries
+      //     recipientEmail=session.email, so it surfaced here — undeletable
+      //     noise at best, and a cross-mailbox mutation handle at worst
+      //     (restore/purge anchored on it resolved an empty member set, or
+      //     admitted the foreign row and mutated ANOTHER USER'S mailbox).
+      //
+      // The trashedFrom marker (stamped by EVERY trash move with the row's
+      // pre-move folder) is what separates the two: the user's own
+      // sender-side trash rows are stamped 'sent'/'drafts' BY THE USER'S
+      // OWN move, author-side trash rows addressed to this user are stamped
+      // BY THE AUTHOR'S move. Prisma notIn excludes NULL rows (SQL NOT IN
+      // semantics), so the received-copies clause spells the NULL case out
+      // explicitly to keep legacy rows (trashed before the marker existed)
+      // visible and restorable.
+      delete where.recipientEmail;
+      // AND-wrapped (not a bare where.OR): the search branch below assigns
+      // its own where.OR, and overwriting this scope would turn a search in
+      // Trash into a CROSS-USER listing of every trashed row. AND keeps the
+      // mailbox scope and the search OR-group independent conditions — the
+      // same merge discipline the inbox branch applies to its due-or group.
+      where.AND = [
+        {
+          OR: [
+            {
+              // My received copies in any live folder, trashed by me. Never
+              // a draft (drafts are authored rows) and never an author-side
+              // trashed row addressed to me.
+              recipientEmail: session.email,
+              isDraft: false,
+              OR: [{ trashedFrom: null }, { trashedFrom: { notIn: ['sent', 'drafts'] } }],
+            },
+            {
+              // My own sent copies I trashed.
+              senderId: session.userId,
+              trashedFrom: 'sent',
+            },
+            {
+              // My own drafts I trashed.
+              senderId: session.userId,
+              trashedFrom: 'drafts',
+            },
+          ],
+        },
+      ];
+    }
+
     if (folder === 'scheduled') {
       // F-03: the base clause set recipientEmail=session.email for this branch
       // (folder !== sent/drafts). ANDed with senderId below, the Scheduled
